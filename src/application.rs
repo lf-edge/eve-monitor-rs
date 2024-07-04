@@ -2,20 +2,12 @@ use std::{thread, vec};
 
 use anyhow::{Ok, Result};
 use log::trace;
-use ratatui::Frame;
-use ratatui::{buffer::Buffer, widgets::WidgetRef};
 
 use ratatui::CompletedFrame;
-use ratatui::{
-    layout::{Constraint, Layout, Rect},
-    widgets::Widget,
-};
-use Constraint::{Length, Min};
 
 use crate::dispatcher::EventDispatcher;
 use crate::events::EventCode;
 use crate::terminal::TerminalWrapper;
-use crate::traits::Component;
 use crate::ui::dialog::create_dialog;
 use crate::ui::window::Window;
 // use crate::ui::dialog::message_box;

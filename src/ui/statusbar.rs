@@ -7,7 +7,7 @@ use ratatui::{
 
 use crate::traits::VisualComponent;
 
-use super::component::{StatefulComponentWrapper, WidgetState};
+use super::component::{StatefulComponentWrapper, VisualComponentState, WidgetState};
 
 struct StatusBarWidget {}
 impl StatusBarWidget {
@@ -48,9 +48,9 @@ impl StatefulWidgetRef for &mut Box<StatusBarWidget> {
 }
 
 impl StatefulWidgetRef for StatusBarWidget {
-    type State = StatusBarWidgetState;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
-        self.render_widget(_state, area, buf);
+    type State = VisualComponentState<StatusBarWidgetState>;
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.render_widget(&mut state.widget_state, area, buf);
     }
 }
 
@@ -58,6 +58,6 @@ type StatusBar = StatefulComponentWrapper<StatusBarWidget, StatusBarWidgetState>
 
 impl VisualComponent for StatusBar {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, _focused: bool) {
-        frame.render_stateful_widget_ref(&mut self.widget, *area, &mut self.state)
+        frame.render_stateful_widget_ref(&mut self.widget, *area, &mut self.state.widget_state)
     }
 }

@@ -1,14 +1,6 @@
-use std::any::Any;
+use ratatui::{layout::Rect, Frame};
 
-use ratatui::{layout::Rect, widgets::Widget, Frame};
-
-use crate::{
-    events::Event,
-    ui::{
-        component::WidgetState,
-        window::{Window, WindowId},
-    },
-};
+use crate::{events::Event, ui::window::WindowId};
 
 pub trait Component {
     // return a list of (parent, child) window ids
@@ -16,6 +8,11 @@ pub trait Component {
         vec![]
     }
     fn id(&self) -> WindowId;
+    fn focused(&self) -> bool;
+    fn visible(&self) -> bool;
+    fn set_visible(&mut self, visible: bool);
+    fn focus(&mut self);
+    fn focus_lost(&mut self);
 }
 
 pub trait VisualComponent: Component {

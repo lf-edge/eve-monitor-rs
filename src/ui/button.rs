@@ -3,24 +3,20 @@ use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
     style::{Color, Style},
-    symbols::block,
-    widgets::{Block, BorderType, Borders, Paragraph, StatefulWidgetRef, Widget, WidgetRef},
+    widgets::{Block, BorderType, Borders, Paragraph, StatefulWidgetRef, WidgetRef},
 };
 
 use crate::{
     events::{Event, EventCode},
-    traits::{Component, VisualComponent},
+    traits::VisualComponent,
 };
 
-use super::{
-    component::{StatefulComponentWrapper, WidgetState},
-    window::{Window, WindowId},
-};
+use super::component::{StatefulComponentWrapper, VisualComponentState, WidgetState};
 
 pub struct ButtonWidgetState {
     label: String,
     pushed: bool,
-    focused: bool,
+    // focused: bool,
 }
 impl ButtonWidgetState {
     pub fn label(&self) -> &str {
@@ -32,16 +28,21 @@ impl WidgetState for ButtonWidgetState {}
 
 pub struct ButtonWidget {}
 impl ButtonWidget {
-    fn render(&self, state: &mut ButtonWidgetState, area: Rect, buf: &mut Buffer) {
+    fn render(
+        &self,
+        state: &mut VisualComponentState<ButtonWidgetState>,
+        area: Rect,
+        buf: &mut Buffer,
+    ) {
         // set border style based on focus
-        let border_style = if state.focused {
+        let border_style = if state.focused() {
             Style::default().fg(Color::White)
         } else {
             Style::default().fg(Color::Gray)
         };
 
         // set border type based on push state
-        let border_type = if state.focused {
+        let border_type = if state.focused() {
             BorderType::Thick
         } else {
             BorderType::Rounded
@@ -53,13 +54,13 @@ impl ButtonWidget {
             .border_style(border_style)
             .style(Style::default().bg(Color::Black));
 
-        let button = if state.pushed {
-            Paragraph::new(state.label.as_str())
+        let button = if state.widget_state.pushed {
+            Paragraph::new(state.widget_state.label.as_str())
                 .style(Style::default().fg(Color::Black).bg(Color::White))
                 .alignment(Alignment::Center)
                 .block(block)
         } else {
-            Paragraph::new(state.label.as_str())
+            Paragraph::new(state.widget_state.label.as_str())
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Center)
                 .block(block)
@@ -74,30 +75,40 @@ impl Button {
     pub fn new(label: String) -> Self {
         Self::create_component_state(
             Box::new(ButtonWidget {}),
-            Box::new(ButtonWidgetState {
+            ButtonWidgetState {
                 label,
                 pushed: false,
-                focused: false,
-            }),
+                // focused: false,
+            },
         )
     }
     pub fn label(&self) -> &str {
-        self.state.label.as_str()
+        self.state.widget_state.label.as_str()
     }
 }
 
 impl StatefulWidgetRef for ButtonWidget {
-    type State = ButtonWidgetState;
+    type State = VisualComponentState<ButtonWidgetState>;
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut ButtonWidgetState) {
+    fn render_ref(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        state: &mut VisualComponentState<ButtonWidgetState>,
+    ) {
         self.render(state, area, buf);
     }
 }
 
 impl StatefulWidgetRef for &mut Box<ButtonWidget> {
-    type State = ButtonWidgetState;
+    type State = VisualComponentState<ButtonWidgetState>;
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut ButtonWidgetState) {
+    fn render_ref(
+        &self,
+        area: Rect,
+        buf: &mut Buffer,
+        state: &mut VisualComponentState<ButtonWidgetState>,
+    ) {
         self.render(state, area, buf);
     }
 }
@@ -109,14 +120,14 @@ impl VisualComponent for Button {
     fn handle_event(&mut self, event: &Event) -> Option<Event> {
         match event.code {
             EventCode::Key(key) => {
-                if self.state.pushed {
+                if self.state.widget_state.pushed {
                     // we cate only about release of enter key or space bar
                     // consume all other events
                     if (key.code == crossterm::event::KeyCode::Enter
                         || key.code == crossterm::event::KeyCode::Char(' '))
                         && key.kind == crossterm::event::KeyEventKind::Release
                     {
-                        self.state.pushed = false;
+                        self.state.widget_state.pushed = false;
                         return Some(Event::redraw(None));
                     }
                     return None;
@@ -125,7 +136,7 @@ impl VisualComponent for Button {
                         || key.code == crossterm::event::KeyCode::Char(' '))
                         && key.kind == crossterm::event::KeyEventKind::Press
                     {
-                        self.state.pushed = true;
+                        self.state.widget_state.pushed = true;
                         return Some(Event::redraw(None));
                     }
                     return None;

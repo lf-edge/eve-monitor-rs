@@ -8,10 +8,7 @@ use ratatui::{
 
 use crate::traits::VisualComponent;
 
-use super::{
-    component::{StatefulComponentWrapper, WidgetState},
-    window::Window,
-};
+use super::component::{StatefulComponentWrapper, VisualComponentState, WidgetState};
 
 pub struct LabelWidget<'a> {
     text: Box<Paragraph<'a>>,
@@ -31,23 +28,31 @@ impl<'a> LabelWidget<'a> {
 
 //FIXME: we do not use this state yet
 pub struct LabelWidgetState {
-    text: String,
+    _text: String,
+}
+
+impl LabelWidgetState {
+    pub fn new(text: String) -> Self {
+        Self { _text: text }
+    }
 }
 
 impl WidgetState for LabelWidgetState {}
 impl WidgetState for &LabelWidgetState {}
 
+impl WidgetState for VisualComponentState<LabelWidgetState> {}
+
 impl<'a> StatefulWidgetRef for LabelWidget<'a> {
-    type State = LabelWidgetState;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    type State = VisualComponentState<LabelWidgetState>;
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
         self.text.render_ref(area, buf);
     }
 }
 
 // implement StatefulWidgetRef got Box<LabelWidget>
 impl StatefulWidgetRef for &mut Box<LabelWidget<'_>> {
-    type State = LabelWidgetState;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+    type State = VisualComponentState<LabelWidgetState>;
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
         self.text.render_ref(area, buf);
     }
 }
@@ -58,7 +63,7 @@ impl<'a> Label<'a> {
     pub fn new(text: String) -> Self {
         Self::create_component_state(
             Box::new(LabelWidget::new(text.clone())),
-            Box::new(LabelWidgetState { text }),
+            LabelWidgetState { _text: text },
         )
     }
 }

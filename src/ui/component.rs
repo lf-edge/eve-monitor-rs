@@ -1,5 +1,5 @@
 use log::trace;
-use ratatui::{layout::Rect, widgets::StatefulWidgetRef, Frame};
+use ratatui::widgets::StatefulWidgetRef;
 
 use crate::traits::{Component, VisualComponent};
 
@@ -7,23 +7,34 @@ use super::window::{Window, WindowId};
 
 pub trait WidgetState {}
 
-pub struct VisualComponentState {
+pub struct VisualComponentState<S>
+where
+    S: WidgetState,
+{
+    pub widget_state: S,
     id: WindowId,
     visible: bool,
     focused: bool,
 }
 
-impl VisualComponentState {
-    pub fn new() -> Self {
+impl<S> VisualComponentState<S>
+where
+    S: WidgetState,
+{
+    pub fn new(widget_state: S) -> Self {
         Self {
             id: Window::gen_window_id(),
             visible: true,
             focused: false,
+            widget_state,
         }
     }
 }
 
-impl VisualComponentState {
+impl<S> VisualComponentState<S>
+where
+    S: WidgetState,
+{
     pub fn id(&self) -> WindowId {
         self.id
     }
@@ -51,33 +62,31 @@ impl VisualComponentState {
 
 pub struct StatefulComponentWrapper<W, S>
 where
-    W: StatefulWidgetRef<State = S>,
+    W: StatefulWidgetRef<State = VisualComponentState<S>>,
     S: WidgetState,
 {
     pub widget: Box<W>,
-    pub state: Box<S>,
+    pub state: VisualComponentState<S>,
     pub root: Vec<Box<dyn VisualComponent>>,
-    pub visual_state: VisualComponentState,
 }
 
 impl<W, S> StatefulComponentWrapper<W, S>
 where
-    W: StatefulWidgetRef<State = S>,
+    W: StatefulWidgetRef<State = VisualComponentState<S>>,
     S: WidgetState,
 {
-    pub fn create_component_state(widget: Box<W>, state: Box<S>) -> Self {
+    pub fn create_component_state(widget: Box<W>, state: S) -> Self {
         Self {
             widget,
-            state,
+            state: VisualComponentState::new(state),
             root: Vec::new(),
-            visual_state: VisualComponentState::new(),
         }
     }
 }
 
 impl<W, S> Component for StatefulComponentWrapper<W, S>
 where
-    W: StatefulWidgetRef<State = S>,
+    W: StatefulWidgetRef<State = VisualComponentState<S>>,
     S: WidgetState,
 {
     fn get_children(&self) -> Vec<(WindowId, WindowId)> {
@@ -89,8 +98,7 @@ where
         // collect immediate children of the root view
         let mut children: Vec<(WindowId, WindowId)> =
             self.root.iter().map(|c| (c.id(), self.id())).collect();
-        // traverse children of the root view
-        // let mut ret: Vec<(usize, usize)> = children.clone();
+        // traverse grandchildren of the root view
         for child in &self.root {
             let grandchildren = child.get_children();
             children.extend(grandchildren);
@@ -99,7 +107,26 @@ where
     }
 
     fn id(&self) -> WindowId {
-        self.visual_state.id()
+        self.state.id()
+    }
+    fn focused(&self) -> bool {
+        self.state.focused()
+    }
+
+    fn visible(&self) -> bool {
+        self.state.visible()
+    }
+
+    fn set_visible(&mut self, visible: bool) {
+        self.state.visible = visible;
+    }
+
+    fn focus(&mut self) {
+        self.state.focused = true;
+    }
+
+    fn focus_lost(&mut self) {
+        self.state.focused = false;
     }
 }
 

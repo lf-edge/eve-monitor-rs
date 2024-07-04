@@ -15,7 +15,6 @@ use std::{
 use ratatui::{backend::CrosstermBackend, CompletedFrame, Frame, Terminal};
 
 use crate::{dispatcher::EventDispatcher, events::EventCode};
-// use crate::traits::TranslateEvent;
 
 pub type IO = std::io::Stdout;
 

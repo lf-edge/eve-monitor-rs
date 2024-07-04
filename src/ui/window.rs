@@ -5,12 +5,12 @@ use std::{
 };
 
 use log::{trace, warn};
-use ratatui::{layout::Rect, widgets::StatefulWidgetRef, Frame};
+use ratatui::{layout::Rect, Frame};
 
 use crate::{
     dispatcher::EventDispatcher,
     events::{Event, EventCode},
-    traits::{Component, VisualComponent},
+    traits::VisualComponent,
 };
 
 /// WindowId is a unique identifier for a window that is incremented sequentially.
@@ -63,17 +63,17 @@ impl Window {
     pub fn focus_view(&mut self, id: WindowId) {
         trace!("Focusing view {}", id);
         // if there is a view in focus then notify it that it is losing focus
-        // if let Some(view) = self.focused_view.and_then(|id| self.views.get_mut(&id)) {
-        //     view.focus_lost();
-        // }
+        if let Some(view) = self.focused_view.and_then(|id| self.views.get_mut(&id)) {
+            view.focus_lost();
+        }
 
         self.focused_view = Some(id);
         // let view know that it is in focus
-        // if let Some(view) = self.views.get_mut(&id) {
-        //     view.focus_gain();
-        // } else {
-        //     warn!("View with id {} not found", id)
-        // }
+        if let Some(view) = self.views.get_mut(&id) {
+            view.focus();
+        } else {
+            warn!("View with id {} not found", id)
+        }
     }
     pub fn get_focused_view(&self) -> Option<&Box<dyn VisualComponent>> {
         self.focused_view.and_then(|id| self.views.get(&id))
@@ -89,6 +89,7 @@ impl Window {
     }
     pub fn handle_event(&mut self, event: &EventCode) -> Option<EventCode> {
         trace!("window {} Event: {:?} ", self.id, event);
+        trace!("focused view: {:?}", self.focused_view);
         // get children of the focused view
         if let Some(view) = self.focused_view {
             let children = self
@@ -97,22 +98,6 @@ impl Window {
                 .and_then(|v| Some(v.get_children()))
                 .unwrap_or(Vec::new());
             trace!("children: {:?}", children);
-
-            // self.views
-            //     .get_mut(&view)
-            //     .and_then(|v| v.get_children())
-            //     .and_then(|e| {
-            //         for (parent, child) in e {
-            //             if parent == view {
-            //                 if let Some(view) = self.views.get_mut(&child) {
-            //                     if let Some(e) = view.handle_event(event) {
-            //                         return Some(e);
-            //                     }
-            //                 }
-            //             }
-            //         }
-            //         None
-            //     });
         }
 
         // if let Some(children) = self.views.get(&self.root).and_then(|v| v.get_children()) {
@@ -157,5 +142,3 @@ impl Window {
 struct WndProc {
     thread: JoinHandle<()>,
 }
-
-pub struct Dialog {}

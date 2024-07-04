@@ -1,6 +1,6 @@
 // use crate::traits::TranslateEvent;
 
-use crate::ui::window::{Window, WindowId, TARGET_APP_ID};
+use crate::ui::window::{WindowId, TARGET_APP_ID};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum EventCode {
@@ -24,7 +24,7 @@ impl Event {
         Self::new(code, Some(TARGET_APP_ID))
     }
     pub fn redraw(target: Option<WindowId>) -> Self {
-        Self::new(EventCode::Redraw, target.or((Some(TARGET_APP_ID))))
+        Self::new(EventCode::Redraw, target.or(Some(TARGET_APP_ID)))
     }
 }
 

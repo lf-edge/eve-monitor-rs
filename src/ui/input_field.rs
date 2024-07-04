@@ -6,40 +6,19 @@ use ratatui::{
     Frame,
 };
 
-use crate::{events::Event, traits::Component};
+use crate::{
+    events::{Event, EventCode},
+    traits::{Component, VisualComponent},
+};
 
-struct InputFieldWidget {}
-#[derive(Debug, Clone, PartialEq)]
-struct InputFieldState {
-    caption: String,
-    value: Option<String>,
-    input_position: usize,
-    cursor_position: Position,
-}
+use super::{
+    component::{StatefulComponentWrapper, WidgetState},
+    window::{Window, WindowId},
+};
 
-pub struct InputField {
-    widget: InputFieldWidget,
-    state: InputFieldState,
-}
-
-impl InputField {
-    pub fn new(caption: String, value: Option<String>) -> Self {
-        let input_position = value.as_ref().map(|v| v.len()).unwrap_or_default();
-        Self {
-            widget: InputFieldWidget {},
-            state: InputFieldState {
-                caption,
-                value,
-                input_position,
-                cursor_position: Position::new(0, 0),
-            },
-        }
-    }
-}
-
-impl StatefulWidgetRef for &mut InputFieldWidget {
-    type State = InputFieldState;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut InputFieldState) {
+pub struct InputFieldWidget {}
+impl InputFieldWidget {
+    fn render_widget(&self, state: &mut InputFieldState, area: Rect, buf: &mut Buffer) {
         let blk = Block::new()
             .border_type(BorderType::Rounded)
             .borders(Borders::ALL)
@@ -62,19 +41,61 @@ impl StatefulWidgetRef for &mut InputFieldWidget {
             Position::new(inner_area.x + state.input_position as u16, inner_area.y);
     }
 }
+#[derive(Debug, Clone, PartialEq)]
+pub struct InputFieldState {
+    caption: String,
+    value: Option<String>,
+    input_position: usize,
+    cursor_position: Position,
+}
 
-impl Component for InputField {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
+impl WidgetState for InputFieldState {}
+
+pub type InputField = StatefulComponentWrapper<InputFieldWidget, InputFieldState>;
+
+impl InputField {
+    pub fn new(caption: String, value: Option<String>) -> Self {
+        let input_position = value.as_ref().map(|v| v.len()).unwrap_or_default();
+        Self::create_component_state(
+            Box::new(InputFieldWidget {}),
+            Box::new(InputFieldState {
+                caption,
+                value,
+                input_position,
+                cursor_position: Position::new(0, 0),
+            }),
+        )
+    }
+}
+
+impl StatefulWidgetRef for InputFieldWidget {
+    type State = InputFieldState;
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut InputFieldState) {
+        self.render_widget(state, area, buf);
+    }
+}
+
+impl StatefulWidgetRef for &mut Box<InputFieldWidget> {
+    type State = InputFieldState;
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut InputFieldState) {
+        self.render_widget(state, area, buf);
+    }
+}
+
+impl VisualComponent for InputField {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
         frame.render_stateful_widget_ref(&mut self.widget, *area, &mut self.state);
-        frame.set_cursor(self.state.cursor_position.x, self.state.cursor_position.y);
+        if _focused && self.visual_state.focused() {
+            frame.set_cursor(self.state.cursor_position.x, self.state.cursor_position.y);
+        }
     }
     fn handle_event(&mut self, event: &Event) -> Option<Event> {
         let old_state = self.state.clone();
 
-        match event {
-            Event::Key(key) => match key.code {
+        match event.code {
+            EventCode::Key(key) => match key.code {
                 crossterm::event::KeyCode::Char(c) => {
-                    if let Some(value) = &mut self.state.value {
+                    if let Some(value) = self.state.value.as_mut() {
                         value.insert(self.state.input_position, c);
                         self.state.input_position += 1;
                     }
@@ -111,7 +132,7 @@ impl Component for InputField {
             _ => {}
         }
         if old_state != self.state {
-            return Some(Event::Redraw);
+            return Some(Event::app_event(EventCode::Redraw));
         } else {
             return None;
         }

@@ -1,4 +1,7 @@
+use std::{thread, vec};
+
 use anyhow::Result;
+use log::trace;
 use ratatui::Frame;
 use ratatui::{buffer::Buffer, widgets::WidgetRef};
 
@@ -10,19 +13,21 @@ use ratatui::{
 use Constraint::{Length, Min};
 
 use crate::dispatcher::EventDispatcher;
-use crate::events::Event;
+use crate::events::EventCode;
 use crate::terminal::TerminalWrapper;
 use crate::traits::Component;
-use crate::ui::dialog::message_box;
-use crate::ui::input_field::InputField;
-use crate::ui::statusbar::StatusBar;
+use crate::ui::dialog::create_dialog;
+use crate::ui::window::Window;
+// use crate::ui::dialog::message_box;
+// use crate::ui::input_field::InputField;
+// use crate::ui::statusbar::StatusBar;
 
 #[derive(Debug)]
 pub struct Application {
     //screen: Screen,
-    dispatcher: EventDispatcher<Event>,
+    dispatcher: EventDispatcher<EventCode>,
     ui: Ui,
-    //timers: thread::JoinHandle<()>,
+    timers: thread::JoinHandle<()>,
 }
 
 impl Application {
@@ -33,14 +38,14 @@ impl Application {
         ui.init();
 
         let dispatcher_clone = dispatcher.clone();
-        // let timers = thread::spawn(move || loop {
-        //     thread::sleep(std::time::Duration::from_millis(50));
-        //     dispatcher_clone.send(Event::Redraw);
-        // });
+        let timers = thread::spawn(move || loop {
+            thread::sleep(std::time::Duration::from_millis(50));
+            dispatcher_clone.send(EventCode::Redraw);
+        });
         Ok(Self {
             dispatcher,
             ui,
-            //timers,
+            timers,
         })
     }
 
@@ -57,7 +62,7 @@ impl Application {
             // wait for an event
             let event = self.wait_for_event()?;
             match event {
-                Event::Redraw => self.draw_ui()?,
+                EventCode::Redraw => self.draw_ui()?,
 
                 _ => {
                     if let Some(evt) = self.ui.handle_event(event) {
@@ -69,10 +74,10 @@ impl Application {
     }
 
     fn invalidate(&mut self) {
-        self.dispatcher.send(Event::Redraw)
+        self.dispatcher.send(EventCode::Redraw)
     }
 
-    fn wait_for_event(&self) -> Result<Event> {
+    fn wait_for_event(&self) -> Result<EventCode> {
         let evt = self.dispatcher.recv();
         //if evt is redraw, consume all redraw events while available
         // do not miss other events!
@@ -88,123 +93,15 @@ impl Application {
     }
 }
 
-struct MainWndWidget<'a> {
-    status_bar: StatusBar<'a>,
-    //input_field: InputField,
-}
-
-impl<'a> MainWndWidget<'a> {
-    fn new() -> Self {
-        Self {
-            status_bar: StatusBar::new(),
-            // input_field: InputField {
-            //     widget: InputFieldWidget {},
-            //     state: InputFieldState {
-            //         caption: "Input".to_string(),
-            //         value: Some("initial".to_string()),
-            //         input_position: 0,
-            //         cursor_position: Position::new(0, 0),
-            //     },
-            // },
-        }
-    }
-    fn calculate_layout<const N: usize>(&self, area: Rect) -> [Rect; N] {
-        let layout = Layout::vertical([Min(0), Length(3)]).areas(area);
-        layout
-    }
-}
-
-impl<'a> Widget for MainWndWidget<'a> {
-    fn render(self, area: Rect, buf: &mut Buffer) {
-        self.render_ref(area, buf)
-    }
-}
-
-// impl<'a> Deref for MainWndWidget<'a> {
-//     type Target = MainWndWidget<'a>;
-
-//     fn deref(&self) -> &Self::Target {
-//         unsafe { std::mem::transmute(self) }
-//     }
-// }
-
-// impl DerefMut for MainWndWidget<'_> {
-//     fn deref_mut(&mut self) -> &mut Self {
-//         self
-//     }
-// }
-impl<'a> WidgetRef for MainWndWidget<'a> {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        self.render_inner(area, buf);
-    }
-}
-
-impl<'a> WidgetRef for &MainWndWidget<'a> {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        self.render_inner(area, buf);
-    }
-}
-
-impl<'a> MainWndWidget<'a> {
-    fn render_inner(&self, area: Rect, buf: &mut Buffer) {
-        let [content, status] = self.calculate_layout(area);
-        self.status_bar.render_ref(status, buf);
-        let input_layout = Layout::vertical([Length(3), Min(0)]).split(content)[0];
-        //self.input_field.render(&input_layout, buf);
-    }
-}
-
-struct MainWnd<'a> {
-    widget: MainWndWidget<'a>,
-}
-
-impl<'a> MainWnd<'a> {
-    fn new() -> Self {
-        Self {
-            widget: MainWndWidget::new(),
-        }
-    }
-}
-
-impl<'a> Component for MainWnd<'a> {
-    // fn calculate_layout(&mut self, area: &Rect) {
-    //     let layout = self.calculate_layout(area);
-    //     //self.status_bar.border.calculate_layout(&layout[1]);
-    // }
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
-        frame.render_widget_ref(&self.widget, *area);
-    }
-    fn handle_event(&mut self, event: &Event) -> Option<Event> {
-        match event {
-            Event::Key(key) => {
-                if key.code == crossterm::event::KeyCode::Char('q') {
-                    // exit the application
-                    std::process::exit(0);
-                } else if key.code == crossterm::event::KeyCode::Char('d') {
-                    // create modal dialog
-                    None
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
-    }
-}
-
-struct FocusState {
-    focused: bool,
-}
-
 #[derive(Debug)]
 struct Ui {
     screen: TerminalWrapper,
-    dispatcher: EventDispatcher<Event>,
-    layer_stack: Vec<Box<dyn Component>>,
+    dispatcher: EventDispatcher<EventCode>,
+    layer_stack: Vec<Window>,
 }
 
 impl Ui {
-    fn new(dispatcher: EventDispatcher<Event>, screen: TerminalWrapper) -> Result<Self> {
+    fn new(dispatcher: EventDispatcher<EventCode>, screen: TerminalWrapper) -> Result<Self> {
         Ok(Self {
             screen: screen,
             dispatcher: dispatcher,
@@ -212,42 +109,38 @@ impl Ui {
         })
     }
     fn init(&mut self) {
-        let main = Box::new(MainWnd::new());
-        self.layer_stack.push(main);
-        self.layer_stack.push(Box::new(InputField::new(
-            "caption".to_string(),
-            Some("value".to_string()),
-        )));
-        let dlg = message_box(
+        // self.layer_stack.push(create_main_window());
+        self.layer_stack.push(create_dialog(
             "title",
-            "my message",
             vec!["OK".to_string(), "Cancel".to_string()],
-        );
-        self.layer_stack.push(Box::new(dlg));
+        ));
     }
     fn draw(&mut self) -> Result<CompletedFrame> {
         Ok(self.screen.draw(|frame| {
             let area = frame.size();
-            if let Some(layer) = self.layer_stack.last_mut() {
+            // redraw from the bottom up
+            for layer in self.layer_stack.iter_mut() {
                 layer.render(&area, frame);
             }
         })?)
     }
-    fn translate_event(&self, event: Event) -> Event {
+    fn translate_event(&self, event: EventCode) -> EventCode {
         match event {
-            Event::Key(key) => {
-                if key.code == crossterm::event::KeyCode::Tab {
-                    Event::Tab
+            EventCode::Key(key) => {
+                if key.code == crossterm::event::KeyCode::Tab
+                    && key.kind == crossterm::event::KeyEventKind::Press
+                {
+                    EventCode::Tab
                 } else {
-                    Event::Key(key)
+                    EventCode::Key(key)
                 }
             }
             _ => event,
         }
     }
-    fn handle_event(&mut self, event: Event) -> Option<Event> {
-        // convert Tab key to Tab event
+    fn handle_event(&mut self, event: EventCode) -> Option<EventCode> {
         let event = self.translate_event(event);
+        trace!("Ui handle_event {:?}", event);
 
         if let Some(layer) = self.layer_stack.last_mut() {
             return layer.handle_event(&event);

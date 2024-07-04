@@ -14,7 +14,7 @@ use std::{
 
 use ratatui::{backend::CrosstermBackend, CompletedFrame, Frame, Terminal};
 
-use crate::{dispatcher::EventDispatcher, events::Event};
+use crate::{dispatcher::EventDispatcher, events::EventCode};
 // use crate::traits::TranslateEvent;
 
 pub type IO = std::io::Stdout;
@@ -26,7 +26,7 @@ pub struct TerminalWrapper {
 }
 
 impl TerminalWrapper {
-    pub fn new(dispatcher: EventDispatcher<Event>) -> Result<Self> {
+    pub fn new(dispatcher: EventDispatcher<EventCode>) -> Result<Self> {
         let terminal = Self::init_terminal()?;
         let dispatcher = dispatcher.clone();
         // spawn a thread to listen for events

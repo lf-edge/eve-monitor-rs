@@ -1,3 +1,4 @@
+use log::trace;
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Rect},
@@ -6,57 +7,58 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Paragraph, StatefulWidgetRef, Widget, WidgetRef},
 };
 
-use crate::{events::Event, traits::Component};
+use crate::{
+    events::{Event, EventCode},
+    traits::{Component, VisualComponent},
+};
 
-pub struct ButtonState {
+use super::{
+    component::{StatefulComponentWrapper, WidgetState},
+    window::{Window, WindowId},
+};
+
+pub struct ButtonWidgetState {
     label: String,
     pushed: bool,
+    focused: bool,
 }
-
-struct ButtonWidget {}
-
-pub struct Button {
-    state: ButtonState,
-    widget: ButtonWidget,
-}
-
-impl Button {
-    pub fn new(label: String) -> Self {
-        Self {
-            state: ButtonState {
-                label: label.clone(),
-                pushed: false,
-            },
-            widget: ButtonWidget {},
-        }
-    }
+impl ButtonWidgetState {
     pub fn label(&self) -> &str {
-        self.state.label.as_str()
+        self.label.as_str()
     }
 }
 
-impl StatefulWidgetRef for &mut ButtonWidget {
-    type State = ButtonState;
+impl WidgetState for ButtonWidgetState {}
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut ButtonState) {
+pub struct ButtonWidget {}
+impl ButtonWidget {
+    fn render(&self, state: &mut ButtonWidgetState, area: Rect, buf: &mut Buffer) {
+        // set border style based on focus
+        let border_style = if state.focused {
+            Style::default().fg(Color::White)
+        } else {
+            Style::default().fg(Color::Gray)
+        };
+
+        // set border type based on push state
+        let border_type = if state.focused {
+            BorderType::Thick
+        } else {
+            BorderType::Rounded
+        };
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(border_type)
+            .border_style(border_style)
+            .style(Style::default().bg(Color::Black));
+
         let button = if state.pushed {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::White))
-                .style(Style::default().bg(Color::Black));
-
             Paragraph::new(state.label.as_str())
                 .style(Style::default().fg(Color::Black).bg(Color::White))
                 .alignment(Alignment::Center)
                 .block(block)
         } else {
-            let block = Block::default()
-                .borders(Borders::ALL)
-                .border_type(BorderType::Rounded)
-                .border_style(Style::default().fg(Color::White))
-                .style(Style::default().bg(Color::Black));
-
             Paragraph::new(state.label.as_str())
                 .style(Style::default().fg(Color::White))
                 .alignment(Alignment::Center)
@@ -66,13 +68,47 @@ impl StatefulWidgetRef for &mut ButtonWidget {
     }
 }
 
-impl Component for Button {
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
+pub type Button = StatefulComponentWrapper<ButtonWidget, ButtonWidgetState>;
+
+impl Button {
+    pub fn new(label: String) -> Self {
+        Self::create_component_state(
+            Box::new(ButtonWidget {}),
+            Box::new(ButtonWidgetState {
+                label,
+                pushed: false,
+                focused: false,
+            }),
+        )
+    }
+    pub fn label(&self) -> &str {
+        self.state.label.as_str()
+    }
+}
+
+impl StatefulWidgetRef for ButtonWidget {
+    type State = ButtonWidgetState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut ButtonWidgetState) {
+        self.render(state, area, buf);
+    }
+}
+
+impl StatefulWidgetRef for &mut Box<ButtonWidget> {
+    type State = ButtonWidgetState;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut ButtonWidgetState) {
+        self.render(state, area, buf);
+    }
+}
+
+impl VisualComponent for Button {
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, _focused: bool) {
         frame.render_stateful_widget_ref(&mut self.widget, *area, &mut self.state);
     }
     fn handle_event(&mut self, event: &Event) -> Option<Event> {
-        match event {
-            Event::Key(key) => {
+        match event.code {
+            EventCode::Key(key) => {
                 if self.state.pushed {
                     // we cate only about release of enter key or space bar
                     // consume all other events
@@ -81,7 +117,7 @@ impl Component for Button {
                         && key.kind == crossterm::event::KeyEventKind::Release
                     {
                         self.state.pushed = false;
-                        return Some(Event::Redraw);
+                        return Some(Event::redraw(None));
                     }
                     return None;
                 } else {
@@ -90,7 +126,7 @@ impl Component for Button {
                         && key.kind == crossterm::event::KeyEventKind::Press
                     {
                         self.state.pushed = true;
-                        return Some(Event::Redraw);
+                        return Some(Event::redraw(None));
                     }
                     return None;
                 }

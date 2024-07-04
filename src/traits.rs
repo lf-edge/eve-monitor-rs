@@ -1,46 +1,45 @@
+use std::any::Any;
+
 use ratatui::{layout::Rect, widgets::Widget, Frame};
 
-use crate::events::Event;
+use crate::{
+    events::Event,
+    ui::{
+        component::WidgetState,
+        window::{Window, WindowId},
+    },
+};
 
 pub trait Component {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>);
+    // return a list of (parent, child) window ids
+    fn get_children(&self) -> Vec<(WindowId, WindowId)> {
+        vec![]
+    }
+    fn id(&self) -> WindowId;
+}
+
+pub trait VisualComponent: Component {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, parent_focused: bool);
     fn handle_event(&mut self, _event: &Event) -> Option<Event> {
+        // self.get_children()
+        //     .and_then(|children| {
+        //         for (parent, child) in children {
+        //             if parent == self.id() {
+        //                 return Some(child);
+        //             }
+        //         }
+        //         None
+        //     })
+        //     .map(|id| Event::new(Event::Focus(id)));
         None
     }
 }
 
-// impl Component for Box<dyn Component> {
-//     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
-//         self.as_mut().render(area, frame);
-//     }
-//     fn handle_event(&mut self, event: &Event) -> Option<Event> {
-//         self.as_mut().handle_event(event)
-//     }
-// }
-
-// impl Component for &mut dyn Component {
-//     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
-//         self.render(area, frame);
-//     }
-//     fn handle_event(&mut self, event: Event) -> Option<Event> {
-//         self.handle_event(event)
-//     }
-// }
-
-// impl Component for &mut Box<dyn Component> {
-//     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
-//         self.as_mut().render(area, frame);
-//     }
-//     fn handle_event(&mut self, event: &Event) -> Option<Event> {
-//         self.as_mut().handle_event(event)
-//     }
-// }
-
-// impl<T: Widget> Component for T {
-//     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
-//         frame.render_widget(&self, *area);
-//     }
-// }
+impl std::fmt::Debug for dyn VisualComponent + 'static {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "VisualComponent")
+    }
+}
 
 // implement Debug for dyn traits::Component + 'static
 impl std::fmt::Debug for dyn Component + 'static {

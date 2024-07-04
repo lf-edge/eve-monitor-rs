@@ -1,6 +1,6 @@
 use std::{thread, vec};
 
-use anyhow::Result;
+use anyhow::{Ok, Result};
 use log::trace;
 use ratatui::Frame;
 use ratatui::{buffer::Buffer, widgets::WidgetRef};
@@ -63,6 +63,7 @@ impl Application {
             let event = self.wait_for_event()?;
             match event {
                 EventCode::Redraw => self.draw_ui()?,
+                EventCode::Quit => break Ok(()),
 
                 _ => {
                     if let Some(evt) = self.ui.handle_event(event) {
@@ -141,6 +142,15 @@ impl Ui {
     fn handle_event(&mut self, event: EventCode) -> Option<EventCode> {
         let event = self.translate_event(event);
         trace!("Ui handle_event {:?}", event);
+
+        match event {
+            EventCode::Key(key) => {
+                if key.code == crossterm::event::KeyCode::Char('q') {
+                    return Some(EventCode::Quit);
+                }
+            }
+            _ => {}
+        }
 
         if let Some(layer) = self.layer_stack.last_mut() {
             return layer.handle_event(&event);

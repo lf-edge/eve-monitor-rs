@@ -2,11 +2,12 @@
 
 use crate::ui::window::{Window, WindowId, TARGET_APP_ID};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum EventCode {
     Key(crossterm::event::KeyEvent),
     Tab,
     Redraw,
+    Quit,
 }
 
 #[derive(Debug, Clone)]

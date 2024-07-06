@@ -1,6 +1,8 @@
+use std::collections::HashMap;
+
 use ratatui::{
     buffer::Buffer,
-    layout::{Alignment, Rect},
+    layout::{self, Alignment, Rect},
     style::{Color, Style},
     widgets::{Paragraph, StatefulWidgetRef, WidgetRef},
     Frame,
@@ -19,7 +21,7 @@ impl<'a> LabelWidget<'a> {
         Self {
             text: Box::new(
                 Paragraph::new(text)
-                    .style(Style::default().fg(Color::White))
+                    .style(Style::default().fg(Color::White).bg(Color::Red))
                     .alignment(Alignment::Left),
             ),
         }
@@ -37,10 +39,18 @@ impl LabelWidgetState {
     }
 }
 
-impl WidgetState for LabelWidgetState {}
-impl WidgetState for &LabelWidgetState {}
+impl WidgetState for LabelWidgetState {
+    fn get_layout(&self) -> HashMap<String, Rect> {
+        return HashMap::new();
+    }
+}
+impl WidgetState for &LabelWidgetState {
+    fn get_layout(&self) -> HashMap<String, Rect> {
+        return HashMap::new();
+    }
+}
 
-impl WidgetState for VisualComponentState<LabelWidgetState> {}
+// impl WidgetState for VisualComponentState<LabelWidgetState> {}
 
 impl<'a> StatefulWidgetRef for LabelWidget<'a> {
     type State = VisualComponentState<LabelWidgetState>;
@@ -57,18 +67,21 @@ impl StatefulWidgetRef for &mut Box<LabelWidget<'_>> {
     }
 }
 
-pub type Label<'a> = StatefulComponentWrapper<LabelWidget<'a>, LabelWidgetState>;
+pub type LabelView<'a> = StatefulComponentWrapper<LabelWidget<'a>, LabelWidgetState>;
 
-impl<'a> Label<'a> {
-    pub fn new(text: String) -> Self {
+impl<'a> LabelView<'a> {
+    pub fn new<S: Into<String>>(name: S, text: S) -> Self {
+        let text = text.into();
         Self::create_component_state(
+            name.into(),
             Box::new(LabelWidget::new(text.clone())),
             LabelWidgetState { _text: text },
+            Box::new(|_, _| HashMap::new()),
         )
     }
 }
 
-impl<'a> VisualComponent for Label<'a> {
+impl<'a> VisualComponent for LabelView<'a> {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
         frame.render_stateful_widget_ref(&mut self.widget, *area, &mut self.state);
     }

@@ -3,12 +3,16 @@ use std::{thread, vec};
 use anyhow::{Ok, Result};
 use log::trace;
 
+use ratatui::layout::{Constraint, Layout};
+use ratatui::widgets::canvas::Label;
 use ratatui::CompletedFrame;
 
 use crate::dispatcher::EventDispatcher;
 use crate::events::EventCode;
 use crate::terminal::TerminalWrapper;
-use crate::ui::dialog::create_dialog;
+use crate::ui::dialog::Dialog;
+use crate::ui::label::LabelView;
+// use crate::ui::dialog::create_dialog;
 use crate::ui::window::Window;
 // use crate::ui::dialog::message_box;
 // use crate::ui::input_field::InputField;
@@ -19,7 +23,7 @@ pub struct Application {
     //screen: Screen,
     dispatcher: EventDispatcher<EventCode>,
     ui: Ui,
-    timers: thread::JoinHandle<()>,
+    //timers: thread::JoinHandle<()>,
 }
 
 impl Application {
@@ -30,14 +34,14 @@ impl Application {
         ui.init();
 
         let dispatcher_clone = dispatcher.clone();
-        let timers = thread::spawn(move || loop {
-            thread::sleep(std::time::Duration::from_millis(50));
-            dispatcher_clone.send(EventCode::Redraw);
-        });
+        // let timers = thread::spawn(move || loop {
+        //     thread::sleep(std::time::Duration::from_millis(50));
+        //     dispatcher_clone.send(EventCode::Redraw);
+        // });
         Ok(Self {
             dispatcher,
             ui,
-            timers,
+            //timers,
         })
     }
 
@@ -102,11 +106,37 @@ impl Ui {
         })
     }
     fn init(&mut self) {
-        // self.layer_stack.push(create_main_window());
-        self.layer_stack.push(create_dialog(
-            "title",
-            vec!["OK".to_string(), "Cancel".to_string()],
-        ));
+        let label = LabelView::new("Label1", "Hello, World!");
+        let wnd = Window::builder()
+            .add_view(label)
+            .with_layout(|frame| {
+                let mut layout_hash = std::collections::HashMap::new();
+                let [layout] =
+                    Layout::horizontal(vec![Constraint::Percentage(10)]).areas(frame.clone());
+                layout_hash.insert("Label1".to_string(), layout.clone());
+                layout_hash
+            })
+            .build();
+        self.layer_stack.push(wnd);
+
+        let dlg = Dialog::builder()
+            .title("Dialog")
+            .button(
+                "Ok",
+                Box::new(|a| {
+                    trace!("Ok button clicked");
+                }),
+            )
+            .button(
+                "Cancel",
+                Box::new(|a| {
+                    trace!("Cancel button clicked");
+                }),
+            )
+            .view(Box::new(LabelView::new("Label2", "Hello, World!")))
+            .build();
+
+        self.layer_stack.push(dlg);
     }
     fn draw(&mut self) -> Result<CompletedFrame> {
         Ok(self.screen.draw(|frame| {

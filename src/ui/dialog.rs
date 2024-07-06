@@ -1,11 +1,11 @@
-use std::{any::Any, collections::HashMap};
+use std::collections::HashMap;
 
 use log::trace;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style},
-    widgets::{Block, BorderType, Borders, StatefulWidgetRef},
+    widgets::{Block, BorderType, Borders, StatefulWidgetRef, WidgetRef},
     Frame,
 };
 
@@ -15,107 +15,203 @@ use crate::{
 };
 
 use super::{
-    button::Button,
+    button::{Button, OnButtonClicked},
     component::{StatefulComponentWrapper, VisualComponentState, WidgetState},
-    label::Label,
-    // mainwnd::MainWnd,
+    tools::centered_rect,
     window::{Window, WindowId},
 };
 
-pub fn create_dialog(title: &str, buttons: Vec<String>) -> Window {
-    let mut root_view = Dialog::new(title.to_string(), (30, 15));
-    let content = Label::new("This is a dialog".to_string());
-    root_view.set_content(&mut vec![Box::new(content)]);
-    buttons
-        .into_iter()
-        .map(|label| {
-            let button = Button::new(label);
-            Box::new(button)
-        })
-        .for_each(|e| {
-            root_view.add_button(e);
-        });
-    Window::new(Box::new(root_view))
-}
-
-// pub fn create_main_window() -> Window {
-//     let root_view = MainWnd::new();
-//     Window::new(Box::new(root_view))
-// }
-
-// struct Dialog {
-//     title: String,
-//     content: Vec<Box<dyn Component>>,
-//     buttons: Vec<Box<Button>>,
-//     size: (u16, u16),
-// }
-
-struct DialogWidgetState {
+pub struct DialogBuilder {
     title: String,
-    // content: Vec<Box<dyn VisualComponent>>,
-    buttons: HashMap<String, WindowId>,
+    buttons: HashMap<String, OnButtonClicked>,
+    views: HashMap<String, Box<dyn VisualComponent>>,
+    do_layout: Box<dyn Fn(&DialogWidgetState, &Rect) -> HashMap<String, Rect>>,
     size: (u16, u16),
 }
-impl WidgetState for DialogWidgetState {}
-struct DialogWidget {}
-impl StatefulWidgetRef for DialogWidget {
-    type State = VisualComponentState<DialogWidgetState>;
 
-    fn render_ref(&self, _area: Rect, _buf: &mut Buffer, _state: &mut Self::State) {
-        todo!()
+fn dialog_default_layout_vertical(state: &DialogWidgetState, area: &Rect) -> HashMap<String, Rect> {
+    let mut result = HashMap::new();
+
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick)
+        .border_style(Style::default().fg(Color::White))
+        .style(Style::default().bg(Color::Black))
+        .title(state.title.as_str());
+
+    let inner = block.inner(*area);
+    result.insert("frame".to_string(), inner);
+    let layout = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).split(inner);
+
+    result.insert("content".to_string(), layout[0]);
+    result.insert("buttons".to_string(), layout[1]);
+
+    result
+}
+
+impl DialogBuilder {
+    fn new() -> Self {
+        Self {
+            title: String::new(),
+            buttons: HashMap::new(),
+            views: HashMap::new(),
+            do_layout: Box::new(dialog_default_layout_vertical),
+            size: (30, 15),
+        }
+    }
+    pub fn title<S: Into<String>>(mut self, title: S) -> Self {
+        self.title = title.into();
+        self
+    }
+    pub fn button(mut self, label: &str, on_click: OnButtonClicked) -> Self {
+        self.buttons.insert(label.to_string(), on_click);
+        self
+    }
+    pub fn view(mut self, view: Box<dyn VisualComponent>) -> Self {
+        self.views.insert(view.name().to_string(), view);
+        self
+    }
+    pub fn with_layout(
+        mut self,
+        layout: impl Fn(&DialogWidgetState, &Rect) -> HashMap<String, Rect> + 'static,
+    ) -> Self {
+        self.do_layout = Box::new(layout);
+        self
+    }
+    pub fn build(self) -> Window {
+        let mut buttons: HashMap<String, Box<dyn VisualComponent>> = HashMap::new();
+        for (label, on_click) in self.buttons {
+            let button = Button::new(label.clone(), label.clone(), on_click);
+            buttons.insert(label, Box::new(button));
+        }
+        let dlg = Dialog::new("root_view", &self.title, (30, 15), buttons, self.do_layout);
+        let wnd = Window::builder()
+            .add_view(dlg)
+            .with_layout(move |r| {
+                let mut layout = HashMap::new();
+                let rect = centered_rect(self.size.0, self.size.1, r.clone());
+                layout.insert("root_view".to_string(), rect);
+                trace!("Dialog layout: {:?}", layout);
+                layout
+            })
+            .name(format!("Dialog: -{}-", self.title))
+            .build();
+        wnd
+    }
+}
+#[derive(Debug)]
+pub struct DialogWidgetState {
+    title: String,
+    buttons: HashMap<String, Box<dyn VisualComponent>>,
+    size: (u16, u16),
+    layout_map: HashMap<String, Rect>,
+}
+impl WidgetState for DialogWidgetState {
+    fn get_layout(&self) -> HashMap<String, Rect> {
+        return self.layout_map.clone();
+    }
+}
+pub struct DialogWidget {
+    frame: Block<'static>,
+}
+
+impl DialogWidget {
+    fn render(&self, state: &DialogWidgetState, area: Rect, buf: &mut Buffer) {
+        trace!("Dialog render with state: {:?}", state);
+        // let content_area = self.state.layout_map[&"content".to_string()];
+        // let buttons_area = self.state.layout_map[&"buttons".to_string()];
+        // // render the frame
+        // //frame.render_stateful_widget_ref(&mut self.widget, *area);
+
+        // // self.widget
+        // //     .frame
+        // //     .(self.state.widget_state.title.as_str());
+
+        // //render buttons
+        // for (i, (_label, button)) in self
+        //     .state
+        //     .widget_state
+        //     .buttons
+        //     .iter_mut()
+        //     //.filter(|c| is_button(c))
+        //     .enumerate()
+        // {
+        //     button.render(&layout_buttons[i], frame, _focused);
+        // }
+        // // render content
+        // for c in self.root.iter_mut() {
+        //     c.1.render(&content_area, frame, _focused);
+        // }
+
+        self.frame.render_ref(area, buf);
+
+        // render content
     }
 }
 
-type Dialog = StatefulComponentWrapper<DialogWidget, DialogWidgetState>;
+impl<'a> StatefulWidgetRef for Box<DialogWidget> {
+    type State = VisualComponentState<DialogWidgetState>;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.render(&state.widget_state, area, buf);
+    }
+}
+
+impl<'a> StatefulWidgetRef for &Box<DialogWidget> {
+    type State = VisualComponentState<DialogWidgetState>;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.render(&state.widget_state, area, buf);
+    }
+}
+
+impl<'a> StatefulWidgetRef for DialogWidget {
+    type State = VisualComponentState<DialogWidgetState>;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.render(&state.widget_state, area, buf);
+    }
+}
+
+pub type Dialog = StatefulComponentWrapper<DialogWidget, DialogWidgetState>;
 
 impl Dialog {
-    fn new(title: String, size: (u16, u16)) -> Self {
+    fn new<S: Into<String>>(
+        name: S,
+        title: S,
+        size: (u16, u16),
+        buttons: HashMap<String, Box<dyn VisualComponent>>,
+        layout: Box<dyn Fn(&DialogWidgetState, &Rect) -> HashMap<String, Rect>>,
+    ) -> Self {
         Self::create_component_state(
-            Box::new(DialogWidget {}),
+            name.into(),
+            Box::new(DialogWidget {
+                frame: Block::new()
+                    .border_type(BorderType::Thick)
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::White))
+                    .style(Style::default().bg(Color::Black)), //.title(self.state.widget_state.title.as_str()),
+            }),
             DialogWidgetState {
-                title,
+                title: title.into(),
+                buttons,
                 size,
-                // content: Vec::new(),
-                buttons: HashMap::new(),
+                layout_map: HashMap::new(),
             },
+            layout,
         )
     }
-    fn add_button(&mut self, button: Box<Button>) {
-        self.state
-            .widget_state
-            .buttons
-            .insert(button.state.widget_state.label().to_string(), button.id());
-        // prepend to the content
-        self.root.insert(0, button);
-    }
-    fn set_content(&mut self, content: &mut Vec<Box<dyn VisualComponent>>) {
-        self.root.append(content);
+    pub fn builder() -> DialogBuilder {
+        DialogBuilder::new()
     }
 }
 
 impl VisualComponent for Dialog {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
-        // get centered area for the dialog
-        let area = centered_rect(
-            self.state.widget_state.size.0,
-            self.state.widget_state.size.1,
-            *area,
-        );
+        frame.render_stateful_widget_ref(&self.widget, *area, &mut self.state);
+        let content_area = self.state.widget_state.layout_map[&"content".to_string()];
+        let buttons_area = self.state.widget_state.layout_map[&"buttons".to_string()];
 
-        // create a block with wide borders
-        let blk = Block::new()
-            .border_type(BorderType::Thick)
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::White))
-            .style(Style::default().bg(Color::Black))
-            .title(self.state.widget_state.title.as_str());
-
-        let inner_area = blk.inner(area);
-        // render the block
-        frame.render_widget(blk, area);
-
-        let layout =
-            Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).split(inner_area);
         let layout_buttons = Layout::horizontal(
             self.state
                 .widget_state
@@ -125,61 +221,18 @@ impl VisualComponent for Dialog {
                 .collect::<Vec<_>>(),
         )
         .flex(ratatui::layout::Flex::End)
-        .split(layout[1]);
+        .split(buttons_area);
 
-        let is_button = |c: &Box<dyn VisualComponent>| -> bool {
-            self.state
-                .widget_state
-                .buttons
-                .values()
-                .any(|id| *id == c.id())
-        };
-        // render buttons
-        for (i, button) in self.root.iter_mut().filter(|c| is_button(c)).enumerate() {
-            button.render(&layout_buttons[i], frame, _focused);
-        }
-        // render content
-        for c in self.root.iter_mut().filter(|c| !is_button(c)) {
-            c.render(&layout[0], frame, _focused);
+        for (i, (label, button)) in self.state.widget_state.buttons.iter_mut().enumerate() {
+            button.render(&layout_buttons[i], frame, false);
         }
     }
 
     fn handle_event(&mut self, _event: &Event) -> Option<Event> {
         None
     }
-}
 
-pub fn message_box(title: &str, content: &str, buttons: Vec<String>) -> impl Component {
-    let mut dlg = Dialog::new(title.to_string(), (30, 15));
-    let content = Label::new(content.to_string());
-    dlg.set_content(&mut vec![Box::new(content)]);
-
-    buttons
-        .into_iter()
-        .map(|label| {
-            let button = Button::new(label);
-            Box::new(button)
-        })
-        .for_each(|e| {
-            dlg.add_button(e);
-        });
-
-    dlg
-}
-
-// helper function to create a centered rect using up certain percentage of the available rect `r`
-fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
-    let popup_layout = Layout::vertical([
-        Constraint::Percentage((100 - percent_y) / 2),
-        Constraint::Percentage(percent_y),
-        Constraint::Percentage((100 - percent_y) / 2),
-    ])
-    .split(r);
-
-    Layout::horizontal([
-        Constraint::Percentage((100 - percent_x) / 2),
-        Constraint::Percentage(percent_x),
-        Constraint::Percentage((100 - percent_x) / 2),
-    ])
-    .split(popup_layout[1])[1]
+    fn layout(&mut self, area: &Rect) {
+        self.state.widget_state.layout_map = (self.do_layout)(&self.state.widget_state, area);
+    }
 }

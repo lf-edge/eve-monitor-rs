@@ -36,7 +36,11 @@ impl StatusBarWidget {
     }
 }
 
-impl WidgetState for StatusBarWidgetState {}
+impl WidgetState for StatusBarWidgetState {
+    fn get_layout(&self) -> std::collections::HashMap<String, Rect> {
+        todo!()
+    }
+}
 
 struct StatusBarWidgetState {}
 

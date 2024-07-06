@@ -13,10 +13,13 @@ pub trait Component {
     fn set_visible(&mut self, visible: bool);
     fn focus(&mut self);
     fn focus_lost(&mut self);
+    fn name(&self) -> &str;
+    // fn layout(&mut self, area: &Rect);
 }
 
 pub trait VisualComponent: Component {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, parent_focused: bool);
+    // fn layout(&mut self, area: &Rect);
     fn handle_event(&mut self, _event: &Event) -> Option<Event> {
         // self.get_children()
         //     .and_then(|children| {
@@ -30,6 +33,7 @@ pub trait VisualComponent: Component {
         //     .map(|id| Event::new(Event::Focus(id)));
         None
     }
+    fn layout(&mut self, _area: &Rect) {}
 }
 
 impl std::fmt::Debug for dyn VisualComponent + 'static {

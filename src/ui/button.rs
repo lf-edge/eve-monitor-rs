@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use log::trace;
 use ratatui::{
     buffer::Buffer,
@@ -16,7 +18,7 @@ use super::component::{StatefulComponentWrapper, VisualComponentState, WidgetSta
 pub struct ButtonWidgetState {
     label: String,
     pushed: bool,
-    // focused: bool,
+    on_click: Option<OnButtonClicked>,
 }
 impl ButtonWidgetState {
     pub fn label(&self) -> &str {
@@ -24,7 +26,11 @@ impl ButtonWidgetState {
     }
 }
 
-impl WidgetState for ButtonWidgetState {}
+impl WidgetState for ButtonWidgetState {
+    fn get_layout(&self) -> HashMap<String, Rect> {
+        todo!()
+    }
+}
 
 pub struct ButtonWidget {}
 impl ButtonWidget {
@@ -71,15 +77,19 @@ impl ButtonWidget {
 
 pub type Button = StatefulComponentWrapper<ButtonWidget, ButtonWidgetState>;
 
+pub type OnButtonClicked = Box<dyn Fn(&Button) -> ()>;
+
 impl Button {
-    pub fn new(label: String) -> Self {
+    pub fn new<S: Into<String>>(name: S, label: S, on_click: OnButtonClicked) -> Self {
         Self::create_component_state(
+            name.into(),
             Box::new(ButtonWidget {}),
             ButtonWidgetState {
-                label,
+                label: label.into(),
                 pushed: false,
-                // focused: false,
+                on_click: Some(on_click),
             },
+            Box::new(|_, _| HashMap::new()),
         )
     }
     pub fn label(&self) -> &str {

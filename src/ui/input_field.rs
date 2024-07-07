@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Position, Rect},
@@ -56,14 +58,20 @@ pub struct InputFieldState {
     cursor_position: Position,
 }
 
-impl WidgetState for InputFieldState {}
+impl WidgetState for InputFieldState {
+    fn get_layout(&self) -> std::collections::HashMap<String, Rect> {
+        todo!()
+    }
+}
 
 pub type InputField = StatefulComponentWrapper<InputFieldWidget, InputFieldState>;
 
 impl InputField {
-    pub fn new(caption: String, value: Option<String>) -> Self {
+    pub fn new<S: Into<String>>(caption: S, value: Option<String>) -> Self {
         let input_position = value.as_ref().map(|v| v.len()).unwrap_or_default();
+        let caption = caption.into();
         Self::create_component_state(
+            caption.clone(),
             Box::new(InputFieldWidget {}),
             InputFieldState {
                 caption,
@@ -71,6 +79,7 @@ impl InputField {
                 input_position,
                 cursor_position: Position::new(0, 0),
             },
+            Box::new(|_, _| HashMap::new()),
         )
     }
 }
@@ -102,17 +111,17 @@ impl StatefulWidgetRef for &mut Box<InputFieldWidget> {
 impl VisualComponent for InputField {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
         frame.render_stateful_widget_ref(&mut self.widget, *area, &mut self.state);
-        if _focused && self.state.focused() {
+        if self.state.focused() {
             frame.set_cursor(
                 self.state.widget_state.cursor_position.x,
                 self.state.widget_state.cursor_position.y,
             );
         }
     }
-    fn handle_event(&mut self, event: &Event) -> Option<Event> {
+    fn handle_event(&mut self, event: &EventCode) -> Option<Event> {
         let old_state = self.state.widget_state.clone();
 
-        match event.code {
+        match event {
             EventCode::Key(key) => match key.code {
                 crossterm::event::KeyCode::Char(c) => {
                     if let Some(value) = self.state.widget_state.value.as_mut() {
@@ -156,5 +165,9 @@ impl VisualComponent for InputField {
         } else {
             return None;
         }
+    }
+
+    fn can_focus(&self) -> bool {
+        true
     }
 }

@@ -6,6 +6,7 @@ use crate::ui::window::{WindowId, TARGET_APP_ID};
 pub enum EventCode {
     Key(crossterm::event::KeyEvent),
     Tab,
+    ShiftTab,
     Redraw,
     Quit,
 }
@@ -25,6 +26,9 @@ impl Event {
     }
     pub fn redraw(target: Option<WindowId>) -> Self {
         Self::new(EventCode::Redraw, target.or(Some(TARGET_APP_ID)))
+    }
+    pub fn key_event(key: crossterm::event::KeyEvent) -> Self {
+        Self::new(EventCode::Key(key), None)
     }
 }
 

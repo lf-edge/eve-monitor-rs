@@ -131,9 +131,6 @@ where
     fn id(&self) -> WindowId {
         self.state.id()
     }
-    fn focused(&self) -> bool {
-        self.state.focused()
-    }
 
     fn visible(&self) -> bool {
         self.state.visible()

@@ -127,8 +127,8 @@ impl VisualComponent for Button {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, _focused: bool) {
         frame.render_stateful_widget_ref(&mut self.widget, *area, &mut self.state);
     }
-    fn handle_event(&mut self, event: &Event) -> Option<Event> {
-        match event.code {
+    fn handle_event(&mut self, event: &EventCode) -> Option<Event> {
+        match event {
             EventCode::Key(key) => {
                 if self.state.widget_state.pushed {
                     // we cate only about release of enter key or space bar

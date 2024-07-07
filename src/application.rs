@@ -1,6 +1,7 @@
 use std::{thread, vec};
 
 use anyhow::{Ok, Result};
+use crossterm::event::KeyModifiers;
 use log::trace;
 
 use ratatui::layout::{Constraint, Layout};
@@ -11,7 +12,9 @@ use crate::dispatcher::EventDispatcher;
 use crate::events::EventCode;
 use crate::terminal::TerminalWrapper;
 use crate::ui::dialog::Dialog;
-use crate::ui::label::LabelView;
+use crate::ui::input_field;
+use crate::ui::label::{self, LabelView};
+use crate::ui::statusbar::StatusBar;
 // use crate::ui::dialog::create_dialog;
 use crate::ui::window::Window;
 // use crate::ui::dialog::message_box;
@@ -107,36 +110,57 @@ impl Ui {
     }
     fn init(&mut self) {
         let label = LabelView::new("Label1", "Hello, World!");
+        let status_bar = StatusBar::new();
+        let input_field = input_field::InputField::new("Input", Some("Type here".to_string()));
+        let input1_field =
+            input_field::InputField::new("Input1", Some("Type here too".to_string()));
         let wnd = Window::builder()
             .add_view(label)
+            .add_view(input_field)
+            .add_view(input1_field)
+            .add_view(status_bar)
             .with_layout(|frame| {
                 let mut layout_hash = std::collections::HashMap::new();
-                let [layout] =
-                    Layout::horizontal(vec![Constraint::Percentage(10)]).areas(frame.clone());
-                layout_hash.insert("Label1".to_string(), layout.clone());
+
+                // vertical layout with 3 lines for status bar
+                let [frame, status_bar] =
+                    Layout::vertical(vec![Constraint::Min(0), Constraint::Length(3)]).areas(*frame);
+
+                // split the frame into two parts for the label and input field
+                let [label, input, input1] = Layout::vertical(vec![
+                    Constraint::Length(1),
+                    Constraint::Length(3),
+                    Constraint::Length(3),
+                ])
+                .areas(frame);
+
+                layout_hash.insert("Label1".to_string(), label);
+                layout_hash.insert("Input".to_string(), input);
+                layout_hash.insert("Input1".to_string(), input1);
+                layout_hash.insert("StatusBar".to_string(), status_bar);
                 layout_hash
             })
             .build();
         self.layer_stack.push(wnd);
 
-        let dlg = Dialog::builder()
-            .title("Dialog")
-            .button(
-                "Ok",
-                Box::new(|a| {
-                    trace!("Ok button clicked");
-                }),
-            )
-            .button(
-                "Cancel",
-                Box::new(|a| {
-                    trace!("Cancel button clicked");
-                }),
-            )
-            .view(Box::new(LabelView::new("Label2", "Hello, World!")))
-            .build();
+        // let dlg = Dialog::builder()
+        //     .title("Dialog")
+        //     .button(
+        //         "Ok",
+        //         Box::new(|a| {
+        //             trace!("Ok button clicked");
+        //         }),
+        //     )
+        //     .button(
+        //         "Cancel",
+        //         Box::new(|a| {
+        //             trace!("Cancel button clicked");
+        //         }),
+        //     )
+        //     .view(Box::new(LabelView::new("Label2", "Hello, World!")))
+        //     .build();
 
-        self.layer_stack.push(dlg);
+        // self.layer_stack.push(dlg);
     }
     fn draw(&mut self) -> Result<CompletedFrame> {
         Ok(self.screen.draw(|frame| {
@@ -152,8 +176,13 @@ impl Ui {
             EventCode::Key(key) => {
                 if key.code == crossterm::event::KeyCode::Tab
                     && key.kind == crossterm::event::KeyEventKind::Press
+                    && key.modifiers.is_empty()
                 {
                     EventCode::Tab
+                } else if key.code == crossterm::event::KeyCode::BackTab
+                    && key.kind == crossterm::event::KeyEventKind::Press
+                {
+                    EventCode::ShiftTab
                 } else {
                     EventCode::Key(key)
                 }

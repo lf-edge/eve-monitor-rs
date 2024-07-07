@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Constraint, Layout, Rect},
@@ -9,7 +11,7 @@ use crate::traits::VisualComponent;
 
 use super::component::{StatefulComponentWrapper, VisualComponentState, WidgetState};
 
-struct StatusBarWidget {}
+pub struct StatusBarWidget {}
 impl StatusBarWidget {
     fn render_widget(&self, _state: &mut StatusBarWidgetState, area: Rect, buf: &mut Buffer) {
         let border = Block::new()
@@ -42,7 +44,7 @@ impl WidgetState for StatusBarWidgetState {
     }
 }
 
-struct StatusBarWidgetState {}
+pub struct StatusBarWidgetState {}
 
 impl StatefulWidgetRef for &mut Box<StatusBarWidget> {
     type State = StatusBarWidgetState;
@@ -58,7 +60,18 @@ impl StatefulWidgetRef for StatusBarWidget {
     }
 }
 
-type StatusBar = StatefulComponentWrapper<StatusBarWidget, StatusBarWidgetState>;
+pub type StatusBar = StatefulComponentWrapper<StatusBarWidget, StatusBarWidgetState>;
+
+impl StatusBar {
+    pub fn new() -> Self {
+        Self::create_component_state(
+            "StatusBar".to_string(),
+            Box::new(StatusBarWidget {}),
+            StatusBarWidgetState {},
+            Box::new(|_, _| HashMap::new()),
+        )
+    }
+}
 
 impl VisualComponent for StatusBar {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, _focused: bool) {

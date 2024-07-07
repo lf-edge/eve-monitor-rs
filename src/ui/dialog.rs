@@ -10,7 +10,7 @@ use ratatui::{
 };
 
 use crate::{
-    events::Event,
+    events::{Event, EventCode},
     traits::{Component, VisualComponent},
 };
 
@@ -228,7 +228,7 @@ impl VisualComponent for Dialog {
         }
     }
 
-    fn handle_event(&mut self, _event: &Event) -> Option<Event> {
+    fn handle_event(&mut self, _event: &EventCode) -> Option<Event> {
         None
     }
 

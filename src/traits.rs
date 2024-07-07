@@ -1,6 +1,9 @@
 use ratatui::{layout::Rect, Frame};
 
-use crate::{events::Event, ui::window::WindowId};
+use crate::{
+    events::{Event, EventCode},
+    ui::window::WindowId,
+};
 
 pub trait Component {
     // return a list of (parent, child) window ids
@@ -8,11 +11,11 @@ pub trait Component {
         vec![]
     }
     fn id(&self) -> WindowId;
-    fn focused(&self) -> bool;
     fn visible(&self) -> bool;
     fn set_visible(&mut self, visible: bool);
-    fn focus(&mut self);
     fn focus_lost(&mut self);
+    fn focus(&mut self) {}
+
     fn name(&self) -> &str;
     // fn layout(&mut self, area: &Rect);
 }
@@ -20,7 +23,7 @@ pub trait Component {
 pub trait VisualComponent: Component {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, parent_focused: bool);
     // fn layout(&mut self, area: &Rect);
-    fn handle_event(&mut self, _event: &Event) -> Option<Event> {
+    fn handle_event(&mut self, _event: &EventCode) -> Option<Event> {
         // self.get_children()
         //     .and_then(|children| {
         //         for (parent, child) in children {
@@ -34,6 +37,9 @@ pub trait VisualComponent: Component {
         None
     }
     fn layout(&mut self, _area: &Rect) {}
+    fn can_focus(&self) -> bool {
+        false
+    }
 }
 
 impl std::fmt::Debug for dyn VisualComponent + 'static {

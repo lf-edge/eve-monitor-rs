@@ -1,4 +1,5 @@
 use std::{
+    borrow::BorrowMut,
     cell::RefCell,
     collections::HashMap,
     fmt::Debug,
@@ -30,16 +31,61 @@ static WIN_ID: WindowIdGenerator = WindowIdGenerator(AtomicUsize::new(1));
 /// TARGET_APP_ID is a special identifier to roue events to the application's event loop.
 pub static TARGET_APP_ID: WindowId = 0;
 
+#[derive(Debug)]
+pub struct FocusTracker {
+    focused_view: usize,
+    tab_order: Vec<String>,
+}
+
+impl FocusTracker {
+    pub fn new(tab_order: Vec<String>, focused_view: Option<String>) -> Self {
+        // if focused view is set find its index in the tab order
+        let focused_view = focused_view
+            .and_then(|name| tab_order.iter().position(|n| n == &name))
+            .unwrap_or(0);
+
+        Self {
+            focused_view,
+            tab_order,
+        }
+    }
+    pub fn get_focused_view(&self) -> Option<String> {
+        self.tab_order.get(self.focused_view).cloned()
+    }
+    pub fn focus_next(&mut self) -> Option<String> {
+        if self.focused_view + 1 < self.tab_order.len() {
+            self.focused_view += 1;
+        } else {
+            self.focused_view = 0;
+        }
+
+        Some(self.tab_order[self.focused_view].clone())
+    }
+
+    pub fn focus_prev(&mut self) -> Option<String> {
+        if self.focused_view > 0 {
+            self.focused_view -= 1;
+        } else {
+            self.focused_view = self.tab_order.len() - 1;
+        }
+
+        Some(self.tab_order[self.focused_view].clone())
+    }
+}
+
 pub struct WindowBuilder {
     views: HashMap<String, Box<dyn VisualComponent>>,
     focused_view: Option<String>,
     do_layout: Box<dyn Fn(&Rect) -> HashMap<String, Rect>>,
     name: Option<String>,
+    tab_order: Option<Vec<String>>,
 }
 
 impl WindowBuilder {
     pub fn add_view(mut self, view: impl VisualComponent + 'static) -> Self {
-        self.views.insert(view.name().to_string(), Box::new(view));
+        let view_name = view.name().to_string();
+
+        self.views.insert(view_name, Box::new(view));
         self
     }
     pub fn with_layout(
@@ -53,9 +99,30 @@ impl WindowBuilder {
         self.name = Some(name.into());
         self
     }
+    pub fn focused_view<S: Into<String>>(mut self, name: S) -> Self {
+        self.focused_view = Some(name.into());
+        self
+    }
+    pub fn tab_order(mut self, order: Vec<String>) -> Self {
+        self.tab_order = Some(order);
+        self
+    }
     pub fn build(self) -> Window {
-        // if name is not set then generate a default name
-        let ret = Window::new(self.name, self.views, self.focused_view, self.do_layout);
+        let collect_views = || {
+            let mut tab_order = Vec::new();
+
+            for (view_name, view) in self.views.iter() {
+                if view.can_focus() {
+                    tab_order.push(view_name.clone());
+                }
+            }
+            tab_order
+        };
+
+        let tab_order = self.tab_order.unwrap_or_else(collect_views);
+        let focus_tracker = FocusTracker::new(tab_order, self.focused_view);
+
+        let ret = Window::new(self.name, self.views, focus_tracker, self.do_layout);
         ret
     }
 }
@@ -66,10 +133,10 @@ type LayoutFn = Box<dyn Fn(&Rect) -> HashMap<String, Rect>>;
 pub struct Window {
     id: WindowId,
     views: HashMap<String, Box<dyn VisualComponent>>,
-    focused_view: Option<String>,
     dispatcher: EventDispatcher<Event>,
     do_layout: LayoutFn,
     name: String,
+    focus_tracker: FocusTracker,
 }
 
 impl Debug for Window {
@@ -77,7 +144,7 @@ impl Debug for Window {
         f.debug_struct("Window")
             .field("id", &self.id)
             .field("views", &self.views)
-            .field("focused_view", &self.focused_view)
+            .field("focus_tracker", &self.focus_tracker)
             .finish()
     }
 }
@@ -89,13 +156,14 @@ impl Window {
             focused_view: None,
             do_layout: Box::new(|_| HashMap::new()),
             name: None,
+            tab_order: None,
         }
     }
 
     fn new(
         name: Option<String>,
         views: HashMap<String, Box<dyn VisualComponent>>,
-        focused_view: Option<String>,
+        focus_tracker: FocusTracker,
         do_layout: LayoutFn,
     ) -> Self {
         let id = Self::gen_window_id();
@@ -106,7 +174,7 @@ impl Window {
             name: name.into(),
             id: id,
             views,
-            focused_view: focused_view,
+            focus_tracker,
             dispatcher: EventDispatcher::new(),
             do_layout,
         }
@@ -114,52 +182,159 @@ impl Window {
     pub fn gen_window_id() -> WindowId {
         WIN_ID.next()
     }
-    // pub fn add_view(&mut self, view: Box<dyn VisualComponent>) {
-    //     self.views.insert(view.id(), view);
-    // }
-    // pub fn remove_view(&mut self, id: WindowId) {
-    //     self.views.remove(&id);
-    // }
-    // pub fn focus_view(&mut self, id: WindowId) {
-    //     trace!("Focusing view {}", id);
-    //     // if there is a view in focus then notify it that it is losing focus
-    //     if let Some(view) = self.focused_view.and_then(|id| self.views.get_mut(&id)) {
-    //         view.borrow_mut().focus_lost();
-    //     }
 
-    //     self.focused_view = Some(id);
-    //     // let view know that it is in focus
-    //     if let Some(view) = self.views.get_mut(&id) {
-    //         view.borrow_mut().focus();
-    //     } else {
-    //         warn!("View with id {} not found", id)
-    //     }
-    // }
-    // pub fn get_focused_view(&self) -> Option<&Box<dyn VisualComponent>> {
-    //     self.focused_view.and_then(|id| self.views.get(&id))
-    // }
     pub fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
         trace!("Rendering window {} {}", self.id, self.name);
-        for (_id, view) in self.views.iter_mut() {
-            //get layout tfo the view
+        for (name, view) in self.views.iter_mut() {
+            //get layout for the view
             let layout = (self.do_layout)(area);
-            let area = layout.get(_id).unwrap();
-            trace!("Rendering view {} at {:?}", _id, area);
+            let area = layout.get(name).unwrap();
+            trace!("Rendering view {} at {:?}", name, area);
             trace!("Layout: {:?}", layout);
 
-            // if the view is in focus then render it with focus
-            // let focused = &self
-            //     .focused_view
-            //     .and_then(|f| Some(f == *id))
-            //     .unwrap_or(false);
-            //VisualComponent::layout(&1mut *view, area);
             view.layout(area);
             view.render(area, frame, true);
         }
     }
     pub fn handle_event(&mut self, event: &EventCode) -> Option<EventCode> {
         trace!("window {} Event: {:?} ", self.id, event);
-        trace!("focused view: {:?}", self.focused_view);
+        trace!("focused view: {:#?}", self.focus_tracker);
+
+        let focused_view = self
+            .focus_tracker
+            .get_focused_view()
+            .and_then(|name| self.views.get_mut(&name));
+
+        match event {
+            EventCode::Tab => {
+                if let Some(focused_view) = focused_view {
+                    focused_view.focus_lost();
+                }
+
+                if let Some(next) = self.focus_tracker.focus_next() {
+                    let view = self.views.get_mut(&next).unwrap();
+                    view.focus();
+                    return Some(EventCode::Redraw);
+                }
+            }
+            EventCode::ShiftTab => {
+                if let Some(focused_view) = focused_view {
+                    focused_view.focus_lost();
+                }
+
+                if let Some(prev) = self.focus_tracker.focus_prev() {
+                    let view = self.views.get_mut(&prev).unwrap();
+                    view.focus();
+                    return Some(EventCode::Redraw);
+                }
+            }
+            _ => {
+                if let Some(focused_view) = focused_view {
+                    return focused_view.handle_event(event).and_then(|a| Some(a.code));
+                }
+            }
+        }
+
+        // get name of the focused view
+        // if let Some(focused_view_name) = self.focused_view.as_ref() {
+        //     // find a focusable view after the current view
+        //     let focusable_views = self
+        //         .views
+        //         .iter_mut()
+        //         .filter_map(|(name, view)| {
+        //             if view.can_focus() {
+        //                 Some(name.clone())
+        //             } else {
+        //                 None
+        //             }
+        //         })
+        //         .collect::<Vec<_>>();
+
+        //     trace!("focusable views: {:?}", focusable_views);
+
+        //     let next = focusable_views
+        //         .iter()
+        //         // .skip(|name| *name == focused_view_name)
+        //         //.filter(|name| *name != focused_view_name)
+        //         .cycle()
+        //         .next();
+
+        //     trace!("next: {:?}", next);
+
+        //     if let Some(next) = next {
+        //         self.focused_view = Some(next.clone());
+        //         let view = &mut self.views.get_mut(next).unwrap();
+        //         view.focus();
+        //         return Some(Event::redraw(None).code);
+        //     } else {
+        //         trace!("No focusable view found");
+        //     }
+
+        //     // if let Some((name, _)) = &next_view {
+        //     //     let view = &mut self.views.get_mut(*name).unwrap();
+        //     //     self.focused_view = Some(*name.clone());
+        //     // }
+        // } else {
+        //     // choose the first focusable view from the list of views
+        //     for (name, view) in self.views.iter_mut() {
+        //         if view.can_focus() {
+        //             self.focused_view = Some(name.clone());
+        //             view.focus();
+        //             return Some(Event::redraw(None).code);
+        //         }
+        //     }
+        // }
+
+        // get a view that is in focus
+        // let focused_view = self
+        //     .focused_view
+        //     .as_ref()
+        //     .and_then(|id| self.views.get_mut(id));
+
+        // if let Some(view) = focused_view {
+        //     // find focusable element after current
+        //     self.views
+        //         .iter()
+        //         .skip_while(|(name, _)| *name != &self.focused_view.unwrap());
+
+        //     // return view
+        //     //     .handle_event(&Event {
+        //     //         code: event.clone(),
+        //     //         target: None,
+        //     //     })
+        //     //     .map(|e| e.code);
+        //     return Some(Event::redraw(None).code);
+        // } else {
+        //     trace!("No view in focus selecting");
+        //     // choose the first focusable view from the list of views
+        //     for (name, view) in self.views.iter_mut() {
+        //         trace!("Checking view {} can_focus={}", name, view.can_focus());
+        //         if view.can_focus() {
+        //             self.focused_view = Some(name.clone());
+        //             view.focus();
+        //             return Some(Event::redraw(None).code);
+        //             // return view
+        //             //     .handle_event(&Event {
+        //             //         code: event.clone(),
+        //             //         target: None,
+        //             //     })
+        //             //     .map(|e| e.code);
+        //         }
+        //     }
+        // }
+
+        // if let Some(view) = &self
+        //     .focused_view
+        //     .as_mut()
+        //     .and_then(|id| self.views.get_mut(id))
+        // {
+        //     return view
+        //         .handle_event(&Event {
+        //             code: EventCode::Tab,
+        //             target: None,
+        //         })
+        //         .map(|e| e.code);
+        // }
         // get children of the focused view
         // if let Some(view) = self.focused_view {
         //     let children = self

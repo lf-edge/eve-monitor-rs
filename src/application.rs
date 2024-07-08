@@ -18,6 +18,7 @@ use crate::terminal::TerminalWrapper;
 use crate::traits::{IPresenter, IWidget, IWindow};
 use crate::ui::focus_tracker::{FocusMode, FocusTracker};
 use crate::ui::mainwnd::MainWnd;
+use crate::ui::widgets::label::LabelElement;
 use crate::ui::widgets::rediogroup::{RadioGroupElement, RadioGroupState};
 // use crate::ui::dialog::DialogBuilder;
 // use crate::ui::input_field;
@@ -180,9 +181,12 @@ impl Ui {
         let labels = vec!["c".into(), "d".into(), "e".into()];
         let v2 = RadioGroupElement::new(labels, "Radio Group 1".to_string());
 
+        let v3 = LabelElement::new("Label".to_string());
+
         let mut widgets: HashMap<String, Box<dyn IWidget>> = HashMap::new();
         widgets.insert("RadioGroup".to_string(), Box::new(v1));
         widgets.insert("RadioGroup 1".to_string(), Box::new(v2));
+        widgets.insert("Label".to_string(), Box::new(v3));
 
         let w = MainWnd {
             ft: FocusTracker::create_from_taborder(

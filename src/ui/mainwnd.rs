@@ -138,7 +138,10 @@ impl IPresenter for MainWnd {
 
         let r = self.layout.get("0-1").unwrap();
         let rg = self.widgets.get_mut("RadioGroup 1").unwrap();
+        rg.render(r, frame);
 
+        let r = self.layout.get("3-3").unwrap();
+        let rg = self.widgets.get_mut("Label").unwrap();
         rg.render(r, frame);
     }
 

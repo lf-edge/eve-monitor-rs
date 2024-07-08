@@ -103,7 +103,7 @@ pub trait IFocusTracker {
 }
 
 pub trait IEventHandler {
-    fn handle_key_event(&mut self, key: KeyEvent);
+    fn handle_key_event(&mut self, key: KeyEvent) {}
 }
 
 pub trait IEventDispatcher {

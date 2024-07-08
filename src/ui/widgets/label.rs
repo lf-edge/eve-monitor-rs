@@ -8,90 +8,55 @@ use ratatui::{
     Frame,
 };
 
-use crate::{
-    traits::VisualComponent,
-    ui::component::{StatelessComponent, VisualComponentState, WidgetState},
-};
+use crate::traits::{IEventHandler, IPresenter, IWidget, IWidgetPresenter};
 
-pub struct LabelWidget<'a> {
-    text_widget: Box<Paragraph<'a>>,
-}
+use super::element::Element;
 
-impl<'a> LabelWidget<'a> {
-    pub fn new(text: String) -> Self {
-        Self {
-            text_widget: Box::new(
-                Paragraph::new(text)
-                    .style(Style::default().fg(Color::White).bg(Color::Red))
-                    .alignment(Alignment::Left),
-            ),
-        }
-    }
-}
-
-//FIXME: we do not use this state yet
 pub struct LabelWidgetState {
     text: String,
 }
 
-impl LabelWidgetState {
+pub type LabelElement = Element<LabelWidgetState>;
+
+impl LabelElement {
     pub fn new(text: String) -> Self {
-        Self { text }
+        let state = LabelWidgetState { text };
+        Self {
+            d: state,
+            v: Default::default(),
+        }
     }
 }
 
-impl WidgetState for LabelWidgetState {
-    fn get_layout(&self) -> HashMap<String, Rect> {
-        return HashMap::new();
-    }
-}
-impl WidgetState for &LabelWidgetState {
-    fn get_layout(&self) -> HashMap<String, Rect> {
-        return HashMap::new();
-    }
-}
-
-// impl<V: WidgetState> StatefulWidgetRef for V {
-//     type State = VisualComponentState<V>;
-//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-//         self.widget.render_ref(area, buf, state);
-//     }
-// }
-
-// impl WidgetState for VisualComponentState<LabelWidgetState> {}
-
-impl<'a> StatefulWidgetRef for LabelWidget<'a> {
-    type State = VisualComponentState<LabelWidgetState>;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
-        self.text_widget.render_ref(area, buf);
+impl IWidgetPresenter for LabelElement {
+    fn render(&self, area: Rect, buf: &mut Buffer) {
+        let text = self.d.text.clone();
+        let p = Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::White));
+        p.render_ref(area, buf);
     }
 }
 
-// implement StatefulWidgetRef got Box<LabelWidget>
-impl StatefulWidgetRef for &mut Box<LabelWidget<'_>> {
-    type State = VisualComponentState<LabelWidgetState>;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
-        self.text_widget.render_ref(area, buf);
+impl IWidgetPresenter for &mut LabelElement {
+    fn render(&self, area: Rect, buf: &mut Buffer) {
+        let text = self.d.text.clone();
+        let p = Paragraph::new(text)
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::White));
+        p.render_ref(area, buf);
     }
 }
 
-pub type LabelView<'a> = StatelessComponent<LabelWidget<'a>>;
+impl IPresenter for LabelElement {
+    fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
+        todo!()
+    }
 
-impl<'a> LabelView<'a> {
-    pub fn new<S: Into<String>>(name: S, text: S) -> Self {
-        let text = text.into();
-        Self::create_component_state(
-            name.into(),
-            Box::new(LabelWidget::new(text.clone())),
-            LabelWidgetState { text },
-            Box::new(|_, _| HashMap::new()),
-            None,
-        )
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
+        frame.render_widget_ref(self, *area)
     }
 }
 
-impl<'a> VisualComponent for LabelView<'a> {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
-        frame.render_stateful_widget_ref(&mut self.widget, *area, &mut self.state);
-    }
-}
+impl IEventHandler for LabelElement {}
+impl IWidget for LabelElement {}

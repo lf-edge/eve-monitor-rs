@@ -38,7 +38,7 @@ pub struct FocusTracker {
 }
 
 impl FocusTracker {
-    pub fn new(tab_order: Vec<String>, focused_view: Option<String>) -> Self {
+    fn new(tab_order: Vec<String>, focused_view: Option<String>) -> Self {
         // if focused view is set find its index in the tab order
         let focused_view = focused_view
             .and_then(|name| tab_order.iter().position(|n| n == &name))
@@ -49,6 +49,35 @@ impl FocusTracker {
             tab_order,
         }
     }
+
+    pub fn create_from_taborder(
+        tab_order: Vec<String>,
+        focused_view: Option<String>,
+    ) -> FocusTracker {
+        let focus_tracker = FocusTracker::new(tab_order, focused_view);
+        focus_tracker
+    }
+
+    pub fn create_from_views(
+        views: &HashMap<String, Box<dyn VisualComponent>>,
+        focused_view: Option<String>,
+    ) -> FocusTracker {
+        let collect_views = || {
+            let mut tab_order = Vec::new();
+
+            for (view_name, view) in views.iter() {
+                if view.can_focus() {
+                    tab_order.push(view_name.clone());
+                }
+            }
+            tab_order
+        };
+
+        let tab_order = collect_views();
+        let focus_tracker = FocusTracker::new(tab_order, focused_view);
+        focus_tracker
+    }
+
     pub fn get_focused_view(&self) -> Option<String> {
         self.tab_order.get(self.focused_view).cloned()
     }
@@ -108,19 +137,11 @@ impl WindowBuilder {
         self
     }
     pub fn build(self) -> Window {
-        let collect_views = || {
-            let mut tab_order = Vec::new();
-
-            for (view_name, view) in self.views.iter() {
-                if view.can_focus() {
-                    tab_order.push(view_name.clone());
-                }
-            }
-            tab_order
+        let focus_tracker = if let Some(order) = self.tab_order {
+            FocusTracker::create_from_taborder(order, self.focused_view.clone())
+        } else {
+            FocusTracker::create_from_views(&self.views, self.focused_view.clone())
         };
-
-        let tab_order = self.tab_order.unwrap_or_else(collect_views);
-        let focus_tracker = FocusTracker::new(tab_order, self.focused_view);
 
         let ret = Window::new(self.name, self.views, focus_tracker, self.do_layout);
         ret
@@ -208,13 +229,29 @@ impl Window {
         match event {
             EventCode::Tab => {
                 if let Some(focused_view) = focused_view {
-                    focused_view.focus_lost();
-                }
-
-                if let Some(next) = self.focus_tracker.focus_next() {
-                    let view = self.views.get_mut(&next).unwrap();
-                    view.focus();
-                    return Some(EventCode::Redraw);
+                    trace!("Focused view: {}", focused_view.name());
+                    // let's try forward the event first.
+                    if !focused_view.focus_next() {
+                        // internal view lost focus
+                        // we should find the next focusable view in the current window
+                        focused_view.focus_lost();
+                        if let Some(next) = self.focus_tracker.focus_next() {
+                            let view = self.views.get_mut(&next).unwrap();
+                            view.focus();
+                            return Some(EventCode::Redraw);
+                        }
+                    } else {
+                        trace!("Focus forwarded to {}", focused_view.name());
+                    }
+                } else {
+                    // focused view was never set
+                    trace!("No focused view found for {}", self.name);
+                    if let Some(next) = self.focus_tracker.focus_next() {
+                        trace!("Focusing next view: {}", next);
+                        let view = self.views.get_mut(&next).unwrap();
+                        view.focus();
+                        return Some(EventCode::Redraw);
+                    }
                 }
             }
             EventCode::ShiftTab => {

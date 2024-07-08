@@ -8,18 +8,19 @@ use ratatui::{
     Frame,
 };
 
-use crate::traits::VisualComponent;
-
-use super::component::{StatefulComponentWrapper, VisualComponentState, WidgetState};
+use crate::{
+    traits::VisualComponent,
+    ui::component::{StatelessComponent, VisualComponentState, WidgetState},
+};
 
 pub struct LabelWidget<'a> {
-    text: Box<Paragraph<'a>>,
+    text_widget: Box<Paragraph<'a>>,
 }
 
 impl<'a> LabelWidget<'a> {
     pub fn new(text: String) -> Self {
         Self {
-            text: Box::new(
+            text_widget: Box::new(
                 Paragraph::new(text)
                     .style(Style::default().fg(Color::White).bg(Color::Red))
                     .alignment(Alignment::Left),
@@ -30,12 +31,12 @@ impl<'a> LabelWidget<'a> {
 
 //FIXME: we do not use this state yet
 pub struct LabelWidgetState {
-    _text: String,
+    text: String,
 }
 
 impl LabelWidgetState {
     pub fn new(text: String) -> Self {
-        Self { _text: text }
+        Self { text }
     }
 }
 
@@ -50,12 +51,19 @@ impl WidgetState for &LabelWidgetState {
     }
 }
 
+// impl<V: WidgetState> StatefulWidgetRef for V {
+//     type State = VisualComponentState<V>;
+//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+//         self.widget.render_ref(area, buf, state);
+//     }
+// }
+
 // impl WidgetState for VisualComponentState<LabelWidgetState> {}
 
 impl<'a> StatefulWidgetRef for LabelWidget<'a> {
     type State = VisualComponentState<LabelWidgetState>;
     fn render_ref(&self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
-        self.text.render_ref(area, buf);
+        self.text_widget.render_ref(area, buf);
     }
 }
 
@@ -63,11 +71,11 @@ impl<'a> StatefulWidgetRef for LabelWidget<'a> {
 impl StatefulWidgetRef for &mut Box<LabelWidget<'_>> {
     type State = VisualComponentState<LabelWidgetState>;
     fn render_ref(&self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
-        self.text.render_ref(area, buf);
+        self.text_widget.render_ref(area, buf);
     }
 }
 
-pub type LabelView<'a> = StatefulComponentWrapper<LabelWidget<'a>, LabelWidgetState>;
+pub type LabelView<'a> = StatelessComponent<LabelWidget<'a>>;
 
 impl<'a> LabelView<'a> {
     pub fn new<S: Into<String>>(name: S, text: S) -> Self {
@@ -75,8 +83,9 @@ impl<'a> LabelView<'a> {
         Self::create_component_state(
             name.into(),
             Box::new(LabelWidget::new(text.clone())),
-            LabelWidgetState { _text: text },
+            LabelWidgetState { text },
             Box::new(|_, _| HashMap::new()),
+            None,
         )
     }
 }

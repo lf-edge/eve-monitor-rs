@@ -6,6 +6,7 @@ use crossterm::{
         LeaveAlternateScreen,
     },
 };
+use log::trace;
 use std::{
     io::stdout,
     ops::{Deref, DerefMut},
@@ -14,7 +15,7 @@ use std::{
 
 use ratatui::{backend::CrosstermBackend, CompletedFrame, Frame, Terminal};
 
-use crate::{dispatcher::EventDispatcher, events::EventCode};
+use crate::{dispatcher::EventDispatcher, events::Event};
 
 pub type IO = std::io::Stdout;
 
@@ -25,7 +26,7 @@ pub struct TerminalWrapper {
 }
 
 impl TerminalWrapper {
-    pub fn new(dispatcher: EventDispatcher<EventCode>) -> Result<Self> {
+    pub fn new(dispatcher: EventDispatcher<Event>) -> Result<Self> {
         let terminal = Self::init_terminal()?;
         let dispatcher = dispatcher.clone();
         // spawn a thread to listen for events
@@ -34,7 +35,12 @@ impl TerminalWrapper {
                 // wait for an event
                 // if event is received, send it to the event dispatcher
                 let event = crossterm::event::read()?;
-                dispatcher.send(event.into());
+                // Only handle key events
+                if let crossterm::event::Event::Key(key) = event {
+                    dispatcher.send(Event::Key(key));
+                } else {
+                    trace!("Unhandled event: {:?}", event);
+                }
             }
         });
         Ok(Self {
@@ -65,12 +71,12 @@ impl TerminalWrapper {
     }
 
     // wrapper to call draw on termnial
-    fn draw<F>(&mut self, f: F) -> Result<CompletedFrame>
-    where
-        F: FnOnce(&mut Frame),
-    {
-        Ok(self.terminal.draw(f)?)
-    }
+    // fn draw<F>(&mut self, f: F) -> Result<CompletedFrame>
+    // where
+    //     F: FnOnce(&mut Frame),
+    // {
+    //     Ok(self.terminal.draw(f)?)
+    // }
 }
 
 impl Drop for TerminalWrapper {

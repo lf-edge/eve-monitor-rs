@@ -80,6 +80,7 @@ impl InputField {
                 cursor_position: Position::new(0, 0),
             },
             Box::new(|_, _| HashMap::new()),
+            None,
         )
     }
 }

@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::traits::VisualComponent;
 
-use super::component::{StatefulComponentWrapper, VisualComponentState, WidgetState};
+use super::component::{StatefulComponent, VisualComponentState, WidgetState};
 
 pub struct StatusBarWidget {}
 impl StatusBarWidget {
@@ -60,7 +60,7 @@ impl StatefulWidgetRef for StatusBarWidget {
     }
 }
 
-pub type StatusBar = StatefulComponentWrapper<StatusBarWidget, StatusBarWidgetState>;
+pub type StatusBar = StatefulComponent<StatusBarWidget, StatusBarWidgetState>;
 
 impl StatusBar {
     pub fn new() -> Self {
@@ -69,6 +69,7 @@ impl StatusBar {
             Box::new(StatusBarWidget {}),
             StatusBarWidgetState {},
             Box::new(|_, _| HashMap::new()),
+            None,
         )
     }
 }

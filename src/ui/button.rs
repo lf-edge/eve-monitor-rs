@@ -40,6 +40,11 @@ impl ButtonWidget {
         area: Rect,
         buf: &mut Buffer,
     ) {
+        trace!(
+            "Rendering button: {:?}: focused: {}",
+            state.widget_state.label.as_str(),
+            state.focused()
+        );
         // set border style based on focus
         let border_style = if state.focused() {
             Style::default().fg(Color::White)
@@ -90,6 +95,7 @@ impl Button {
                 on_click: Some(on_click),
             },
             Box::new(|_, _| HashMap::new()),
+            None,
         )
     }
     pub fn label(&self) -> &str {
@@ -154,5 +160,9 @@ impl VisualComponent for Button {
             }
             _ => None,
         }
+    }
+
+    fn can_focus(&self) -> bool {
+        true
     }
 }

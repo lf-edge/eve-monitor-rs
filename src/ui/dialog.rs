@@ -18,7 +18,7 @@ use super::{
     button::{Button, OnButtonClicked},
     component::{StatefulComponentWrapper, VisualComponentState, WidgetState},
     tools::centered_rect,
-    window::{Window, WindowId},
+    window::{FocusTracker, Window, WindowId},
 };
 
 pub struct DialogBuilder {
@@ -79,12 +79,11 @@ impl DialogBuilder {
         self
     }
     pub fn build(self) -> Window {
-        let mut buttons: HashMap<String, Box<dyn VisualComponent>> = HashMap::new();
-        for (label, on_click) in self.buttons {
-            let button = Button::new(label.clone(), label.clone(), on_click);
-            buttons.insert(label, Box::new(button));
-        }
-        let dlg = Dialog::new("root_view", &self.title, (30, 15), buttons, self.do_layout);
+        // let mut buttons: HashMap<String, Box<dyn VisualComponent>> = HashMap::new();
+        // for (label, on_click) in self.buttons {
+        //     let button = Button::new(label.clone(), label.clone(), on_click);
+        //     buttons.insert(label, Box::new(button));
+        // }
         let wnd = Window::builder()
             .add_view(dlg)
             .with_layout(move |r| {
@@ -99,140 +98,203 @@ impl DialogBuilder {
         wnd
     }
 }
-#[derive(Debug)]
-pub struct DialogWidgetState {
-    title: String,
-    buttons: HashMap<String, Box<dyn VisualComponent>>,
-    size: (u16, u16),
-    layout_map: HashMap<String, Rect>,
-}
-impl WidgetState for DialogWidgetState {
-    fn get_layout(&self) -> HashMap<String, Rect> {
-        return self.layout_map.clone();
-    }
-}
-pub struct DialogWidget {
-    frame: Block<'static>,
-}
+// #[derive(Debug)]
+// pub struct DialogWidgetState {
+//     title: String,
+//     buttons: HashMap<String, Box<dyn VisualComponent>>,
+//     size: (u16, u16),
+//     layout_map: HashMap<String, Rect>,
+// }
+// impl WidgetState for DialogWidgetState {
+//     fn get_layout(&self) -> HashMap<String, Rect> {
+//         return self.layout_map.clone();
+//     }
+// }
+// pub struct DialogWidget {
+//     frame: Block<'static>,
+// }
 
-impl DialogWidget {
-    fn render(&self, state: &DialogWidgetState, area: Rect, buf: &mut Buffer) {
-        trace!("Dialog render with state: {:?}", state);
-        // let content_area = self.state.layout_map[&"content".to_string()];
-        // let buttons_area = self.state.layout_map[&"buttons".to_string()];
-        // // render the frame
-        // //frame.render_stateful_widget_ref(&mut self.widget, *area);
+// impl DialogWidget {
+//     fn render(&self, state: &DialogWidgetState, area: Rect, buf: &mut Buffer) {
+//         trace!("Dialog render with state: {:?}", state);
+//         // let content_area = self.state.layout_map[&"content".to_string()];
+//         // let buttons_area = self.state.layout_map[&"buttons".to_string()];
+//         // // render the frame
+//         // //frame.render_stateful_widget_ref(&mut self.widget, *area);
 
-        // // self.widget
-        // //     .frame
-        // //     .(self.state.widget_state.title.as_str());
+//         // // self.widget
+//         // //     .frame
+//         // //     .(self.state.widget_state.title.as_str());
 
-        // //render buttons
-        // for (i, (_label, button)) in self
-        //     .state
-        //     .widget_state
-        //     .buttons
-        //     .iter_mut()
-        //     //.filter(|c| is_button(c))
-        //     .enumerate()
-        // {
-        //     button.render(&layout_buttons[i], frame, _focused);
-        // }
-        // // render content
-        // for c in self.root.iter_mut() {
-        //     c.1.render(&content_area, frame, _focused);
-        // }
+//         // //render buttons
+//         // for (i, (_label, button)) in self
+//         //     .state
+//         //     .widget_state
+//         //     .buttons
+//         //     .iter_mut()
+//         //     //.filter(|c| is_button(c))
+//         //     .enumerate()
+//         // {
+//         //     button.render(&layout_buttons[i], frame, _focused);
+//         // }
+//         // // render content
+//         // for c in self.root.iter_mut() {
+//         //     c.1.render(&content_area, frame, _focused);
+//         // }
 
-        self.frame.render_ref(area, buf);
+//         self.frame.render_ref(area, buf);
 
-        // render content
-    }
-}
+//         // render content
+//     }
+// }
 
-impl<'a> StatefulWidgetRef for Box<DialogWidget> {
-    type State = VisualComponentState<DialogWidgetState>;
+// impl<'a> StatefulWidgetRef for Box<DialogWidget> {
+//     type State = VisualComponentState<DialogWidgetState>;
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render(&state.widget_state, area, buf);
-    }
-}
+//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+//         self.render(&state.widget_state, area, buf);
+//     }
+// }
 
-impl<'a> StatefulWidgetRef for &Box<DialogWidget> {
-    type State = VisualComponentState<DialogWidgetState>;
+// impl<'a> StatefulWidgetRef for &Box<DialogWidget> {
+//     type State = VisualComponentState<DialogWidgetState>;
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render(&state.widget_state, area, buf);
-    }
-}
+//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+//         self.render(&state.widget_state, area, buf);
+//     }
+// }
 
-impl<'a> StatefulWidgetRef for DialogWidget {
-    type State = VisualComponentState<DialogWidgetState>;
+// impl<'a> StatefulWidgetRef for DialogWidget {
+//     type State = VisualComponentState<DialogWidgetState>;
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render(&state.widget_state, area, buf);
-    }
-}
+//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+//         self.render(&state.widget_state, area, buf);
+//     }
+// }
 
-pub type Dialog = StatefulComponentWrapper<DialogWidget, DialogWidgetState>;
+// pub type Dialog = StatefulComponentWrapper<DialogWidget, DialogWidgetState>;
 
-impl Dialog {
-    fn new<S: Into<String>>(
-        name: S,
-        title: S,
-        size: (u16, u16),
-        buttons: HashMap<String, Box<dyn VisualComponent>>,
-        layout: Box<dyn Fn(&DialogWidgetState, &Rect) -> HashMap<String, Rect>>,
-    ) -> Self {
-        Self::create_component_state(
-            name.into(),
-            Box::new(DialogWidget {
-                frame: Block::new()
-                    .border_type(BorderType::Thick)
-                    .borders(Borders::ALL)
-                    .border_style(Style::default().fg(Color::White))
-                    .style(Style::default().bg(Color::Black)), //.title(self.state.widget_state.title.as_str()),
-            }),
-            DialogWidgetState {
-                title: title.into(),
-                buttons,
-                size,
-                layout_map: HashMap::new(),
-            },
-            layout,
-        )
-    }
-    pub fn builder() -> DialogBuilder {
-        DialogBuilder::new()
-    }
-}
+// impl Dialog {
+//     fn new<S: Into<String>>(
+//         name: S,
+//         title: S,
+//         size: (u16, u16),
+//         buttons: HashMap<String, Box<dyn VisualComponent>>,
+//         layout: Box<dyn Fn(&DialogWidgetState, &Rect) -> HashMap<String, Rect>>,
+//     ) -> Self {
+//         let focus_tracker = FocusTracker::create_from_views(&buttons, None);
+//         Self::create_component_state(
+//             name.into(),
+//             Box::new(DialogWidget {
+//                 frame: Block::new()
+//                     .border_type(BorderType::Thick)
+//                     .borders(Borders::ALL)
+//                     .border_style(Style::default().fg(Color::White))
+//                     .style(Style::default().bg(Color::Black)), //.title(self.state.widget_state.title.as_str()),
+//             }),
+//             DialogWidgetState {
+//                 title: title.into(),
+//                 buttons,
+//                 size,
+//                 layout_map: HashMap::new(),
+//             },
+//             layout,
+//             Some(focus_tracker),
+//         )
+//     }
+//     pub fn builder() -> DialogBuilder {
+//         DialogBuilder::new()
+//     }
+// }
 
-impl VisualComponent for Dialog {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
-        frame.render_stateful_widget_ref(&self.widget, *area, &mut self.state);
-        let content_area = self.state.widget_state.layout_map[&"content".to_string()];
-        let buttons_area = self.state.widget_state.layout_map[&"buttons".to_string()];
+// impl VisualComponent for Dialog {
+//     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
+//         frame.render_stateful_widget_ref(&self.widget, *area, &mut self.state);
+//         let content_area = self.state.widget_state.layout_map[&"content".to_string()];
+//         let buttons_area = self.state.widget_state.layout_map[&"buttons".to_string()];
 
-        let layout_buttons = Layout::horizontal(
-            self.state
-                .widget_state
-                .buttons
-                .iter()
-                .map(|(label, _)| Constraint::Length(label.len() as u16 + 4))
-                .collect::<Vec<_>>(),
-        )
-        .flex(ratatui::layout::Flex::End)
-        .split(buttons_area);
+//         let layout_buttons = Layout::horizontal(
+//             self.state
+//                 .widget_state
+//                 .buttons
+//                 .iter()
+//                 .map(|(label, _)| Constraint::Length(label.len() as u16 + 4))
+//                 .collect::<Vec<_>>(),
+//         )
+//         .flex(ratatui::layout::Flex::End)
+//         .split(buttons_area);
 
-        for (i, (label, button)) in self.state.widget_state.buttons.iter_mut().enumerate() {
-            button.render(&layout_buttons[i], frame, false);
-        }
-    }
+//         for (i, (label, button)) in self.state.widget_state.buttons.iter_mut().enumerate() {
+//             button.render(&layout_buttons[i], frame, false);
+//         }
+//     }
 
-    fn handle_event(&mut self, _event: &EventCode) -> Option<Event> {
-        None
-    }
+//     fn handle_event(&mut self, _event: &EventCode) -> Option<Event> {
+//         // match _event {
+//         // EventCode::Key(Enter) => {
+//         //         // if let Some(focused_view) = self.state.focus_tracker.get_focused_view() {
+//         //         //     focused_view.handle_event(&EventCode::Enter);
+//         //         // }
+//         //         return Some(Event::redraw(Some(0)));
+//         //     }
+//         //     EventCode::Tab => {
+//         //         return self.focus_next()
+//         //         // if let Some(focused_view) = self.focus_tracker.get_focused_view() {
+//         //         //     // let's try forward the event first.
+//         //         //     if !focused_view.focus_next() {
+//         //         //         // internal view lost focus
+//         //         //         // we should find the next focusable view in the current window
+//         //         //         focused_view.focus_lost();
+//         //         //         if let Some(next) = self.focus_tracker.focus_next() {
+//         //         //             let view = self.views.get_mut(&next).unwrap();
+//         //         //             view.focus();
+//         //         //             return Some(EventCode::Redraw);
+//         //         //         }
+//         //         //     }
+//         //         // } else {
+//         //         //     // focused view was never set
+//         //         //     if let Some(next) = self.focus_tracker.focus_next() {
+//         //         //         let view = self.views.get_mut(&next).unwrap();
+//         //         //         view.focus();
+//         //         //         return Some(EventCode::Redraw);
+//         //         //     }
+//         //         // }
+//         //     }
+//         //     _ => {}
+//         // }
+//         None
+//     }
 
-    fn layout(&mut self, area: &Rect) {
-        self.state.widget_state.layout_map = (self.do_layout)(&self.state.widget_state, area);
-    }
-}
+//     fn layout(&mut self, area: &Rect) {
+//         self.state.widget_state.layout_map = (self.do_layout)(&self.state.widget_state, area);
+//     }
+
+//     fn can_focus(&self) -> bool {
+//         true
+//     }
+
+//     fn get_view_mut(&mut self, name: &str) -> Option<&mut Box<dyn VisualComponent>> {
+//         let b = self.state.widget_state.buttons.get_mut(name);
+//         if b.is_some() {
+//             return b;
+//         }
+//         let v = self.root.get_mut(name);
+//         if v.is_some() {
+//             return v;
+//         }
+//         None
+//         // let view = Component::get_view_mut(self, name);
+//         // if view.is_some() {
+//         //     return view;
+//         // }
+
+//         // if view.is_none() {
+//         //     for (_, button) in self.state.widget_state.buttons.iter_mut() {
+//         //         if button.name() == name {
+//         //             return Some(button);
+//         //         }
+//         //     }
+//         // }
+//         // None
+//     }
+// }

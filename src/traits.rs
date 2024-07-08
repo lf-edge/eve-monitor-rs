@@ -111,5 +111,11 @@ pub trait IEventDispatcher {
     fn dispatch_event(&self, event: UiCommand);
 }
 
+pub trait ILayout {
+    fn get_layout(&self) -> HashMap<String, ratatui::prelude::Rect>;
+    fn set_layout(&self, layout: HashMap<String, ratatui::prelude::Rect>);
+}
+
 pub trait IWindow: IPresenter + IFocusTracker + IEventHandler + IEventDispatcher {}
 pub trait IVisibleElement: IPresenter + IVisible + IFocusAcceptor {}
+pub trait IWidget: IPresenter + IEventHandler {}

@@ -7,74 +7,51 @@ use ratatui::{
     Frame,
 };
 
-use crate::traits::{IFocusAcceptor, IPresenter, IVisible, IWidgetPresenter};
+use crate::traits::{IFocusAcceptor, ILayout, IPresenter, IVisible, IWidgetPresenter};
 
-pub struct Element<S, W>
-// where
-//     W: IWidgetPresenter,
-{
-    /// widget state contains all the data displayed by widget
-    pub widget_state: S,
-    /// widget is the actual widget that will be rendered
-    pub widget: W,
-    pub visible: bool,
-    pub focused: bool,
-    pub name: String,
+#[derive(Debug)]
+pub struct WidgetWithLayout<W> {
+    widget: W,
+    layout: HashMap<String, Rect>,
 }
 
-pub struct LabelWidgetState {
-    /// text displayed by the label
-    pub text: String,
+impl<W> WidgetWithLayout<W> {
+    pub fn new(widget: W) -> Self {
+        Self {
+            widget,
+            layout: HashMap::new(),
+        }
+    }
 }
 
-pub struct LabelWidget<'a> {
-    /// text widget that will be rendered
-    pub text_widget: Box<Paragraph<'a>>,
-}
-// impl IWidgetPresenter for LabelWidget<'_> {
-//     fn render(&self, area: Rect, buf: &mut Buffer) {
-//         self.
-//     }
-// }
-
-impl<'a> StatefulWidgetRef for Element<LabelWidgetState, LabelWidget<'a>>
+impl<W> StatefulWidgetRef for WidgetWithLayout<W>
 where
-    Element<LabelWidgetState, LabelWidget<'a>>: IPresenter,
+    W: StatefulWidgetRef,
+    W::State: ILayout,
 {
-    type State = LabelWidgetState;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
-        //self.widget.render_ref(area, buf);
+    type State = W::State;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        // Now you can access ILayout methods on the state
+        //state.get_layout(); //
+
+        // Delegate to the original widget's render_ref method
+        self.widget.render_ref(area, buf, state);
     }
 }
 
-impl<'a> IPresenter for Element<LabelWidgetState, LabelWidget<'a>> {
-    fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
-        todo!()
-    }
+impl<W> StatefulWidgetRef for &mut WidgetWithLayout<W>
+where
+    W: StatefulWidgetRef,
+    W::State: ILayout + IVisible + IFocusAcceptor,
+{
+    type State = W::State;
 
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
-        todo!()
-    }
-}
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        // Now you can access ILayout methods on the state
+        //state.get_layout();
 
-impl<'a> IVisible for Element<LabelWidgetState, LabelWidget<'a>> {
-    fn is_visible(&self) -> bool {
-        self.visible
-    }
-
-    fn set_visible(&mut self, visible: bool) {
-        self.visible = visible;
+        // Delegate to the original widget's render_ref method
+        self.widget.render_ref(area, buf, state);
     }
 }
-
-impl<'a> IFocusAcceptor for Element<LabelWidgetState, LabelWidget<'a>> {
-    fn set_focus(&mut self) {
-        self.focused = true;
-    }
-
-    fn clear_focus(&mut self) {
-        self.focused = false;
-    }
-}
-
-pub trait IWidget: IPresenter + StatefulWidgetRef {}

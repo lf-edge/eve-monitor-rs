@@ -15,11 +15,11 @@ use crate::dispatcher::EventDispatcher;
 use crate::events::{Event, UiCommand};
 // use crate::events::EventCode;
 use crate::terminal::TerminalWrapper;
-use crate::traits::{IPresenter, IWindow};
+use crate::traits::{IPresenter, IWidget, IWindow};
 use crate::ui::focus_tracker::{FocusMode, FocusTracker};
-use crate::ui::mainwnd::{
-    IWidget, MainWnd, RadioGroupState, RadioGroupView, RadioGroupWidget, WidgetWithLayout,
-};
+use crate::ui::mainwnd::MainWnd;
+use crate::ui::widgets::element::WidgetWithLayout;
+use crate::ui::widgets::rediogroup::{RadioGroupState, RadioGroupView, RadioGroupWidget};
 // use crate::ui::dialog::DialogBuilder;
 // use crate::ui::input_field;
 // use crate::ui::label::{self, LabelView};

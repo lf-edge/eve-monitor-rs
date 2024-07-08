@@ -8,4 +8,4 @@ pub mod mainwnd;
 // pub mod statusbar;
 // pub mod tools;
 pub mod widgets;
-// pub mod window;
+pub mod window;

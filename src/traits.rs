@@ -85,9 +85,10 @@ pub trait IVisible {
 pub trait IFocusAcceptor {
     fn set_focus(&mut self) {}
     fn clear_focus(&mut self) {}
+    fn has_focus(&self) -> bool {
+        false
+    }
 }
-
-
 
 pub trait IFocusTracker {
     fn focus_next(&mut self) -> Option<&String> {

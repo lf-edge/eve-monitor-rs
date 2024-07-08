@@ -1,21 +1,13 @@
-use std::collections::HashMap;
-
 use crossterm::event::{KeyCode, KeyEvent};
 use log::info;
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style},
-    widgets::{Block, Borders, Paragraph, StatefulWidgetRef, WidgetRef},
+    widgets::{Block, Borders, Paragraph, WidgetRef},
 };
 
-use crate::{
-    traits::{
-        IEventHandler, IFocusAcceptor, IFocusTracker, ILayout, IPresenter, IVisible, IWidget,
-        IWidgetPresenter,
-    },
-    ui::focus_tracker::FocusTracker,
-};
+use crate::traits::{IEventHandler, IFocusAcceptor, IPresenter, IWidget, IWidgetPresenter};
 
 use super::element::Element;
 
@@ -42,7 +34,7 @@ impl RadioGroupElement {
     }
     pub fn render_view(&self, area: Rect, buf: &mut Buffer) {
         info!("rendering: RadioGroupWidget {:#?}", &self);
-        let style = if self.is_visible() {
+        let style = if self.has_focus() {
             Style::default().fg(Color::Yellow)
         } else {
             Style::default().fg(Color::White)
@@ -72,47 +64,6 @@ impl RadioGroupElement {
         }
     }
 }
-
-// impl IFocusAcceptor for RadioGroupWidget {}
-// impl IVisible for RadioGroupWidget {}
-// impl IFocusTracker for RadioGroupWidget {}
-
-// impl StatefulWidgetRef for RadioGroupElement {
-//     type State = RadioGroupState;
-
-//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-//         //let layout = state.get_layout();
-//         info!("rendering: RadioGroupWidget {:#?}", &state);
-//         let style = if self.is_visible() {
-//             Style::default().fg(Color::Yellow)
-//         } else {
-//             Style::default().fg(Color::White)
-//         };
-
-//         let block = Block::default()
-//             .title(state.title.clone())
-//             .borders(Borders::ALL)
-//             .border_style(style);
-//         let inner = block.inner(area);
-//         block.render_ref(area, buf);
-//         // create vertical layout for radio buttons
-//         let constraints = state.labels.iter().map(|_| Constraint::Length(1));
-//         let buttons_area = Layout::vertical(constraints).split(inner);
-
-//         // render paragraphs for each radio button
-//         for (i, label) in state.labels.iter().enumerate() {
-//             // format the button label <text> (selected)
-//             let label = if state.selected == i {
-//                 format!("{} (*)", label)
-//             } else {
-//                 format!("{} ( )", label)
-//             };
-
-//             let p = Paragraph::new(label);
-//             p.render_ref(buttons_area[i], buf);
-//         }
-//     }
-// }
 
 impl IWidgetPresenter for RadioGroupElement {
     fn render(&self, area: Rect, buf: &mut Buffer) {
@@ -148,49 +99,6 @@ impl IPresenter for RadioGroupElement {
         true
     }
 }
-
-// impl IWidgetPresenter for &mut RadioGroupElement {
-//     fn render(&self, area: Rect, buf: &mut Buffer) {
-//         todo!()
-//     }
-// }
-
-// impl ILayout for RadioGroupElement {
-//     fn get_layout(&self) -> HashMap<String, ratatui::prelude::Rect> {
-//         todo!()
-//     }
-
-//     fn set_layout(&self, layout: HashMap<String, ratatui::prelude::Rect>) {
-//         todo!()
-//     }
-// }
-
-// impl ILayout for RadioGroupView {
-//     fn get_layout(&self) -> HashMap<String, ratatui::prelude::Rect> {
-//         todo!()
-//     }
-
-//     fn set_layout(&self, layout: HashMap<String, ratatui::prelude::Rect>) {
-//         todo!()
-//     }
-// }
-
-// impl IFocusTracker for RadioGroupView {
-//     fn focus_next(&mut self) -> Option<&String> {
-//         //self.widget.focus_next()
-//         None
-//     }
-
-//     fn focus_prev(&mut self) -> Option<&String> {
-//         //self.widget.focus_prev()
-//         None
-//     }
-
-//     fn get_focused_view_name(&self) -> Option<&String> {
-//         //Some(&self.state.labels[self.state.selected])
-//         None
-//     }
-// }
 
 impl IEventHandler for RadioGroupElement {
     fn handle_key_event(&mut self, key: KeyEvent) {

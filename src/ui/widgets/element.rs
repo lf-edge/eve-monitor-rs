@@ -184,23 +184,27 @@ where
     fn clear_focus(&mut self) {
         self.v.focused = false;
     }
-}
 
-impl<D> StatefulWidgetRef for Element<D>
-where
-    Self: IWidgetPresenter,
-{
-    type State = D;
-
-    fn render_ref(
-        &self,
-        area: ratatui::layout::Rect,
-        buf: &mut ratatui::buffer::Buffer,
-        state: &mut Self::State,
-    ) {
-        self.render(area, buf);
+    fn has_focus(&self) -> bool {
+        self.v.focused
     }
 }
+
+// impl<D> StatefulWidgetRef for Element<D>
+// where
+//     Self: IWidgetPresenter,
+// {
+//     type State = D;
+
+//     fn render_ref(
+//         &self,
+//         area: ratatui::layout::Rect,
+//         buf: &mut ratatui::buffer::Buffer,
+//         state: &mut Self::State,
+//     ) {
+//         self.render(area, buf);
+//     }
+// }
 
 impl<D> WidgetRef for Element<D>
 where
@@ -220,18 +224,18 @@ where
     }
 }
 
-impl<D> StatefulWidgetRef for &mut Element<D>
-where
-    Self: IWidgetPresenter,
-{
-    type State = D;
+// impl<D> StatefulWidgetRef for &mut Element<D>
+// where
+//     Self: IWidgetPresenter,
+// {
+//     type State = D;
 
-    fn render_ref(
-        &self,
-        area: ratatui::layout::Rect,
-        buf: &mut ratatui::buffer::Buffer,
-        state: &mut Self::State,
-    ) {
-        self.render(area, buf);
-    }
-}
+//     fn render_ref(
+//         &self,
+//         area: ratatui::layout::Rect,
+//         buf: &mut ratatui::buffer::Buffer,
+//         state: &mut Self::State,
+//     ) {
+//         self.render(area, buf);
+//     }
+// }

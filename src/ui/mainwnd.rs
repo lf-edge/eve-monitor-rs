@@ -1,12 +1,3 @@
-// impl VisualComponent for MainWnd {
-//     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool) {
-//         use Constraint::{Length, Min};
-//         let [main_area, status_bar_area] = Layout::vertical([Min(0), Length(3)]).areas(*area);
-//         self.input_field.render(&main_area, frame, focused);
-//         self.status_bar.render(&status_bar_area, frame, focused);
-//     }
-// }
-
 use std::{collections::HashMap, fmt::Debug};
 
 use crossterm::event::{KeyCode, KeyEvent};
@@ -31,10 +22,7 @@ use super::focus_tracker::{FocusMode, FocusTracker};
 
 struct WindowBuilder {}
 pub struct MainWnd {
-    //status_bar: Box<StatusBarWidget>,
-    //id: WindowId,
     pub ft: FocusTracker,
-    //pub rg: RadioGroupView,
     pub widgets: HashMap<String, Box<dyn IWidget>>,
     pub layout: HashMap<String, Rect>,
 }

@@ -15,7 +15,11 @@ pub struct FocusTracker {
 }
 
 impl FocusTracker {
-    fn new(tab_order: Vec<String>, focused_view: Option<String>, focus_mode: FocusMode) -> Self {
+    pub fn new(
+        tab_order: Vec<String>,
+        focused_view: Option<String>,
+        focus_mode: FocusMode,
+    ) -> Self {
         // if focused view is set find its index in the tab order
         let focused_view = focused_view
             .and_then(|name| tab_order.iter().position(|n| n == &name))

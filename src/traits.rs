@@ -87,9 +87,7 @@ pub trait IFocusAcceptor {
     fn clear_focus(&mut self) {}
 }
 
-pub trait IWidgetPresenter {
-    fn render(&self, area: Rect, buf: &mut Buffer);
-}
+
 
 pub trait IFocusTracker {
     fn focus_next(&mut self) -> Option<&String> {
@@ -114,6 +112,14 @@ pub trait IEventDispatcher {
 pub trait ILayout {
     fn get_layout(&self) -> HashMap<String, ratatui::prelude::Rect>;
     fn set_layout(&self, layout: HashMap<String, ratatui::prelude::Rect>);
+}
+
+// pub trait IWidgetPresenter {
+//     fn render(&self, area: Rect, buf: &mut Buffer);
+// }
+
+pub trait IWidgetPresenter {
+    fn render(&self, area: Rect, buf: &mut Buffer);
 }
 
 pub trait IWindow: IPresenter + IFocusTracker + IEventHandler + IEventDispatcher {}

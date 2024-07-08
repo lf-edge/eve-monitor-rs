@@ -18,8 +18,7 @@ use crate::terminal::TerminalWrapper;
 use crate::traits::{IPresenter, IWidget, IWindow};
 use crate::ui::focus_tracker::{FocusMode, FocusTracker};
 use crate::ui::mainwnd::MainWnd;
-use crate::ui::widgets::element::WidgetWithLayout;
-use crate::ui::widgets::rediogroup::{RadioGroupState, RadioGroupView, RadioGroupWidget};
+use crate::ui::widgets::rediogroup::{RadioGroupElement, RadioGroupState};
 // use crate::ui::dialog::DialogBuilder;
 // use crate::ui::input_field;
 // use crate::ui::label::{self, LabelView};
@@ -175,42 +174,15 @@ impl Ui {
 
         // self.layer_stack.push(dlg);
         let labels = vec!["a".into(), "b".into()];
-        let title = "Radio Group".to_string();
-        let mut rg = RadioGroupState {
-            labels: labels.clone(),
-            selected: 0,
-            title,
-            in_focus: false,
-            is_visible: true,
-        };
-        let widget = RadioGroupWidget {};
-        let widget = WidgetWithLayout::new(widget);
-        let v = RadioGroupView {
-            state: rg,
-            widget,
-            ft: FocusTracker::create_from_taborder(labels, None, FocusMode::Wrap),
-        };
+
+        let v1 = RadioGroupElement::new(labels, "Radio Group".to_string());
 
         let labels = vec!["c".into(), "d".into(), "e".into()];
-        let title = "Radio Group 1".to_string();
-        let mut rg = RadioGroupState {
-            labels: labels.clone(),
-            selected: 0,
-            title,
-            in_focus: false,
-            is_visible: true,
-        };
-        let widget = RadioGroupWidget {};
-        let widget = WidgetWithLayout::new(widget);
-        let v1 = RadioGroupView {
-            state: rg,
-            widget,
-            ft: FocusTracker::create_from_taborder(labels, None, FocusMode::Wrap),
-        };
+        let v2 = RadioGroupElement::new(labels, "Radio Group 1".to_string());
 
         let mut widgets: HashMap<String, Box<dyn IWidget>> = HashMap::new();
-        widgets.insert("RadioGroup".to_string(), Box::new(v));
-        widgets.insert("RadioGroup 1".to_string(), Box::new(v1));
+        widgets.insert("RadioGroup".to_string(), Box::new(v1));
+        widgets.insert("RadioGroup 1".to_string(), Box::new(v2));
 
         let w = MainWnd {
             ft: FocusTracker::create_from_taborder(
@@ -273,6 +245,9 @@ impl Ui {
             // handle Tab
             Event::Key(key) if key.code == crossterm::event::KeyCode::Tab => {
                 if let Some(layer) = self.layer_stack.last_mut() {
+                    //TODO: I can hide the focus tracker from the user
+                    // by making it a private field in the layer
+                    // and implement handle_focus_event on the layer
                     if layer.is_focus_tracker() {
                         if key.modifiers == KeyModifiers::SHIFT {
                             layer.focus_prev();

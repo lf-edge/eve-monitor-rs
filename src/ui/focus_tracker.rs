@@ -63,10 +63,10 @@ impl FocusTracker {
     //     focus_tracker
     // }
 
-    pub fn get_focused_view(&self) -> Option<&String> {
-        self.tab_order.get(self.focused_view)
+    pub fn get_focused_view(&self) -> Option<String> {
+        self.tab_order.get(self.focused_view).cloned()
     }
-    pub fn focus_next(&mut self) -> Option<&String> {
+    pub fn focus_next(&mut self) -> Option<String> {
         if self.too_late {
             return None;
         }
@@ -81,10 +81,10 @@ impl FocusTracker {
             }
         }
 
-        Some(&self.tab_order[self.focused_view])
+        Some(self.tab_order[self.focused_view].clone())
     }
 
-    pub fn focus_prev(&mut self) -> Option<&String> {
+    pub fn focus_prev(&mut self) -> Option<String> {
         if self.too_late {
             return None;
         }
@@ -99,7 +99,7 @@ impl FocusTracker {
             }
         }
 
-        Some(&self.tab_order[self.focused_view])
+        Some(self.tab_order[self.focused_view].clone())
     }
 }
 // #[cfg(test)]

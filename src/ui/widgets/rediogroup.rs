@@ -7,7 +7,10 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, WidgetRef},
 };
 
-use crate::traits::{IEventHandler, IFocusAcceptor, IPresenter, IWidget, IWidgetPresenter};
+use crate::{
+    events::{Event, UiCommand},
+    traits::{IEventHandler, IFocusAcceptor, IPresenter, IWidget, IWidgetPresenter},
+};
 
 use super::element::Element;
 
@@ -101,17 +104,21 @@ impl IPresenter for RadioGroupElement {
 }
 
 impl IEventHandler for RadioGroupElement {
-    fn handle_key_event(&mut self, key: KeyEvent) {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Event> {
         info!("handle_key_event: RadioGroupView {:#?}", &self);
         //TODO: change to focus tracker
         match key.code {
             KeyCode::Up => {
                 self.d.selected = self.d.selected.saturating_sub(1);
+                return Some(Event::UiCommand(UiCommand::Redraw));
             }
             KeyCode::Down => {
                 self.d.selected = (self.d.selected + 1).min(self.d.labels.len() - 1);
+                return Some(Event::UiCommand(UiCommand::Redraw));
             }
-            _ => {}
+            _ => {
+                return None;
+            }
         }
     }
 }

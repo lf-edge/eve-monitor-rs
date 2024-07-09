@@ -1,7 +1,7 @@
 use std::{collections::HashMap, fmt::Debug};
 
 use crossterm::event::{KeyCode, KeyEvent};
-use log::info;
+use log::{info, trace, warn};
 use ratatui::{
     buffer::Buffer,
     layout::{self, Constraint, Layout, Rect},
@@ -11,7 +11,7 @@ use ratatui::{
 
 use crate::{
     dispatcher::EventDispatcher,
-    events::UiCommand,
+    events::{Event, UiCommand},
     traits::{
         IEventDispatcher, IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible,
         IVisibleElement, IWidget, IWindow,
@@ -66,45 +66,83 @@ impl IEventDispatcher for MainWnd {
     }
 }
 impl IEventHandler for MainWnd {
-    fn handle_key_event(&mut self, key: KeyEvent) {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Event> {
         // forward the event to the focused view
         if let Some(focused_view) = self.ft.get_focused_view() {
-            let widget = self.widgets.get_mut(focused_view).unwrap();
-            widget.handle_key_event(key);
+            let widget = self.widgets.get_mut(&focused_view).unwrap();
+            if let Some(evet) = widget.handle_key_event(key) {
+                match evet {
+                    Event::UiCommand(cmd) => {
+                        //self.dispatch_event(cmd);
+                        return Some(Event::UiCommand(cmd));
+                    }
+                    Event::Key(_) => {}
+                }
+            }
         }
+        None
     }
 }
 
 impl IFocusTracker for MainWnd {
-    fn focus_next(&mut self) -> Option<&String> {
+    fn focus_next(&mut self) -> Option<String> {
         info!("focus_next: MainWnd {:#?}", &self.ft);
+
+        // Clear focus from the current focused view, if there is one
         if let Some(focused_view) = self.ft.get_focused_view() {
-            let widget = self.widgets.get_mut(focused_view).unwrap();
-            widget.clear_focus();
+            if let Some(widget) = self.widgets.get_mut(&focused_view) {
+                widget.clear_focus();
+            } else {
+                warn!("Focused view not found in widgets: {}", focused_view);
+            }
         }
-        let next = self.ft.focus_next();
-        if let Some(focused_view) = next {
-            let widget = self.widgets.get_mut(focused_view).unwrap();
-            widget.set_focus();
+
+        // Loop to find the next view that can take focus
+        loop {
+            let next = self.ft.focus_next();
+            trace!("Next focused view candidate: {:#?}", &next);
+
+            match next {
+                Some(focused_view) => {
+                    if let Some(widget) = self.widgets.get_mut(&focused_view) {
+                        if widget.is_focus_tracker() {
+                            widget.set_focus();
+                            return Some(focused_view);
+                        } else {
+                            trace!("Next focused view is not a focus tracker: {}", focused_view);
+                        }
+                    } else {
+                        warn!("Next focused view not found in widgets: {}", focused_view);
+                    }
+                }
+                None => {
+                    // Break the loop if there are no more views to focus on
+                    return None;
+                }
+            }
         }
-        next
     }
 
-    fn focus_prev(&mut self) -> Option<&String> {
+    fn focus_prev(&mut self) -> Option<String> {
         info!("focus_prev: MainWnd {:#?}", &self.ft);
         if let Some(focused_view) = self.ft.get_focused_view() {
-            let widget = self.widgets.get_mut(focused_view).unwrap();
+            let widget = self.widgets.get_mut(&focused_view).unwrap();
             widget.clear_focus();
         }
-        let next = self.ft.focus_prev();
-        if let Some(focused_view) = next {
-            let widget = self.widgets.get_mut(focused_view).unwrap();
-            widget.set_focus();
-        }
-        next
+        let ret = loop {
+            let next = self.ft.focus_prev();
+            if let Some(focused_view) = next {
+                let widget = self.widgets.get_mut(&focused_view).unwrap();
+                if widget.is_focus_tracker() {
+                    widget.set_focus();
+                    break Some(focused_view);
+                }
+            }
+        };
+        ret
     }
 
-    fn get_focused_view_name(&self) -> Option<&String> {
+    fn get_focused_view_name(&self) -> Option<String> {
         self.ft.get_focused_view()
     }
 }
@@ -142,6 +180,10 @@ impl IPresenter for MainWnd {
 
         let r = self.layout.get("3-3").unwrap();
         let rg = self.widgets.get_mut("Label").unwrap();
+        rg.render(r, frame);
+
+        let r = self.layout.get("3-0").unwrap();
+        let rg = self.widgets.get_mut("Input").unwrap();
         rg.render(r, frame);
     }
 

@@ -62,10 +62,10 @@
 
 use std::collections::HashMap;
 
-use crossterm::event::{Event, KeyEvent};
+// use crossterm::event::{Event, KeyEvent};
 use ratatui::{buffer::Buffer, layout::Rect, Frame};
 
-use crate::events::UiCommand;
+use crate::events::{Event, UiCommand};
 
 pub trait IPresenter: IVisible + IFocusAcceptor {
     fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect>;
@@ -91,19 +91,21 @@ pub trait IFocusAcceptor {
 }
 
 pub trait IFocusTracker {
-    fn focus_next(&mut self) -> Option<&String> {
+    fn focus_next(&mut self) -> Option<String> {
         None
     }
-    fn focus_prev(&mut self) -> Option<&String> {
+    fn focus_prev(&mut self) -> Option<String> {
         None
     }
-    fn get_focused_view_name(&self) -> Option<&String> {
+    fn get_focused_view_name(&self) -> Option<String> {
         None
     }
 }
 
 pub trait IEventHandler {
-    fn handle_key_event(&mut self, key: KeyEvent) {}
+    fn handle_key_event(&mut self, key: crossterm::event::KeyEvent) -> Option<Event> {
+        None
+    }
 }
 
 pub trait IEventDispatcher {
@@ -121,6 +123,11 @@ pub trait ILayout {
 
 pub trait IWidgetPresenter {
     fn render(&self, area: Rect, buf: &mut Buffer);
+}
+
+pub trait IStatefulWidgetPresenter {
+    type State;
+    fn render_with_state(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State);
 }
 
 pub trait IWindow: IPresenter + IFocusTracker + IEventHandler + IEventDispatcher {}

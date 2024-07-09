@@ -135,9 +135,13 @@
 // //     }
 // // }
 
-use ratatui::widgets::{StatefulWidgetRef, WidgetRef};
+use ratatui::{
+    buffer::Buffer,
+    layout::Rect,
+    widgets::{StatefulWidget, StatefulWidgetRef, WidgetRef},
+};
 
-use crate::traits::{IFocusAcceptor, IVisible, IWidgetPresenter};
+use crate::traits::{IFocusAcceptor, IStatefulWidgetPresenter, IVisible, IWidgetPresenter};
 
 #[derive(Debug)]
 pub struct VisualState {
@@ -189,20 +193,20 @@ where
         self.v.focused
     }
 }
-
-// impl<D> StatefulWidgetRef for Element<D>
+// impl<D> IFocusAcceptor for Element<D>
 // where
-//     Self: IWidgetPresenter,
+//     Self: IStatefulWidgetPresenter<State = D>,
 // {
-//     type State = D;
+//     fn set_focus(&mut self) {
+//         self.v.focused = true;
+//     }
 
-//     fn render_ref(
-//         &self,
-//         area: ratatui::layout::Rect,
-//         buf: &mut ratatui::buffer::Buffer,
-//         state: &mut Self::State,
-//     ) {
-//         self.render(area, buf);
+//     fn clear_focus(&mut self) {
+//         self.v.focused = false;
+//     }
+
+//     fn has_focus(&self) -> bool {
+//         self.v.focused
 //     }
 // }
 
@@ -210,7 +214,7 @@ impl<D> WidgetRef for Element<D>
 where
     Self: IWidgetPresenter,
 {
-    fn render_ref(&self, area: ratatui::layout::Rect, buf: &mut ratatui::buffer::Buffer) {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         self.render(area, buf);
     }
 }
@@ -219,23 +223,51 @@ impl<D> WidgetRef for &mut Element<D>
 where
     Self: IWidgetPresenter,
 {
-    fn render_ref(&self, area: ratatui::layout::Rect, buf: &mut ratatui::buffer::Buffer) {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
         self.render(area, buf);
     }
 }
 
-// impl<D> StatefulWidgetRef for &mut Element<D>
-// where
-//     Self: IWidgetPresenter,
-// {
-//     type State = D;
+impl<D> StatefulWidgetRef for Element<D>
+where
+    Self: IStatefulWidgetPresenter<State = D>,
+{
+    type State = D;
 
-//     fn render_ref(
-//         &self,
-//         area: ratatui::layout::Rect,
-//         buf: &mut ratatui::buffer::Buffer,
-//         state: &mut Self::State,
-//     ) {
-//         self.render(area, buf);
-//     }
-// }
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.render_with_state(area, buf, state);
+    }
+}
+
+impl<D> StatefulWidgetRef for &mut Element<D>
+where
+    Self: IStatefulWidgetPresenter<State = D>,
+{
+    type State = D;
+
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.render_with_state(area, buf, state);
+    }
+}
+
+impl<D> StatefulWidget for Element<D>
+where
+    Self: IStatefulWidgetPresenter<State = D>,
+{
+    type State = D;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.render_with_state(area, buf, state);
+    }
+}
+
+impl<D> StatefulWidget for &mut Element<D>
+where
+    Self: IStatefulWidgetPresenter<State = D>,
+{
+    type State = D;
+
+    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+        self.render_with_state(area, buf, state);
+    }
+}

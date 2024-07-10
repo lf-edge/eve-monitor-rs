@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use ratatui::{
     buffer::Buffer,
-    layout::{self, Alignment, Rect},
+    layout::{Alignment, Rect},
     style::{Color, Style},
-    widgets::{Paragraph, StatefulWidgetRef, WidgetRef},
+    widgets::{Paragraph, WidgetRef},
     Frame,
 };
 
@@ -19,8 +19,8 @@ pub struct LabelWidgetState {
 pub type LabelElement = Element<LabelWidgetState>;
 
 impl LabelElement {
-    pub fn new(text: String) -> Self {
-        let state = LabelWidgetState { text };
+    pub fn new<S: Into<String>>(text: S) -> Self {
+        let state = LabelWidgetState { text: text.into() };
         Self {
             d: state,
             v: Default::default(),
@@ -49,7 +49,7 @@ impl IWidgetPresenter for &mut LabelElement {
 }
 
 impl IPresenter for LabelElement {
-    fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
+    fn do_layout(&mut self, _area: &Rect) -> HashMap<String, Rect> {
         todo!()
     }
 

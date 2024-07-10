@@ -3,8 +3,7 @@
 // pub mod dialog;
 //pub mod label;
 pub mod focus_tracker;
-pub mod mainwnd;
 // pub mod statusbar;
-// pub mod tools;
+pub mod tools;
 pub mod widgets;
 pub mod window;

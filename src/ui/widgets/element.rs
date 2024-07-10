@@ -1,140 +1,3 @@
-// use std::collections::HashMap;
-
-// use ratatui::{
-//     buffer::Buffer,
-//     layout::Rect,
-//     widgets::{Paragraph, StatefulWidgetRef},
-//     Frame,
-// };
-
-// use crate::{
-//     traits::{IFocusAcceptor, IFocusTracker, ILayout, IPresenter, IVisible, IWidgetPresenter},
-//     ui::focus_tracker::{FocusMode, FocusTracker},
-// };
-
-// #[derive(Debug)]
-// pub struct VisibleElement<W, S>
-// where
-//     W: IWidgetPresenter,
-// {
-//     widget: W,
-//     state: S,
-//     layout: HashMap<String, Rect>,
-//     pub in_focus: bool,
-//     pub is_visible: bool,
-//     ft: FocusTracker,
-// }
-
-// impl<W, S> VisibleElement<W, S>
-// where
-//     W: IWidgetPresenter,
-// {
-//     // pub fn new(state: S) -> Self {
-//     //     Self {
-//     //         widget: W::new(),
-//     //         state,
-//     //         layout: HashMap::new(),
-//     //         in_focus: false,
-//     //         is_visible: true,
-//     //         ft: FocusTracker::new(Vec::new(), None, FocusMode::Wrap),
-//     //     }
-//     // }
-// }
-
-// impl<W, S> StatefulWidgetRef for VisibleElement<W, S>
-// where
-//     W: IWidgetPresenter,
-// {
-//     type State = S;
-
-//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-//         // Now you can access ILayout methods on the state
-//         //state.get_layout(); //
-
-//         // Delegate to the original widget's render_ref method
-//         self.widget.render(area, buf);
-//     }
-// }
-
-// impl<W, S> StatefulWidgetRef for &mut VisibleElement<W, S>
-// where
-//     W: IWidgetPresenter,
-// {
-//     type State = S;
-
-//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-//         // Now you can access ILayout methods on the state
-//         //state.get_layout(); //
-
-//         // Delegate to the original widget's render_ref method
-//         self.widget.render(area, buf);
-//     }
-// }
-
-// // impl<W, S> IVisible for &mut VisibleElement<W, S> {
-// //     fn is_visible(&self) -> bool {
-// //         self.is_visible
-// //     }
-
-// //     fn set_visible(&mut self, visible: bool) {
-// //         self.is_visible = visible;
-// //     }
-// // }
-
-// // impl<W, S> IFocusAcceptor for &mut VisibleElement<W, S> {
-// //     fn set_focus(&mut self) {
-// //         self.in_focus = true;
-// //     }
-
-// //     fn clear_focus(&mut self) {
-// //         self.in_focus = false;
-// //     }
-// // }
-
-// impl<W, S> IVisible for VisibleElement<W, S>
-// where
-//     W: IWidgetPresenter,
-// {
-//     fn is_visible(&self) -> bool {
-//         self.is_visible
-//     }
-
-//     fn set_visible(&mut self, visible: bool) {
-//         self.is_visible = visible;
-//     }
-// }
-
-// impl<W, S> IFocusAcceptor for VisibleElement<W, S>
-// where
-//     W: IWidgetPresenter,
-// {
-//     fn set_focus(&mut self) {
-//         self.in_focus = true;
-//     }
-
-//     fn clear_focus(&mut self) {
-//         self.in_focus = false;
-//     }
-// }
-
-// // impl<W> IFocusTracker for VisibleElement<W>
-// // where
-// //     VisibleElement<W>: ILayout + IVisible + IFocusAcceptor + IFocusTracker,
-// //     W: StatefulWidgetRef,
-// // {
-// //     fn focus_next(&mut self) -> Option<&String> {
-// //         self.ft.focus_next()
-// //     }
-
-// //     fn focus_prev(&mut self) -> Option<&String> {
-// //         self.ft.focus_prev()
-// //     }
-
-// //     fn get_focused_view_name(&self) -> Option<&String> {
-// //         self.ft.get_focused_view()
-// //     }
-// // }
-
 use ratatui::{
     buffer::Buffer,
     layout::Rect,
@@ -271,3 +134,38 @@ where
         self.render_with_state(area, buf, state);
     }
 }
+
+// TODO: Experimental code to wrap a widget with a name
+// but let it pretend to be IWidget
+
+// pub trait NamedElement {
+//     fn name(&self) -> &str;
+// }
+
+// struct NamedElementImpl<W>
+// where
+//     W: IWidget,
+// {
+//     name: String,
+//     widget: W,
+// }
+
+// impl<W> NamedElement for NamedElementImpl<W>
+// where
+//     W: IWidget,
+// {
+//     fn name(&self) -> &str {
+//         &self.name
+//     }
+// }
+
+// impl<W> Deref for NamedElementImpl<W>
+// where
+//     W: IWidget,
+// {
+//     type Target = W;
+
+//     fn deref(&self) -> &Self::Target {
+//         &self.widget
+//     }
+// }

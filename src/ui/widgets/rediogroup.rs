@@ -24,11 +24,11 @@ pub struct RadioGroupState {
 pub type RadioGroupElement = Element<RadioGroupState>;
 
 impl RadioGroupElement {
-    pub fn new(labels: Vec<String>, title: String) -> Self {
+    pub fn new<S: Into<String>, P: Into<String>>(labels: Vec<S>, title: P) -> Self {
         let state = RadioGroupState {
-            labels,
+            labels: labels.into_iter().map(|s| s.into()).collect(),
             selected: 0,
-            title,
+            title: title.into(),
         };
         Self {
             d: state,
@@ -83,7 +83,7 @@ impl IWidgetPresenter for &mut RadioGroupElement {
 impl IPresenter for RadioGroupElement {
     fn do_layout(
         &mut self,
-        area: &Rect,
+        _area: &Rect,
     ) -> std::collections::HashMap<String, ratatui::prelude::Rect> {
         // let mut layout_map = std::collections::HashMap::new();
         // layout_map.insert("RadioGroup".to_string(), *area);

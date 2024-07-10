@@ -1,6 +1,7 @@
 mod application;
 mod dispatcher;
 mod events;
+mod mainwnd;
 mod terminal;
 mod traits;
 mod ui;

@@ -1,27 +1,18 @@
-use std::collections::HashMap;
 use std::fmt::Debug;
 use std::mem::ManuallyDrop;
 use std::{thread, vec};
 
 use anyhow::{Ok, Result};
-use crossterm::event::KeyCode::{Char, Tab};
+use crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 use log::{info, trace, warn};
 
-use ratatui::layout::{Constraint, Layout};
-use ratatui::widgets::canvas::Label;
-use ratatui::CompletedFrame;
-
 use crate::dispatcher::EventDispatcher;
 use crate::events::{Event, UiCommand};
+use crate::mainwnd::create_main_wnd;
 // use crate::events::EventCode;
 use crate::terminal::TerminalWrapper;
-use crate::traits::{IFocusAcceptor, IPresenter, IWidget, IWindow};
-use crate::ui::focus_tracker::{FocusMode, FocusTracker};
-use crate::ui::mainwnd::MainWnd;
-use crate::ui::widgets::input_field::InputFieldElement;
-use crate::ui::widgets::label::LabelElement;
-use crate::ui::widgets::rediogroup::{RadioGroupElement, RadioGroupState};
+use crate::traits::IWindow;
 // use crate::ui::dialog::DialogBuilder;
 // use crate::ui::input_field;
 // use crate::ui::label::{self, LabelView};
@@ -176,38 +167,41 @@ impl Ui {
         //     .build();
 
         // self.layer_stack.push(dlg);
-        let labels = vec!["a".into(), "b".into()];
 
-        let mut v1 = RadioGroupElement::new(labels, "Radio Group".to_string());
-        v1.set_focus();
+        // let labels = vec!["a".into(), "b".into()];
 
-        let labels = vec!["c".into(), "d".into(), "e".into()];
-        let v2 = RadioGroupElement::new(labels, "Radio Group 1".to_string());
+        // let mut v1 = RadioGroupElement::new(labels, "Radio Group".to_string());
+        // v1.set_focus();
 
-        let v3 = LabelElement::new("Label".to_string());
+        // let labels = vec!["c".into(), "d".into(), "e".into()];
+        // let v2 = RadioGroupElement::new(labels, "Radio Group 1".to_string());
 
-        let v4 = InputFieldElement::new("Input", Some("Type here".to_string()));
+        // let v3 = LabelElement::new("Label".to_string());
 
-        let mut widgets: HashMap<String, Box<dyn IWidget>> = HashMap::new();
-        widgets.insert("RadioGroup".to_string(), Box::new(v1));
-        widgets.insert("RadioGroup 1".to_string(), Box::new(v2));
-        widgets.insert("Label".to_string(), Box::new(v3));
-        widgets.insert("Input".to_string(), Box::new(v4));
+        // let v4 = InputFieldElement::new("Input", Some("Type here".to_string()));
 
-        let w = MainWnd {
-            ft: FocusTracker::create_from_taborder(
-                vec![
-                    "RadioGroup".into(),
-                    "RadioGroup 1".into(),
-                    "Label".into(),
-                    "Input".into(),
-                ],
-                None,
-                FocusMode::Wrap,
-            ),
-            widgets,
-            layout: Default::default(),
-        };
+        // let mut widgets: HashMap<String, Box<dyn IWidget>> = HashMap::new();
+        // widgets.insert("RadioGroup".to_string(), Box::new(v1));
+        // widgets.insert("RadioGroup 1".to_string(), Box::new(v2));
+        // widgets.insert("Label".to_string(), Box::new(v3));
+        // widgets.insert("Input".to_string(), Box::new(v4));
+
+        // let w = Window {
+        //     ft: FocusTracker::create_from_taborder(
+        //         vec![
+        //             "RadioGroup".into(),
+        //             "RadioGroup 1".into(),
+        //             "Label".into(),
+        //             "Input".into(),
+        //         ],
+        //         None,
+        //         FocusMode::Wrap,
+        //     ),
+        //     widgets,
+        //     layout: Default::default(),
+        // };
+        let w = create_main_wnd();
+
         self.layer_stack.push(Box::new(w));
     }
     fn draw(&mut self) {
@@ -252,24 +246,24 @@ impl Ui {
         match event {
             // only fo debugging purposes
             Event::Key(key)
-                if (key.code == Char('q')) && (key.modifiers == KeyModifiers::CONTROL) =>
+                if (key.code == KeyCode::Char('q')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {
                 self.dispatcher.send(Event::UiCommand(UiCommand::Quit));
             }
             // For debugging purposes
             Event::Key(key)
-                if (key.code == Char('r')) && (key.modifiers == KeyModifiers::CONTROL) =>
+                if (key.code == KeyCode::Char('r')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {
                 self.dispatcher.send(Event::UiCommand(UiCommand::Redraw));
             }
             // handle Tab
-            Event::Key(key) if key.code == Tab => {
+            Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
                 if let Some(layer) = self.layer_stack.last_mut() {
                     //TODO: I can hide the focus tracker from the user
                     // by making it a private field in the layer
                     // and implement handle_focus_event on the layer
                     if layer.is_focus_tracker() {
-                        if key.modifiers == KeyModifiers::SHIFT {
+                        if key.code == KeyCode::Tab {
                             layer.focus_prev();
                         } else {
                             layer.focus_next();
@@ -286,8 +280,8 @@ impl Ui {
             // forward all other key events to the top layer
             Event::Key(key) => {
                 if let Some(layer) = self.layer_stack.last_mut() {
-                    if let Some(cmd) = layer.handle_key_event(key) {
-                        match cmd {
+                    if let Some(evt) = layer.handle_key_event(key) {
+                        match evt {
                             Event::UiCommand(cmd) => match cmd {
                                 UiCommand::Redraw => {
                                     self.invalidate();
@@ -297,7 +291,7 @@ impl Ui {
                                 }
                             },
                             _ => {
-                                warn!("Unhandled command: {:?}", cmd);
+                                warn!("Unhandled command: {:?}", evt);
                             }
                         }
                     }

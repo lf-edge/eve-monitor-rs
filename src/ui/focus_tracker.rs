@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use super::window::WidgetMap;
 
 // use crate::traits::ViewComposer;
 #[derive(Debug)]
@@ -42,26 +42,26 @@ impl FocusTracker {
         focus_tracker
     }
 
-    // pub fn create_from_views(
-    //     views: &HashMap<String, Box<dyn ViewComposer>>,
-    //     focused_view: Option<String>,
-    //     focus_mode: FocusMode,
-    // ) -> FocusTracker {
-    //     let collect_views = || {
-    //         let mut tab_order = Vec::new();
+    pub fn create_from_views(
+        views: &WidgetMap,
+        focused_view: Option<String>,
+        focus_mode: FocusMode,
+    ) -> FocusTracker {
+        let collect_views = || {
+            let mut tab_order = Vec::new();
 
-    //         for (view_name, view) in views.iter() {
-    //             if view.can_focus() {
-    //                 tab_order.push(view_name.clone());
-    //             }
-    //         }
-    //         tab_order
-    //     };
+            for (view_name, view) in views.iter() {
+                if view.is_focus_tracker() {
+                    tab_order.push(view_name.clone());
+                }
+            }
+            tab_order
+        };
 
-    //     let tab_order = collect_views();
-    //     let focus_tracker = FocusTracker::new(tab_order, focused_view, focus_mode);
-    //     focus_tracker
-    // }
+        let tab_order = collect_views();
+        let focus_tracker = FocusTracker::new(tab_order, focused_view, focus_mode);
+        focus_tracker
+    }
 
     pub fn get_focused_view(&self) -> Option<String> {
         self.tab_order.get(self.focused_view).cloned()

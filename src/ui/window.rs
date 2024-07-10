@@ -16,21 +16,6 @@
 //     traits::VisualComponent,
 // };
 
-// /// WindowId is a unique identifier for a window that is incremented sequentially.
-// pub type WindowId = usize;
-
-// struct WindowIdGenerator(AtomicUsize);
-// impl WindowIdGenerator {
-//     fn next(&self) -> WindowId {
-//         self.0.fetch_add(1, Ordering::SeqCst)
-//     }
-// }
-
-// // statically initialize the window id counter
-// static WIN_ID: WindowIdGenerator = WindowIdGenerator(AtomicUsize::new(1));
-// /// TARGET_APP_ID is a special identifier to roue events to the application's event loop.
-// pub static TARGET_APP_ID: WindowId = 0;
-
 // #[derive(Debug)]
 // pub struct FocusTracker {
 //     focused_view: usize,
@@ -158,16 +143,6 @@
 //     do_layout: LayoutFn,
 //     name: String,
 //     focus_tracker: FocusTracker,
-// }
-
-// impl Debug for Window {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         f.debug_struct("Window")
-//             .field("id", &self.id)
-//             .field("views", &self.views)
-//             .field("focus_tracker", &self.focus_tracker)
-//             .finish()
-//     }
 // }
 
 // impl Window {
@@ -424,3 +399,288 @@
 // struct WndProc {
 //     thread: JoinHandle<()>,
 // }
+
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
+
+use crossterm::event::{KeyCode, KeyEvent};
+use log::{info, trace, warn};
+use ratatui::{
+    buffer::Buffer,
+    layout::{self, Constraint, Layout, Rect},
+    style::{Color, Style},
+    widgets::{Block, Borders, Paragraph, StatefulWidgetRef, WidgetRef},
+};
+
+use crate::{
+    dispatcher::EventDispatcher,
+    events::{Event, UiCommand},
+    traits::{
+        IEventDispatcher, IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible,
+        IVisibleElement, IWidget, IWindow,
+    },
+};
+use anyhow::anyhow;
+use anyhow::Result;
+
+use super::{
+    focus_tracker::{FocusMode, FocusTracker},
+    tools::ElementHashMap,
+};
+
+pub type WidgetMap = ElementHashMap<Box<dyn IWidget>>;
+pub type LayoutMap = ElementHashMap<Rect>;
+
+pub type LayoutFn = Box<dyn FnMut(&Rect, &mut LayoutMap) -> Result<()>>;
+pub type RenderFn = Box<dyn FnMut(&Rect, &mut ratatui::Frame<'_>, &LayoutMap, &mut WidgetMap)>;
+
+pub struct WindowBuilder {
+    name: String,
+    widgets: WidgetMap,
+    // callback for layout
+    do_layout: Option<LayoutFn>,
+    // callback for rendering
+    do_render: Option<RenderFn>,
+    // taborder
+    tab_order: Option<Vec<String>>,
+    // initial focus
+    focused_view: Option<String>,
+}
+
+impl WindowBuilder {
+    pub fn widget<S: Into<String>>(mut self, name: S, widget: Box<dyn IWidget>) -> Self {
+        self.widgets
+            .add(name.into(), widget)
+            .expect("Widget name already exists");
+        self
+    }
+
+    pub fn with_layout(
+        mut self,
+        do_layout: Box<dyn FnMut(&Rect, &mut LayoutMap) -> Result<()>>,
+    ) -> Self {
+        self.do_layout = Some(do_layout);
+        self
+    }
+
+    pub fn with_render(mut self, do_render: RenderFn) -> Self {
+        self.do_render = Some(do_render);
+        self
+    }
+
+    pub fn with_taborder(mut self, tab_order: Vec<String>) -> Self {
+        self.tab_order = Some(tab_order);
+        self
+    }
+
+    pub fn with_focused_view<S: Into<String>>(mut self, name: S) -> Self {
+        self.focused_view = Some(name.into());
+        self
+    }
+
+    pub fn build(self) -> Result<Window> {
+        let do_layout = self
+            .do_layout
+            .ok_or_else(|| anyhow!("Layout function should be set for {}", self.name))?;
+        let do_render = self
+            .do_render
+            .ok_or_else(|| anyhow!("Render function should be set for {}", self.name))?;
+
+        //TODO: check focused view exists in widgets
+        let ft = if let Some(order) = self.tab_order {
+            FocusTracker::create_from_taborder(order, self.focused_view, FocusMode::Wrap)
+        } else {
+            FocusTracker::create_from_views(&self.widgets, self.focused_view, FocusMode::Wrap)
+        };
+
+        Ok(Window::new(
+            &self.name,
+            ft,
+            self.widgets,
+            do_layout,
+            do_render,
+        ))
+    }
+}
+
+pub struct Window {
+    pub name: String,
+    pub ft: FocusTracker,
+    pub widgets: ElementHashMap<Box<dyn IWidget>>,
+    pub layout: ElementHashMap<Rect>,
+    pub do_layout: LayoutFn,
+    pub do_render: RenderFn,
+}
+
+impl Debug for Window {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        Ok(())
+    }
+}
+
+impl Window {
+    pub(self) fn new<S: Into<String>>(
+        name: S,
+        ft: FocusTracker,
+        widgets: WidgetMap,
+        do_layout: LayoutFn,
+        do_render: RenderFn,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            ft,
+            widgets,
+            layout: ElementHashMap::new(),
+            do_layout,
+            do_render,
+        }
+    }
+
+    pub fn builder<S: Into<String>>(name: S) -> WindowBuilder {
+        WindowBuilder {
+            name: name.into(),
+            widgets: ElementHashMap::new(),
+            do_layout: None,
+            do_render: None,
+            tab_order: None,
+            focused_view: None,
+        }
+    }
+}
+
+impl IWindow for Window {}
+impl IEventDispatcher for Window {
+    fn dispatch_event(&self, _event: UiCommand) {
+        todo!()
+    }
+}
+impl IEventHandler for Window {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Event> {
+        // forward the event to the focused view
+        if let Some(focused_view) = self.ft.get_focused_view() {
+            let widget = self.widgets.get_mut(&focused_view).unwrap();
+            if let Some(evet) = widget.handle_key_event(key) {
+                match evet {
+                    Event::UiCommand(cmd) => {
+                        //self.dispatch_event(cmd);
+                        return Some(Event::UiCommand(cmd));
+                    }
+                    Event::Key(_) => {}
+                }
+            }
+        }
+        None
+    }
+}
+
+impl IFocusTracker for Window {
+    fn focus_next(&mut self) -> Option<String> {
+        info!("focus_next: MainWnd {:#?}", &self.ft);
+
+        // Clear focus from the current focused view, if there is one
+        if let Some(focused_view) = self.ft.get_focused_view() {
+            if let Some(widget) = self.widgets.get_mut(&focused_view) {
+                widget.clear_focus();
+            } else {
+                warn!("Focused view not found in widgets: {}", focused_view);
+            }
+        }
+
+        // Loop to find the next view that can take focus
+        loop {
+            let next = self.ft.focus_next();
+            trace!("Next focused view candidate: {:#?}", &next);
+
+            match next {
+                Some(focused_view) => {
+                    if let Some(widget) = self.widgets.get_mut(&focused_view) {
+                        if widget.is_focus_tracker() {
+                            widget.set_focus();
+                            return Some(focused_view);
+                        } else {
+                            trace!("Next focused view is not a focus tracker: {}", focused_view);
+                        }
+                    } else {
+                        warn!("Next focused view not found in widgets: {}", focused_view);
+                    }
+                }
+                None => {
+                    // Break the loop if there are no more views to focus on
+                    return None;
+                }
+            }
+        }
+    }
+
+    fn focus_prev(&mut self) -> Option<String> {
+        info!("focus_prev: MainWnd {:#?}", &self.ft);
+        // Clear focus from the current focused view, if there is one
+        if let Some(focused_view) = self.ft.get_focused_view() {
+            if let Some(widget) = self.widgets.get_mut(&focused_view) {
+                widget.clear_focus();
+            } else {
+                warn!("Focused view not found in widgets: {}", focused_view);
+            }
+        }
+
+        // Loop to find the next view that can take focus
+        loop {
+            let next = self.ft.focus_prev();
+            trace!("Next focused view candidate: {:#?}", &next);
+
+            match next {
+                Some(focused_view) => {
+                    if let Some(widget) = self.widgets.get_mut(&focused_view) {
+                        if widget.is_focus_tracker() {
+                            widget.set_focus();
+                            return Some(focused_view);
+                        } else {
+                            trace!("Next focused view is not a focus tracker: {}", focused_view);
+                        }
+                    } else {
+                        warn!("Next focused view not found in widgets: {}", focused_view);
+                    }
+                }
+                None => {
+                    // Break the loop if there are no more views to focus on
+                    return None;
+                }
+            }
+        }
+    }
+
+    fn get_focused_view_name(&self) -> Option<String> {
+        self.ft.get_focused_view()
+    }
+}
+
+impl IVisible for Window {}
+impl IFocusAcceptor for Window {}
+impl IPresenter for Window {
+    fn do_layout(
+        &mut self,
+        area: &Rect,
+    ) -> std::collections::HashMap<String, ratatui::prelude::Rect> {
+        (self.do_layout)(area, &mut self.layout).unwrap();
+        //TODO: do we need upper layer to know about the layout? probably not
+        HashMap::new()
+    }
+
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
+        // set focus
+        // TODO: IMO it should't be here
+        if let Some(focused_view) = self.ft.get_focused_view() {
+            if let Some(widget) = self.widgets.get_mut(&focused_view) {
+                widget.set_focus();
+            }
+        }
+        (self.do_render)(area, frame, &self.layout, &mut self.widgets);
+    }
+
+    fn is_focus_tracker(&self) -> bool {
+        true
+    }
+}

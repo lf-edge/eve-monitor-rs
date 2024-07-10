@@ -13,7 +13,7 @@ use std::{
     thread,
 };
 
-use ratatui::{backend::CrosstermBackend, CompletedFrame, Frame, Terminal};
+use ratatui::{backend::CrosstermBackend, Terminal};
 
 use crate::{dispatcher::EventDispatcher, events::Event};
 
@@ -22,7 +22,10 @@ pub type IO = std::io::Stdout;
 #[derive(Debug)]
 pub struct TerminalWrapper {
     terminal: Terminal<CrosstermBackend<IO>>,
-    terminal_thread_handle: thread::JoinHandle<Result<()>>,
+    //TODO: Add a way to stop the thread
+    // we do not need it for EVE since the ap is always running
+    // but would be nice to have it for other applications
+    _terminal_thread_handle: thread::JoinHandle<Result<()>>,
 }
 
 impl TerminalWrapper {
@@ -30,7 +33,7 @@ impl TerminalWrapper {
         let terminal = Self::init_terminal()?;
         let dispatcher = dispatcher.clone();
         // spawn a thread to listen for events
-        let terminal_thread_handle = thread::spawn(move || -> Result<()> {
+        let _terminal_thread_handle = thread::spawn(move || -> Result<()> {
             loop {
                 // wait for an event
                 // if event is received, send it to the event dispatcher
@@ -45,7 +48,7 @@ impl TerminalWrapper {
         });
         Ok(Self {
             terminal,
-            terminal_thread_handle,
+            _terminal_thread_handle,
         })
     }
 

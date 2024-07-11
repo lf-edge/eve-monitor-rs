@@ -115,40 +115,6 @@ impl Ui {
         })
     }
     fn init(&mut self) {
-        // let label = LabelView::new("Label1", "Hello, World!");
-        // let status_bar = StatusBar::new();
-        // let input_field = input_field::InputField::new("Input", Some("Type here".to_string()));
-        // let input1_field =
-        //     input_field::InputField::new("Input1", Some("Type here too".to_string()));
-        // let wnd = Window::builder()
-        //     .add_view(label)
-        //     .add_view(input_field)
-        //     .add_view(input1_field)
-        //     .add_view(status_bar)
-        //     .with_layout(|frame| {
-        //         let mut layout_hash = std::collections::HashMap::new();
-
-        //         // vertical layout with 3 lines for status bar
-        //         let [frame, status_bar] =
-        //             Layout::vertical(vec![Constraint::Min(0), Constraint::Length(3)]).areas(*frame);
-
-        //         // split the frame into two parts for the label and input field
-        //         let [label, input, input1] = Layout::vertical(vec![
-        //             Constraint::Length(1),
-        //             Constraint::Length(3),
-        //             Constraint::Length(3),
-        //         ])
-        //         .areas(frame);
-
-        //         layout_hash.insert("Label1".to_string(), label);
-        //         layout_hash.insert("Input".to_string(), input);
-        //         layout_hash.insert("Input1".to_string(), input1);
-        //         layout_hash.insert("StatusBar".to_string(), status_bar);
-        //         layout_hash
-        //     })
-        //     .build();
-        // self.layer_stack.push(wnd);
-
         // let dlg = Dialog::builder()
         //     .title("Dialog")
         //     .button(
@@ -168,38 +134,6 @@ impl Ui {
 
         // self.layer_stack.push(dlg);
 
-        // let labels = vec!["a".into(), "b".into()];
-
-        // let mut v1 = RadioGroupElement::new(labels, "Radio Group".to_string());
-        // v1.set_focus();
-
-        // let labels = vec!["c".into(), "d".into(), "e".into()];
-        // let v2 = RadioGroupElement::new(labels, "Radio Group 1".to_string());
-
-        // let v3 = LabelElement::new("Label".to_string());
-
-        // let v4 = InputFieldElement::new("Input", Some("Type here".to_string()));
-
-        // let mut widgets: HashMap<String, Box<dyn IWidget>> = HashMap::new();
-        // widgets.insert("RadioGroup".to_string(), Box::new(v1));
-        // widgets.insert("RadioGroup 1".to_string(), Box::new(v2));
-        // widgets.insert("Label".to_string(), Box::new(v3));
-        // widgets.insert("Input".to_string(), Box::new(v4));
-
-        // let w = Window {
-        //     ft: FocusTracker::create_from_taborder(
-        //         vec![
-        //             "RadioGroup".into(),
-        //             "RadioGroup 1".into(),
-        //             "Label".into(),
-        //             "Input".into(),
-        //         ],
-        //         None,
-        //         FocusMode::Wrap,
-        //     ),
-        //     widgets,
-        //     layout: Default::default(),
-        // };
         let w = create_main_wnd();
 
         self.layer_stack.push(Box::new(w));

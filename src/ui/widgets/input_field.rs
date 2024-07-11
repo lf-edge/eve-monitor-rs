@@ -125,7 +125,10 @@ impl IEventHandler for InputFieldElement {
                         self.d.input_position += 1;
                     }
                 }
-                KeyCode::Enter => todo!(),
+                KeyCode::Enter => {
+                    // do nothing for now
+                    // TODO: submit the value ?
+                }
                 KeyCode::End => {
                     self.d.input_position = value.len();
                 }

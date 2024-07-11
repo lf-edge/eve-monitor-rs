@@ -1,3 +1,5 @@
+use std::borrow::BorrowMut;
+
 use crossterm::event::{KeyCode, KeyEvent};
 use log::info;
 use ratatui::{
@@ -5,16 +7,17 @@ use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph, WidgetRef},
+    Frame,
 };
 
 use crate::{
     events::{Event, UiCommand},
-    traits::{IEventHandler, IFocusAcceptor, IPresenter, IWidget, IWidgetPresenter},
+    traits::{IEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
 };
 
 use super::element::Element;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct RadioGroupState {
     pub labels: Vec<String>,
     pub selected: usize,
@@ -22,6 +25,7 @@ pub struct RadioGroupState {
 }
 
 pub type RadioGroupElement = Element<RadioGroupState>;
+impl IWidget for RadioGroupElement {}
 
 impl RadioGroupElement {
     pub fn new<S: Into<String>, P: Into<String>>(labels: Vec<S>, title: P) -> Self {
@@ -35,7 +39,7 @@ impl RadioGroupElement {
             v: Default::default(),
         }
     }
-    pub fn render_view(&self, area: Rect, buf: &mut Buffer) {
+    pub fn render_view(&self, area: &Rect, buf: &mut Buffer) {
         info!("rendering: RadioGroupWidget {:#?}", &self);
         let style = if self.has_focus() {
             Style::default().fg(Color::Yellow)
@@ -47,8 +51,8 @@ impl RadioGroupElement {
             .title(self.d.title.clone())
             .borders(Borders::ALL)
             .border_style(style);
-        let inner = block.inner(area);
-        block.render_ref(area, buf);
+        let inner = block.inner(*area);
+        block.render_ref(*area, buf);
         // create vertical layout for radio buttons
         let constraints = self.d.labels.iter().map(|_| Constraint::Length(1));
         let buttons_area = Layout::vertical(constraints).split(inner);
@@ -69,37 +73,8 @@ impl RadioGroupElement {
 }
 
 impl IWidgetPresenter for RadioGroupElement {
-    fn render(&self, area: Rect, buf: &mut Buffer) {
-        self.render_view(area, buf);
-    }
-}
-
-impl IWidgetPresenter for &mut RadioGroupElement {
-    fn render(&self, area: Rect, buf: &mut Buffer) {
-        self.render_view(area, buf);
-    }
-}
-
-impl IPresenter for RadioGroupElement {
-    fn do_layout(
-        &mut self,
-        _area: &Rect,
-    ) -> std::collections::HashMap<String, ratatui::prelude::Rect> {
-        // let mut layout_map = std::collections::HashMap::new();
-        // layout_map.insert("RadioGroup".to_string(), *area);
-
-        // info!("do_layout: RadioGroupView {:#?}", &self);
-        // return HashMap::new();
-        todo!("RadioGroupView::do_layout")
-    }
-
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
-        info!("rendering: RadioGroupView {:#?}", &self);
-        frame.render_widget_ref(self, *area);
-    }
-
-    fn is_focus_tracker(&self) -> bool {
-        true
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
+        self.render_view(area, frame.buffer_mut());
     }
 }
 
@@ -109,11 +84,12 @@ impl IEventHandler for RadioGroupElement {
         //TODO: change to focus tracker
         match key.code {
             KeyCode::Up => {
-                self.d.selected = self.d.selected.saturating_sub(1);
+                self.d.borrow_mut().selected = self.d.borrow_mut().selected.saturating_sub(1);
                 return Some(Event::UiCommand(UiCommand::Redraw));
             }
             KeyCode::Down => {
-                self.d.selected = (self.d.selected + 1).min(self.d.labels.len() - 1);
+                self.d.borrow_mut().selected =
+                    (self.d.borrow_mut().selected + 1).min(self.d.borrow_mut().labels.len() - 1);
                 return Some(Event::UiCommand(UiCommand::Redraw));
             }
             _ => {
@@ -121,10 +97,4 @@ impl IEventHandler for RadioGroupElement {
             }
         }
     }
-}
-
-impl IWidget for RadioGroupElement {
-    // fn get_name(&self) -> &str {
-    //     "RadioGroup"
-    // }
 }

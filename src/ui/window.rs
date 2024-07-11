@@ -400,27 +400,18 @@
 //     thread: JoinHandle<()>,
 // }
 
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    ops::{Deref, DerefMut},
-};
+use std::{collections::HashMap, fmt::Debug};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use log::{info, trace, warn};
-use ratatui::{
-    buffer::Buffer,
-    layout::{self, Constraint, Layout, Rect},
-    style::{Color, Style},
-    widgets::{Block, Borders, Paragraph, StatefulWidgetRef, WidgetRef},
-};
+use ratatui::layout::Rect;
 
 use crate::{
     dispatcher::EventDispatcher,
     events::{Event, UiCommand},
     traits::{
         IEventDispatcher, IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible,
-        IVisibleElement, IWidget, IWindow,
+        IWidget, IWindow,
     },
 };
 use anyhow::anyhow;
@@ -597,7 +588,7 @@ impl IFocusTracker for Window {
             match next {
                 Some(focused_view) => {
                     if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                        if widget.is_focus_tracker() {
+                        if widget.can_focus() {
                             widget.set_focus();
                             return Some(focused_view);
                         } else {
@@ -634,7 +625,7 @@ impl IFocusTracker for Window {
             match next {
                 Some(focused_view) => {
                     if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                        if widget.is_focus_tracker() {
+                        if widget.can_focus() {
                             widget.set_focus();
                             return Some(focused_view);
                         } else {

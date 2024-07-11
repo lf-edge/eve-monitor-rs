@@ -1,4 +1,3 @@
-// pub mod button;
 // pub mod component;
 // pub mod dialog;
 //pub mod label;

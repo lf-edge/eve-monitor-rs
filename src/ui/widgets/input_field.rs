@@ -9,9 +9,7 @@ use ratatui::{
 
 use crate::{
     events::{Event, UiCommand},
-    traits::{
-        IEventHandler, IFocusAcceptor, IPresenter, IStatefulWidgetPresenter, IVisible, IWidget,
-    },
+    traits::{IEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
 };
 
 use super::element::Element;
@@ -40,6 +38,7 @@ pub struct InputFieldState {
 }
 
 pub type InputFieldElement = Element<InputFieldState>;
+impl IWidget for InputFieldElement {}
 
 impl InputFieldElement {
     pub fn new<S: Into<String>>(caption: S, value: Option<S>) -> Self {
@@ -58,50 +57,38 @@ impl InputFieldElement {
             v: Default::default(),
         }
     }
-    fn render_input_with_state(&self, area: Rect, buf: &mut Buffer, state: &mut InputFieldState) {
+    fn render_input_field(&mut self, area: &Rect, buf: &mut Buffer) {
         let style = if self.has_focus() {
             Style::default().fg(Color::Yellow)
         } else {
             Style::default().fg(Color::White)
         };
 
+        let data = &mut self.d;
+
         let blk = Block::new()
             .border_type(BorderType::Rounded)
             .borders(Borders::ALL)
             .border_style(style)
             .style(Style::default().bg(Color::Black))
-            .title(self.d.caption.as_str());
+            .title(data.caption.as_str());
 
         // get inner area
-        let inner_area = blk.inner(area);
+        let inner_area = blk.inner(*area);
         // render the border and caption
-        blk.render(area, buf);
+        blk.render(*area, buf);
         // render the input field
-        let input = Paragraph::new(self.d.value.as_deref().unwrap_or_default())
+        let input = Paragraph::new(data.value.as_deref().unwrap_or_default())
             .style(Style::default().fg(Color::White))
             .alignment(Alignment::Left);
         input.render(inner_area, buf);
         // set cursor position. It is set in global coordinates and it can be done only
         // during rendering
-        state.cursor_position =
+        self.d.cursor_position =
             Position::new(inner_area.x + self.d.input_position as u16, inner_area.y);
     }
 }
 
-impl IStatefulWidgetPresenter for InputFieldElement {
-    type State = InputFieldState;
-    fn render_with_state(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render_input_with_state(area, buf, state);
-    }
-}
-
-impl IStatefulWidgetPresenter for &mut InputFieldElement {
-    type State = InputFieldState;
-    fn render_with_state(&self, area: Rect, buf: &mut Buffer, state: &mut InputFieldState) {
-        self.render_input_with_state(area, buf, state);
-    }
-}
-impl IWidget for InputFieldElement {}
 impl IEventHandler for InputFieldElement {
     fn handle_key_event(&mut self, key: KeyEvent) -> Option<Event> {
         let old_state = self.d.clone();
@@ -129,8 +116,8 @@ impl IEventHandler for InputFieldElement {
                 }
                 KeyCode::Left => {
                     self.d.input_position = self.d.input_position.saturating_sub(1)
-                    // if self.d.input_position > 0 {
-                    //     self.d.input_position -= 1;
+                    // if data.input_position > 0 {
+                    //     data.input_position -= 1;
                     // }
                 }
                 KeyCode::Right => {
@@ -160,46 +147,15 @@ impl IEventHandler for InputFieldElement {
         None
     }
 }
-impl IFocusAcceptor for InputFieldElement {
-    fn set_focus(&mut self) {
-        self.v.focused = true;
-    }
 
-    fn clear_focus(&mut self) {
-        self.v.focused = false;
-    }
-
-    fn has_focus(&self) -> bool {
-        self.v.focused
-    }
-}
-impl IVisible for InputFieldElement {
-    fn is_visible(&self) -> bool {
-        self.v.visible
-    }
-
-    fn set_visible(&mut self, visible: bool) {
-        self.v.visible = visible;
-    }
-}
-
-impl IPresenter for InputFieldElement {
-    fn do_layout(&mut self, _area: &Rect) -> std::collections::HashMap<String, Rect> {
-        todo!()
-    }
-
+impl IWidgetPresenter for InputFieldElement {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
         trace!("rendering: InputFieldElement {:#?}", &self);
-        let mut state = self.d.clone();
-        let is_focused = self.v.focused;
-        frame.render_stateful_widget_ref(self, *area, &mut state);
-        if is_focused {
-            let pos = state.cursor_position;
+        self.render_input_field(area, frame.buffer_mut());
+
+        if self.has_focus() {
+            let pos = self.d.cursor_position;
             frame.set_cursor(pos.x, pos.y);
         }
-    }
-
-    fn is_focus_tracker(&self) -> bool {
-        true
     }
 }

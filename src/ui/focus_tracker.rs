@@ -51,7 +51,7 @@ impl FocusTracker {
             let mut tab_order = Vec::new();
 
             for (view_name, view) in views.iter() {
-                if view.is_focus_tracker() {
+                if view.can_focus() {
                     tab_order.push(view_name.clone());
                 }
             }

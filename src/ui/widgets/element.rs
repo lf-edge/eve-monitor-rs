@@ -1,15 +1,10 @@
-use ratatui::{
-    buffer::Buffer,
-    layout::Rect,
-    widgets::{StatefulWidget, StatefulWidgetRef, WidgetRef},
-};
-
-use crate::traits::{IFocusAcceptor, IStatefulWidgetPresenter, IVisible, IWidgetPresenter};
+use crate::traits::{IFocusAcceptor, IVisible, IWidgetPresenter};
 
 #[derive(Debug)]
 pub struct VisualState {
     pub visible: bool,
     pub focused: bool,
+    pub can_focus: bool,
 }
 
 impl Default for VisualState {
@@ -17,6 +12,7 @@ impl Default for VisualState {
         Self {
             visible: true,
             focused: false,
+            can_focus: true,
         }
     }
 }
@@ -55,6 +51,10 @@ where
     fn has_focus(&self) -> bool {
         self.v.focused
     }
+
+    fn can_focus(&self) -> bool {
+        self.v.can_focus
+    }
 }
 // impl<D> IFocusAcceptor for Element<D>
 // where
@@ -73,67 +73,67 @@ where
 //     }
 // }
 
-impl<D> WidgetRef for Element<D>
-where
-    Self: IWidgetPresenter,
-{
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        self.render(area, buf);
-    }
-}
+// impl<D> WidgetRef for Element<D>
+// where
+//     Self: IWidgetExternalPresenter,
+// {
+//     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+//         self.render(area, buf);
+//     }
+// }
 
-impl<D> WidgetRef for &mut Element<D>
-where
-    Self: IWidgetPresenter,
-{
-    fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-        self.render(area, buf);
-    }
-}
+// impl<D> WidgetRef for &mut Element<D>
+// where
+//     Self: IWidgetExternalPresenter,
+// {
+//     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
+//         self.render(area, buf);
+//     }
+// }
 
-impl<D> StatefulWidgetRef for Element<D>
-where
-    Self: IStatefulWidgetPresenter<State = D>,
-{
-    type State = D;
+// impl<D> StatefulWidgetRef for Element<D>
+// where
+//     Self: IStatefulWidgetPresenter<State = D>,
+// {
+//     type State = D;
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render_with_state(area, buf, state);
-    }
-}
+//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+//         self.render_with_state(area, buf, state);
+//     }
+// }
 
-impl<D> StatefulWidgetRef for &mut Element<D>
-where
-    Self: IStatefulWidgetPresenter<State = D>,
-{
-    type State = D;
+// impl<D> StatefulWidgetRef for &mut Element<D>
+// where
+//     Self: IStatefulWidgetPresenter<State = D>,
+// {
+//     type State = D;
 
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render_with_state(area, buf, state);
-    }
-}
+//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+//         self.render_with_state(area, buf, state);
+//     }
+// }
 
-impl<D> StatefulWidget for Element<D>
-where
-    Self: IStatefulWidgetPresenter<State = D>,
-{
-    type State = D;
+// impl<D> StatefulWidget for Element<D>
+// where
+//     Self: IStatefulWidgetPresenter<State = D>,
+// {
+//     type State = D;
 
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render_with_state(area, buf, state);
-    }
-}
+//     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+//         self.render_with_state(area, buf, state);
+//     }
+// }
 
-impl<D> StatefulWidget for &mut Element<D>
-where
-    Self: IStatefulWidgetPresenter<State = D>,
-{
-    type State = D;
+// impl<D> StatefulWidget for &mut Element<D>
+// where
+//     Self: IStatefulWidgetPresenter<State = D>,
+// {
+//     type State = D;
 
-    fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render_with_state(area, buf, state);
-    }
-}
+//     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
+//         self.render_with_state(area, buf, state);
+//     }
+// }
 
 // TODO: Experimental code to wrap a widget with a name
 // but let it pretend to be IWidget

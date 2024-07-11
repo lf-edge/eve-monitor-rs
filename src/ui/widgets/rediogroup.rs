@@ -1,18 +1,15 @@
-use std::borrow::BorrowMut;
-
 use crossterm::event::{KeyCode, KeyEvent};
-use log::info;
+use log::{info, trace};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect},
     style::{Color, Style},
     widgets::{Block, Borders, Paragraph, WidgetRef},
-    Frame,
 };
 
 use crate::{
-    events::{Event, UiCommand},
-    traits::{IEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
+    events::Event,
+    traits::{IEventHandler, IFocusAcceptor, IWidget},
 };
 
 use super::element::{Element, IStandardRenderer};
@@ -43,7 +40,7 @@ impl RadioGroupElement {
 
 impl IStandardRenderer for RadioGroupElement {
     fn render(&self, area: &Rect, buf: &mut Buffer) {
-        info!("rendering: RadioGroupWidget {:#?}", &self);
+        trace!("rendering: RadioGroupElement {:#?}", &self);
         let style = if self.has_focus() {
             Style::default().fg(Color::Yellow)
         } else {
@@ -77,17 +74,16 @@ impl IStandardRenderer for RadioGroupElement {
 
 impl IEventHandler for RadioGroupElement {
     fn handle_key_event(&mut self, key: KeyEvent) -> Option<Event> {
-        info!("handle_key_event: RadioGroupView {:#?}", &self);
+        trace!("handle_key_event: RadioGroupView {:#?}", &self);
         //TODO: change to focus tracker
         match key.code {
             KeyCode::Up => {
-                self.d.borrow_mut().selected = self.d.borrow_mut().selected.saturating_sub(1);
-                return Some(Event::UiCommand(UiCommand::Redraw));
+                self.d.selected = self.d.selected.saturating_sub(1);
+                return Some(Event::redraw());
             }
             KeyCode::Down => {
-                self.d.borrow_mut().selected =
-                    (self.d.borrow_mut().selected + 1).min(self.d.borrow_mut().labels.len() - 1);
-                return Some(Event::UiCommand(UiCommand::Redraw));
+                self.d.selected = (self.d.selected + 1).min(self.d.labels.len() - 1);
+                return Some(Event::redraw());
             }
             _ => {
                 return None;

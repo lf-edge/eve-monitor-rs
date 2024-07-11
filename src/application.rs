@@ -241,7 +241,7 @@ impl Ui {
 
     fn handle_event(&mut self, event: Event) -> Result<()> {
         //let event = self.translate_event(event);
-        trace!("Ui handle_event {:?}", event);
+        info!("Ui handle_event {:?}", event);
 
         match event {
             // only fo debugging purposes

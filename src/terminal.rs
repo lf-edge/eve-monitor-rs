@@ -38,6 +38,7 @@ impl TerminalWrapper {
                 // wait for an event
                 // if event is received, send it to the event dispatcher
                 let event = crossterm::event::read()?;
+                trace!("Received event: {:?}", event);
                 // Only handle key events
                 if let crossterm::event::Event::Key(key) = event {
                     dispatcher.send(Event::Key(key));

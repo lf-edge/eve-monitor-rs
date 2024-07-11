@@ -569,7 +569,7 @@ impl IEventHandler for Window {
 
 impl IFocusTracker for Window {
     fn focus_next(&mut self) -> Option<String> {
-        info!("focus_next: MainWnd {:#?}", &self.ft);
+        trace!("focus_next: MainWnd {:#?}", &self.ft);
 
         // Clear focus from the current focused view, if there is one
         if let Some(focused_view) = self.ft.get_focused_view() {
@@ -607,7 +607,7 @@ impl IFocusTracker for Window {
     }
 
     fn focus_prev(&mut self) -> Option<String> {
-        info!("focus_prev: MainWnd {:#?}", &self.ft);
+        trace!("focus_prev: {:#?}", &self.ft);
         // Clear focus from the current focused view, if there is one
         if let Some(focused_view) = self.ft.get_focused_view() {
             if let Some(widget) = self.widgets.get_mut(&focused_view) {

@@ -12,7 +12,7 @@ use log::LevelFilter;
 use pretty_env_logger::{self, formatted_builder};
 
 fn init_logging() {
-    formatted_builder().filter(None, LevelFilter::Trace).init();
+    formatted_builder().filter(None, LevelFilter::Info).init();
 }
 
 fn main() -> Result<()> {

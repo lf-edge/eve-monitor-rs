@@ -3,10 +3,9 @@ use ratatui::{
     layout::{Alignment, Rect},
     style::{Color, Style},
     widgets::{Paragraph, WidgetRef},
-    Frame,
 };
 
-use crate::traits::{IEventHandler, IWidget, IWidgetPresenter};
+use crate::traits::{IEventHandler, IWidget};
 
 use super::element::{Element, IStandardRenderer};
 

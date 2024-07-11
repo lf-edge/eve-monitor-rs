@@ -465,7 +465,12 @@ use ratatui::{
 };
 
 use crate::ui::{
-    widgets::{input_field::InputFieldElement, label::LabelElement, rediogroup::RadioGroupElement},
+    widgets::{
+        button::{self, ButtonElement},
+        input_field::InputFieldElement,
+        label::LabelElement,
+        rediogroup::RadioGroupElement,
+    },
     window::{LayoutMap, WidgetMap, Window},
 };
 
@@ -499,6 +504,10 @@ pub fn create_main_wnd() -> Window {
             let r = layout.get("3-0").unwrap();
             let rg = widgets.get_mut("Input").unwrap();
             rg.render(r, frame);
+
+            let r = layout.get("0-2").unwrap();
+            let rg = widgets.get_mut("Button").unwrap();
+            rg.render(r, frame);
         },
     );
 
@@ -516,11 +525,14 @@ pub fn create_main_wnd() -> Window {
 
     let input = InputFieldElement::new("Input", Some("Type here"));
 
+    let button = ButtonElement::new("Button");
+
     let wnd = Window::builder("MainWnd")
         .widget("RadioGroup", rg1)
         .widget("RadioGroup 1", rg2)
         .widget("Label", Box::new(label))
         .widget("Input", Box::new(input))
+        .widget("Button", Box::new(button))
         .with_layout(do_layout)
         .with_render(do_render)
         .with_focused_view("Input")

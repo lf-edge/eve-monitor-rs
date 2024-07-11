@@ -1,3 +1,5 @@
+use ratatui::{buffer::Buffer, layout::Rect};
+
 use crate::traits::{IFocusAcceptor, IVisible, IWidgetPresenter};
 
 #[derive(Debug)]
@@ -56,84 +58,20 @@ where
         self.v.can_focus
     }
 }
-// impl<D> IFocusAcceptor for Element<D>
-// where
-//     Self: IStatefulWidgetPresenter<State = D>,
-// {
-//     fn set_focus(&mut self) {
-//         self.v.focused = true;
-//     }
 
-//     fn clear_focus(&mut self) {
-//         self.v.focused = false;
-//     }
+pub trait IStandardRenderer {
+    fn render(&self, area: &Rect, buf: &mut Buffer);
+}
 
-//     fn has_focus(&self) -> bool {
-//         self.v.focused
-//     }
-// }
-
-// impl<D> WidgetRef for Element<D>
-// where
-//     Self: IWidgetExternalPresenter,
-// {
-//     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-//         self.render(area, buf);
-//     }
-// }
-
-// impl<D> WidgetRef for &mut Element<D>
-// where
-//     Self: IWidgetExternalPresenter,
-// {
-//     fn render_ref(&self, area: Rect, buf: &mut Buffer) {
-//         self.render(area, buf);
-//     }
-// }
-
-// impl<D> StatefulWidgetRef for Element<D>
-// where
-//     Self: IStatefulWidgetPresenter<State = D>,
-// {
-//     type State = D;
-
-//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-//         self.render_with_state(area, buf, state);
-//     }
-// }
-
-// impl<D> StatefulWidgetRef for &mut Element<D>
-// where
-//     Self: IStatefulWidgetPresenter<State = D>,
-// {
-//     type State = D;
-
-//     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-//         self.render_with_state(area, buf, state);
-//     }
-// }
-
-// impl<D> StatefulWidget for Element<D>
-// where
-//     Self: IStatefulWidgetPresenter<State = D>,
-// {
-//     type State = D;
-
-//     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-//         self.render_with_state(area, buf, state);
-//     }
-// }
-
-// impl<D> StatefulWidget for &mut Element<D>
-// where
-//     Self: IStatefulWidgetPresenter<State = D>,
-// {
-//     type State = D;
-
-//     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-//         self.render_with_state(area, buf, state);
-//     }
-// }
+impl<S> IWidgetPresenter for Element<S>
+where
+    Self: IStandardRenderer,
+{
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
+        // call render from IStandardRenderer
+        <Element<S> as IStandardRenderer>::render(self, area, frame.buffer_mut());
+    }
+}
 
 // TODO: Experimental code to wrap a widget with a name
 // but let it pretend to be IWidget

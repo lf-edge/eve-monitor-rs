@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::traits::{IEventHandler, IWidget, IWidgetPresenter};
 
-use super::element::Element;
+use super::element::{Element, IStandardRenderer};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LabelWidgetState {
@@ -27,18 +27,15 @@ impl LabelElement {
         ret.v.can_focus = false;
         ret
     }
-    fn render_label_with_state(&self, area: Rect, buf: &mut Buffer) {
+}
+
+impl IStandardRenderer for LabelElement {
+    fn render(&self, area: &Rect, buf: &mut Buffer) {
         let text = self.d.text.clone();
         let p = Paragraph::new(text)
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::White));
-        p.render_ref(area, buf);
-    }
-}
-
-impl IWidgetPresenter for LabelElement {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
-        self.render_label_with_state(*area, frame.buffer_mut());
+        p.render_ref(*area, buf);
     }
 }
 

@@ -15,7 +15,7 @@ use crate::{
     traits::{IEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
 };
 
-use super::element::Element;
+use super::element::{Element, IStandardRenderer};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct RadioGroupState {
@@ -39,7 +39,10 @@ impl RadioGroupElement {
             v: Default::default(),
         }
     }
-    pub fn render_view(&self, area: &Rect, buf: &mut Buffer) {
+}
+
+impl IStandardRenderer for RadioGroupElement {
+    fn render(&self, area: &Rect, buf: &mut Buffer) {
         info!("rendering: RadioGroupWidget {:#?}", &self);
         let style = if self.has_focus() {
             Style::default().fg(Color::Yellow)
@@ -69,12 +72,6 @@ impl RadioGroupElement {
             let p = Paragraph::new(label);
             p.render_ref(buttons_area[i], buf);
         }
-    }
-}
-
-impl IWidgetPresenter for RadioGroupElement {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
-        self.render_view(area, frame.buffer_mut());
     }
 }
 

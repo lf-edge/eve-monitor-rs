@@ -385,6 +385,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "monitor"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "crossbeam",
+ "crossterm",
+ "log",
+ "pretty_env_logger",
+ "ratatui",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -577,19 +590,6 @@ checksum = "2ff9eaf853dec4c8802325d8b6d3dffa86cc707fd7a1a4cdbf416e13b061787a"
 dependencies = [
  "quote",
  "syn",
-]
-
-[[package]]
-name = "standalone-tui"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "crossbeam",
- "crossterm",
- "log",
- "pretty_env_logger",
- "ratatui",
 ]
 
 [[package]]

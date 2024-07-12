@@ -135,12 +135,12 @@ impl IEventHandler for InputFieldElement {
                 KeyCode::Home => {
                     self.d.input_position = 0;
                 }
-                KeyCode::Tab => todo!(),
-                KeyCode::BackTab => todo!(),
+                KeyCode::Tab => {}
+                KeyCode::BackTab => {}
                 KeyCode::Insert => {
                     self.d.input_mode.toggle();
                 }
-                KeyCode::Esc => todo!(),
+                KeyCode::Esc => {}
                 _ => {}
             }
             if old_state != self.d {
@@ -156,6 +156,8 @@ impl IWidgetPresenter for InputFieldElement {
         trace!("rendering: InputFieldElement {:#?}", &self);
         self.render_input_field(area, frame.buffer_mut());
 
+        // set cursor position must be called every time to display the cursor
+        // on the next redraw cycle
         if self.has_focus() {
             let pos = self.d.cursor_position;
             frame.set_cursor(pos.x, pos.y);

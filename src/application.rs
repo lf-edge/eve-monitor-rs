@@ -1,7 +1,19 @@
+use ratatui::prelude::Constraint::Fill;
+use ratatui::prelude::Constraint::Length;
+use ratatui::prelude::Stylize;
+use ratatui::style::Color;
+use ratatui::style::Modifier;
+use ratatui::text::Line;
+use ratatui::widgets::block::Title;
+use ratatui::widgets::Block;
+use ratatui::widgets::Tabs;
+use ratatui::widgets::Widget;
 use std::borrow::BorrowMut;
 use std::fmt::Debug;
+use std::mem;
 use std::time::Duration;
-use std::{thread, vec};
+use std::{default, thread, vec};
+use strum::EnumCount;
 
 use anyhow::{Ok, Result};
 use crossbeam::select;
@@ -10,6 +22,7 @@ use crossterm::event::KeyModifiers;
 use log::{debug, info, trace, warn};
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::Frame;
+use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
 
 use crate::actions::{IpDialogState, MainWndState, MonActions};
 use crate::dispatcher::EventDispatcher;
@@ -123,9 +136,18 @@ impl Application {
 struct Ui {
     terminal: TerminalWrapper,
     dispatcher: EventDispatcher<Event>,
-    layer_stack: LayerStack<MonActions>,
+    views: Vec<LayerStack<MonActions>>,
+    selected_tab: UiTabs,
     // this is our model :)
-    a: u32,
+    _a: u32,
+}
+
+#[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
+enum UiTabs {
+    #[default]
+    Home,
+    Network,
+    Applications,
 }
 
 impl Debug for Ui {
@@ -139,8 +161,9 @@ impl Ui {
         Ok(Self {
             terminal,
             dispatcher,
-            layer_stack: LayerStack::new(),
-            a: 0,
+            views: vec![LayerStack::new(); UiTabs::COUNT],
+            selected_tab: UiTabs::default(),
+            _a: 0,
         })
     }
     pub fn create_main_wnd(&self) -> Window<MonActions, MainWndState> {
@@ -225,8 +248,8 @@ impl Ui {
             .on_action(|action, state: &mut MainWndState| {
                 debug!("on_action Action: {:?}", action);
                 match action.action {
-                    UiActions::CheckBox { checked } => todo!(),
-                    UiActions::RadioGroup { selected } => todo!(),
+                    UiActions::CheckBox { checked: _ } => todo!(),
+                    UiActions::RadioGroup { selected: _ } => todo!(),
                     UiActions::Input { text } => {
                         info!("Input updated: {}", &text);
                         state.ip = text;
@@ -262,6 +285,17 @@ impl Ui {
 
         wnd
     }
+
+    fn tabs() -> Tabs<'static> {
+        let tab_titles = UiTabs::iter().map(UiTabs::to_tab_title);
+        let block = Block::new().title(" Use ctrl + ◄ ► to change tab");
+        Tabs::new(tab_titles)
+            .block(block)
+            .highlight_style(Modifier::REVERSED)
+            .divider(" ")
+            .padding("", "")
+    }
+
     fn init(&mut self) {
         // let dlg = Dialog::builder()
         //     .title("Dialog")
@@ -284,7 +318,7 @@ impl Ui {
 
         let w = self.create_main_wnd();
 
-        self.layer_stack.push(Box::new(w));
+        self.views[UiTabs::Home as usize].push(Box::new(w));
 
         let s = IpDialogState {
             ip: "10.208.13.10".to_string(),
@@ -299,16 +333,26 @@ impl Ui {
             s,
         );
 
-        self.layer_stack.push(Box::new(d));
+        self.views[UiTabs::Home as usize].push(Box::new(d));
     }
+
     fn draw(&mut self) {
+        let screen_layout = Layout::vertical([Length(2), Fill(0), Length(1)]);
+        let tabs_widget = Ui::tabs();
+
         //TODO: handle terminal event
         let _ = self.terminal.draw(|frame| {
             let area = frame.size();
+            let [tabs, body, _statusbar] = screen_layout.areas(area);
+
+            tabs_widget
+                .select(self.selected_tab as usize)
+                .render(tabs, frame.buffer_mut());
+
             // redraw from the bottom up
-            for layer in self.layer_stack.iter_mut() {
-                layer.do_layout(&area);
-                layer.render(&area, frame);
+            for layer in self.views[self.selected_tab as usize].iter_mut() {
+                layer.do_layout(&body);
+                layer.render(&body, frame);
             }
         });
     }
@@ -340,12 +384,12 @@ impl Ui {
                 if (key.code == KeyCode::Char('p')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {
                 debug!("CTRL+p: manual layer.pop() requested");
-                self.layer_stack.pop();
+                self.views[self.selected_tab as usize].pop();
                 self.dispatcher.send_redraw();
             }
-            // handle Tab
+            // handle Tab key
             Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
-                if let Some(layer) = self.layer_stack.last_mut() {
+                if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
                     //TODO: I can hide the focus tracker from the user
                     // by making it a private field in the layer
                     // and implement handle_focus_event on the layer
@@ -366,14 +410,29 @@ impl Ui {
                     }
                 }
             }
+            // handle Tab switching
+            Event::Key(key)
+                if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Left) =>
+            {
+                debug!("CTRL+Left: switching tab view");
+                self.selected_tab = self.selected_tab.previous();
+                self.dispatcher.send_redraw();
+            }
+            Event::Key(key)
+                if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right) =>
+            {
+                debug!("CTRL+Right: switching tab view");
+                self.selected_tab = self.selected_tab.next();
+                self.dispatcher.send_redraw();
+            }
 
             // forward all other key events to the top layer
             Event::Key(key) => {
-                if let Some(layer) = self.layer_stack.last_mut() {
+                if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
                     if let Some(action) = layer.handle_key_event(key) {
                         match action.action {
                             UiActions::DismissDialog => {
-                                self.layer_stack.pop();
+                                self.views[self.selected_tab as usize].pop();
                                 self.invalidate();
                             }
                             _ => {
@@ -387,5 +446,26 @@ impl Ui {
         }
 
         None
+    }
+}
+
+impl UiTabs {
+    fn to_tab_title(self) -> Line<'static> {
+        let text = self.to_string();
+        format!(" {text} ").bg(Color::Black).into()
+    }
+
+    /// Get the previous tab, if there is no previous tab return the current tab.
+    fn previous(self) -> Self {
+        let current_index: usize = self as usize;
+        let previous_index = current_index.saturating_sub(1);
+        Self::from_repr(previous_index).unwrap_or(self)
+    }
+
+    /// Get the next tab, if there is no next tab return the current tab.
+    fn next(self) -> Self {
+        let current_index = self as usize;
+        let next_index = current_index.saturating_add(1);
+        Self::from_repr(next_index).unwrap_or(self)
     }
 }

@@ -395,6 +395,7 @@ dependencies = [
  "log",
  "pretty_env_logger",
  "ratatui",
+ "strum",
 ]
 
 [[package]]

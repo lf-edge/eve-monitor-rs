@@ -36,3 +36,9 @@ impl<A> LayerStack<A> {
         self.layers.iter_mut()
     }
 }
+
+impl<A> Clone for LayerStack<A> {
+    fn clone(&self) -> Self {
+        Self::new()
+    }
+}

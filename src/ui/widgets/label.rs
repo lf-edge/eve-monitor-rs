@@ -7,14 +7,14 @@ use ratatui::{
 
 use crate::traits::{IEventHandler, IWidget};
 
-use super::element::{Element, IStandardRenderer};
+use super::element::{IStandardRenderer, StaticElement};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LabelWidgetState {
     text: String,
 }
 
-pub type LabelElement = Element<LabelWidgetState>;
+pub type LabelElement = StaticElement<LabelWidgetState>;
 
 impl LabelElement {
     pub fn new<S: Into<String>>(text: S) -> Self {
@@ -22,6 +22,7 @@ impl LabelElement {
         let mut ret = Self {
             d: state,
             v: Default::default(),
+            phantom: Default::default(),
         };
         ret.v.can_focus = false;
         ret
@@ -38,5 +39,7 @@ impl IStandardRenderer for LabelElement {
     }
 }
 
-impl IEventHandler for LabelElement {}
+impl IEventHandler for LabelElement {
+    type Action = ();
+}
 impl IWidget for LabelElement {}

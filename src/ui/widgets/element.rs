@@ -20,12 +20,13 @@ impl Default for VisualState {
 }
 
 #[derive(Debug)]
-pub struct Element<D> {
+pub struct StaticElement<D, A = ()> {
     pub v: VisualState,
     pub d: D,
+    pub phantom: std::marker::PhantomData<A>,
 }
 
-impl<D> IVisible for Element<D>
+impl<D> IVisible for StaticElement<D>
 where
     Self: IWidgetPresenter,
 {
@@ -38,7 +39,7 @@ where
     }
 }
 
-impl<D> IFocusAcceptor for Element<D>
+impl<D> IFocusAcceptor for StaticElement<D>
 where
     Self: IWidgetPresenter,
 {
@@ -63,13 +64,13 @@ pub trait IStandardRenderer {
     fn render(&self, area: &Rect, buf: &mut Buffer);
 }
 
-impl<S> IWidgetPresenter for Element<S>
+impl<S> IWidgetPresenter for StaticElement<S>
 where
     Self: IStandardRenderer,
 {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
         // call render from IStandardRenderer
-        <Element<S> as IStandardRenderer>::render(self, area, frame.buffer_mut());
+        <StaticElement<S> as IStandardRenderer>::render(self, area, frame.buffer_mut());
     }
 }
 

@@ -21,6 +21,22 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     ])
     .split(popup_layout[1])[1]
 }
+
+pub fn centered_rect_fixed(width: u16, height: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::vertical([
+        Constraint::Length((r.height - height) / 2),
+        Constraint::Length(height),
+        Constraint::Length((r.height - height) / 2),
+    ])
+    .split(r);
+
+    Layout::horizontal([
+        Constraint::Length((r.width - width) / 2),
+        Constraint::Length(width),
+        Constraint::Length((r.width - width) / 2),
+    ])
+    .split(popup_layout[1])[1]
+}
 #[derive(Default)]
 pub struct ElementHashMap<T> {
     layout: HashMap<String, T>,

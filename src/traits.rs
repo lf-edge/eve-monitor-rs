@@ -1,4 +1,7 @@
-use crate::events::{Event, UiCommand};
+use crate::{
+    events::UiCommand,
+    ui::action::{Action, UiActions},
+};
 use ratatui::{layout::Rect, Frame};
 use std::collections::HashMap;
 
@@ -44,18 +47,35 @@ pub trait IFocusTracker {
 }
 
 pub trait IEventHandler {
-    fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<Event> {
+    type Action;
+    fn handle_key_event(
+        &mut self,
+        _key: crossterm::event::KeyEvent,
+    ) -> Option<Action<Self::Action>> {
         None
     }
 }
 
-pub trait IEventDispatcher {
-    fn dispatch_event(&self, event: UiCommand);
+pub trait IElementEventHandler {
+    type Action;
+    fn handle_key_event(
+        &mut self,
+        _key: crossterm::event::KeyEvent,
+    ) -> Option<UiActions<Self::Action>> {
+        None
+    }
 }
 
 pub trait IWidgetPresenter {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>);
 }
 
-pub trait IWindow: IPresenter + IFocusTracker + IEventHandler + IEventDispatcher {}
-pub trait IWidget: IWidgetPresenter + IEventHandler + IFocusAcceptor {}
+pub trait IWindow: IPresenter + IFocusTracker + IEventHandler {}
+pub trait IWidget: IWidgetPresenter + IElementEventHandler + IFocusAcceptor {}
+
+pub trait IAction: Clone {
+    type Target;
+    fn get_source(&self) -> &str;
+    fn get_target(&self) -> Option<&str>;
+    fn split(self) -> (String, Self::Target);
+}

@@ -1,3 +1,4 @@
+mod actions;
 mod application;
 mod dispatcher;
 mod events;
@@ -9,10 +10,14 @@ mod ui;
 use anyhow::{Ok, Result};
 use application::Application;
 use log::LevelFilter;
-use pretty_env_logger::{self, formatted_builder};
+use pretty_env_logger::env_logger::WriteStyle;
+use pretty_env_logger::formatted_builder;
 
 fn init_logging() {
-    formatted_builder().filter(None, LevelFilter::Info).init();
+    formatted_builder()
+        .filter(None, LevelFilter::Debug)
+        .write_style(WriteStyle::Always)
+        .init();
 }
 
 fn main() -> Result<()> {

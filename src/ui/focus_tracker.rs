@@ -42,8 +42,8 @@ impl FocusTracker {
         focus_tracker
     }
 
-    pub fn create_from_views(
-        views: &WidgetMap,
+    pub fn create_from_views<A>(
+        views: &WidgetMap<A>,
         focused_view: Option<String>,
         focus_mode: FocusMode,
     ) -> FocusTracker {

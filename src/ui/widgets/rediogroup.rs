@@ -12,24 +12,26 @@ use crate::{
     traits::{IEventHandler, IFocusAcceptor, IWidget},
 };
 
-use super::element::{Element, IStandardRenderer};
+use super::element::{StaticElement, IStandardRenderer};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct RadioGroupState {
+pub struct RadioGroupState<A> {
     pub labels: Vec<String>,
     pub selected: usize,
     pub title: String,
+    phantom: std::marker::PhantomData<A>,
 }
 
-pub type RadioGroupElement = Element<RadioGroupState>;
-impl IWidget for RadioGroupElement {}
+pub type RadioGroupElement<A> = StaticElement<RadioGroupState<A>>;
+impl<A> IWidget for RadioGroupElement<A> {}
 
-impl RadioGroupElement {
+impl<A> RadioGroupElement<A> {
     pub fn new<S: Into<String>, P: Into<String>>(labels: Vec<S>, title: P) -> Self {
         let state = RadioGroupState {
             labels: labels.into_iter().map(|s| s.into()).collect(),
             selected: 0,
             title: title.into(),
+            phantom: Default::default(),
         };
         Self {
             d: state,
@@ -38,9 +40,9 @@ impl RadioGroupElement {
     }
 }
 
-impl IStandardRenderer for RadioGroupElement {
+impl<A> IStandardRenderer for RadioGroupElement<A> {
     fn render(&self, area: &Rect, buf: &mut Buffer) {
-        trace!("rendering: RadioGroupElement {:#?}", &self);
+        //trace!("rendering: RadioGroupElement {:#?}", &self);
         let style = if self.has_focus() {
             Style::default().fg(Color::Yellow)
         } else {
@@ -72,18 +74,19 @@ impl IStandardRenderer for RadioGroupElement {
     }
 }
 
-impl IEventHandler for RadioGroupElement {
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Event> {
-        trace!("handle_key_event: RadioGroupView {:#?}", &self);
+impl<A> IEventHandler for RadioGroupElement<A> {
+    type Action = A;
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Self::Action> {
+        //trace!("handle_key_event: RadioGroupView {:#?}", &self);
         //TODO: change to focus tracker
         match key.code {
             KeyCode::Up => {
                 self.d.selected = self.d.selected.saturating_sub(1);
-                return Some(Event::redraw());
+                return None; //Some(Event::redraw());
             }
             KeyCode::Down => {
                 self.d.selected = (self.d.selected + 1).min(self.d.labels.len() - 1);
-                return Some(Event::redraw());
+                return None; //Some(Event::redraw());
             }
             _ => {
                 return None;

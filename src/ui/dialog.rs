@@ -1,300 +1,217 @@
-// use std::collections::HashMap;
+use std::collections::HashMap;
 
-// use log::trace;
-// use ratatui::{
-//     buffer::Buffer,
-//     layout::{Constraint, Layout, Rect},
-//     style::{Color, Style},
-//     widgets::{Block, BorderType, Borders, StatefulWidgetRef, WidgetRef},
-//     Frame,
-// };
+use crossterm::event::KeyEvent;
+use log::{info, trace};
+use ratatui::{
+    layout::{self, Constraint, Flex, Rect},
+    style::{Color, Style},
+    widgets::{Block, BorderType, Borders, Widget},
+    Frame,
+};
 
-// use crate::{
-//     events::{Event, EventCode},
-//     traits::{Component, VisualComponent},
-// };
+use crate::traits::{IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible, IWindow};
 
-// use super::{
-//     button::{Button, OnButtonClicked},
-//     component::{StatefulComponentWrapper, VisualComponentState, WidgetState},
-//     tools::centered_rect,
-//     window::{FocusTracker, Window, WindowId},
-// };
+use anyhow::Result;
 
-// pub struct DialogBuilder {
-//     title: String,
-//     buttons: HashMap<String, OnButtonClicked>,
-//     views: HashMap<String, Box<dyn VisualComponent>>,
-//     do_layout: Box<dyn Fn(&DialogWidgetState, &Rect) -> HashMap<String, Rect>>,
-//     size: (u16, u16),
-// }
+use super::{
+    action::{Action, UiActions},
+    tools::centered_rect_fixed,
+    widgets::button::ButtonElement,
+    window::{LayoutMap, WidgetMap, Window},
+};
 
-// fn dialog_default_layout_vertical(state: &DialogWidgetState, area: &Rect) -> HashMap<String, Rect> {
-//     let mut result = HashMap::new();
+pub struct Dialog<A, D> {
+    w: Window<A, ()>,
+    size: (u16, u16),
+    buttons: Vec<String>,
+    state: D,
+    layout: LayoutMap,
+}
 
-//     let block = Block::default()
-//         .borders(Borders::ALL)
-//         .border_type(BorderType::Thick)
-//         .border_style(Style::default().fg(Color::White))
-//         .style(Style::default().bg(Color::Black))
-//         .title(state.title.as_str());
+impl<A: 'static, D: 'static> Dialog<A, D> {
+    pub fn new(size: (u16, u16), buttons: Vec<String>, focused_button: &str, state: D) -> Self {
+        let mut w = Window::builder("Dialog")
+            .with_layout(|_, _| Ok(()))
+            .with_render(Self::do_render)
+            .with_focused_view(focused_button)
+            .with_state(());
 
-//     let inner = block.inner(*area);
-//     result.insert("frame".to_string(), inner);
-//     let layout = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]).split(inner);
+        // create buttons and add them to the window builder
+        for button_name in buttons.iter() {
+            let button = ButtonElement::<A>::new(button_name);
+            w = w.widget(button_name, Box::new(button));
+        }
 
-//     result.insert("content".to_string(), layout[0]);
-//     result.insert("buttons".to_string(), layout[1]);
+        Self {
+            w: w.build().unwrap(),
+            size,
+            buttons,
+            state,
+            layout: LayoutMap::new(),
+        }
+    }
 
-//     result
-// }
+    fn on_ok_yes<F>(f: F) -> Option<UiActions<A>>
+    where
+        F: Fn(&D) -> Option<UiActions<A>>,
+    {
+        Some(UiActions::ButtonClicked("Ok".to_string()))
+    }
 
-// impl DialogBuilder {
-//     fn new() -> Self {
-//         Self {
-//             title: String::new(),
-//             buttons: HashMap::new(),
-//             views: HashMap::new(),
-//             do_layout: Box::new(dialog_default_layout_vertical),
-//             size: (30, 15),
-//         }
-//     }
-//     pub fn title<S: Into<String>>(mut self, title: S) -> Self {
-//         self.title = title.into();
-//         self
-//     }
-//     pub fn button(mut self, label: &str, on_click: OnButtonClicked) -> Self {
-//         self.buttons.insert(label.to_string(), on_click);
-//         self
-//     }
-//     pub fn view(mut self, view: Box<dyn VisualComponent>) -> Self {
-//         self.views.insert(view.name().to_string(), view);
-//         self
-//     }
-//     pub fn with_layout(
-//         mut self,
-//         layout: impl Fn(&DialogWidgetState, &Rect) -> HashMap<String, Rect> + 'static,
-//     ) -> Self {
-//         self.do_layout = Box::new(layout);
-//         self
-//     }
-//     pub fn build(self) -> Window {
-//         // let mut buttons: HashMap<String, Box<dyn VisualComponent>> = HashMap::new();
-//         // for (label, on_click) in self.buttons {
-//         //     let button = Button::new(label.clone(), label.clone(), on_click);
-//         //     buttons.insert(label, Box::new(button));
-//         // }
-//         let wnd = Window::builder()
-//             .add_view(dlg)
-//             .with_layout(move |r| {
-//                 let mut layout = HashMap::new();
-//                 let rect = centered_rect(self.size.0, self.size.1, r.clone());
-//                 layout.insert("root_view".to_string(), rect);
-//                 trace!("Dialog layout: {:?}", layout);
-//                 layout
-//             })
-//             .name(format!("Dialog: -{}-", self.title))
-//             .build();
-//         wnd
-//     }
-// }
-// // #[derive(Debug)]
-// // pub struct DialogWidgetState {
-// //     title: String,
-// //     buttons: HashMap<String, Box<dyn VisualComponent>>,
-// //     size: (u16, u16),
-// //     layout_map: HashMap<String, Rect>,
-// // }
-// // impl WidgetState for DialogWidgetState {
-// //     fn get_layout(&self) -> HashMap<String, Rect> {
-// //         return self.layout_map.clone();
-// //     }
-// // }
-// // pub struct DialogWidget {
-// //     frame: Block<'static>,
-// // }
+    fn with_render(
+        frame: &mut Frame<'_>,
+        layout: &LayoutMap,
+        widgets: &mut WidgetMap<A>,
+    ) -> Result<()> {
+        info!("Rendering dialog content");
+        Ok(())
+    }
 
-// // impl DialogWidget {
-// //     fn render(&self, state: &DialogWidgetState, area: Rect, buf: &mut Buffer) {
-// //         trace!("Dialog render with state: {:?}", state);
-// //         // let content_area = self.state.layout_map[&"content".to_string()];
-// //         // let buttons_area = self.state.layout_map[&"buttons".to_string()];
-// //         // // render the frame
-// //         // //frame.render_stateful_widget_ref(&mut self.widget, *area);
+    fn do_layout(&mut self, area: &Rect) {
+        let dialog_area = centered_rect_fixed(self.size.0, self.size.1, *area);
+        self.layout.insert("frame".to_string(), dialog_area);
+        // split the dialog area into two parts: content and buttons
+        let max_button_len = self.buttons.iter().map(|b| b.len() + 2).max().unwrap_or(0) as u16;
+        let num_buttons = self.buttons.len();
 
-// //         // // self.widget
-// //         // //     .frame
-// //         // //     .(self.state.widget_state.title.as_str());
+        let layout = layout::Layout::horizontal([
+            layout::Constraint::Min(0),
+            layout::Constraint::Length(max_button_len),
+        ])
+        .margin(1)
+        .split(dialog_area);
 
-// //         // //render buttons
-// //         // for (i, (_label, button)) in self
-// //         //     .state
-// //         //     .widget_state
-// //         //     .buttons
-// //         //     .iter_mut()
-// //         //     //.filter(|c| is_button(c))
-// //         //     .enumerate()
-// //         // {
-// //         //     button.render(&layout_buttons[i], frame, _focused);
-// //         // }
-// //         // // render content
-// //         // for c in self.root.iter_mut() {
-// //         //     c.1.render(&content_area, frame, _focused);
-// //         // }
+        let content_rect = layout[0];
+        let buttons_rect = layout[1];
 
-// //         self.frame.render_ref(area, buf);
+        // split the buttons area into buttons
+        let button_layout = layout::Layout::vertical(vec![Constraint::Length(3); num_buttons])
+            .flex(Flex::Start)
+            .split(buttons_rect);
 
-// //         // render content
-// //     }
-// // }
+        for (i, button) in self.buttons.iter().enumerate() {
+            self.layout.insert(button.clone(), button_layout[i]);
+        }
+        self.layout.insert("content".to_string(), content_rect);
+    }
 
-// // impl<'a> StatefulWidgetRef for Box<DialogWidget> {
-// //     type State = VisualComponentState<DialogWidgetState>;
+    fn do_render(
+        _area: &Rect,
+        frame: &mut Frame<'_>,
+        layout: &LayoutMap,
+        widgets: &mut WidgetMap<A>,
+    ) {
+        info!("Rendering dialog content");
+    }
+}
 
-// //     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-// //         self.render(&state.widget_state, area, buf);
-// //     }
-// // }
+impl<A: 'static, D: 'static> IWindow for Dialog<A, D> {}
 
-// // impl<'a> StatefulWidgetRef for &Box<DialogWidget> {
-// //     type State = VisualComponentState<DialogWidgetState>;
+impl<A, D> IFocusTracker for Dialog<A, D> {
+    fn focus_next(&mut self) -> Option<String> {
+        self.w.focus_next()
+    }
 
-// //     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-// //         self.render(&state.widget_state, area, buf);
-// //     }
-// // }
+    fn focus_prev(&mut self) -> Option<String> {
+        self.w.focus_prev()
+    }
 
-// // impl<'a> StatefulWidgetRef for DialogWidget {
-// //     type State = VisualComponentState<DialogWidgetState>;
+    fn get_focused_view_name(&self) -> Option<String> {
+        self.w.get_focused_view_name()
+    }
+}
 
-// //     fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-// //         self.render(&state.widget_state, area, buf);
-// //     }
-// // }
+impl<A: 'static, D: 'static> IPresenter for Dialog<A, D> {
+    fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
+        self.do_layout(area);
+        // get content area and pass it to window
+        let content_area = self.layout.get("content").unwrap();
 
-// // pub type Dialog = StatefulComponentWrapper<DialogWidget, DialogWidgetState>;
+        self.w.do_layout(&content_area);
+        HashMap::new()
+    }
 
-// // impl Dialog {
-// //     fn new<S: Into<String>>(
-// //         name: S,
-// //         title: S,
-// //         size: (u16, u16),
-// //         buttons: HashMap<String, Box<dyn VisualComponent>>,
-// //         layout: Box<dyn Fn(&DialogWidgetState, &Rect) -> HashMap<String, Rect>>,
-// //     ) -> Self {
-// //         let focus_tracker = FocusTracker::create_from_views(&buttons, None);
-// //         Self::create_component_state(
-// //             name.into(),
-// //             Box::new(DialogWidget {
-// //                 frame: Block::new()
-// //                     .border_type(BorderType::Thick)
-// //                     .borders(Borders::ALL)
-// //                     .border_style(Style::default().fg(Color::White))
-// //                     .style(Style::default().bg(Color::Black)), //.title(self.state.widget_state.title.as_str()),
-// //             }),
-// //             DialogWidgetState {
-// //                 title: title.into(),
-// //                 buttons,
-// //                 size,
-// //                 layout_map: HashMap::new(),
-// //             },
-// //             layout,
-// //             Some(focus_tracker),
-// //         )
-// //     }
-// //     pub fn builder() -> DialogBuilder {
-// //         DialogBuilder::new()
-// //     }
-// // }
+    fn render(&mut self, _area: &Rect, frame: &mut Frame<'_>) {
+        trace!("Rendering dialog: {}", self.w.name);
+        // render the dialog
+        let frame_rect = self.layout.get("frame").unwrap();
 
-// // impl VisualComponent for Dialog {
-// //     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
-// //         frame.render_stateful_widget_ref(&self.widget, *area, &mut self.state);
-// //         let content_area = self.state.widget_state.layout_map[&"content".to_string()];
-// //         let buttons_area = self.state.widget_state.layout_map[&"buttons".to_string()];
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick)
+            .border_style(Style::default().fg(Color::White))
+            .style(Style::default().bg(Color::Black))
+            .title(self.w.name.as_str());
 
-// //         let layout_buttons = Layout::horizontal(
-// //             self.state
-// //                 .widget_state
-// //                 .buttons
-// //                 .iter()
-// //                 .map(|(label, _)| Constraint::Length(label.len() as u16 + 4))
-// //                 .collect::<Vec<_>>(),
-// //         )
-// //         .flex(ratatui::layout::Flex::End)
-// //         .split(buttons_area);
+        block.render(*frame_rect, frame.buffer_mut());
+        // render the buttons
+        for button_name in self.buttons.iter() {
+            let button_rect = self.layout.get(button_name).unwrap();
+            let button = self.w.widgets.get_mut(button_name).unwrap();
+            button.render(button_rect, frame);
+        }
 
-// //         for (i, (label, button)) in self.state.widget_state.buttons.iter_mut().enumerate() {
-// //             button.render(&layout_buttons[i], frame, false);
-// //         }
-// //     }
+        // render the content
+        let content_area = self.layout.get("content").unwrap();
+        self.w.render(content_area, frame);
+    }
 
-// //     fn handle_event(&mut self, _event: &EventCode) -> Option<Event> {
-// //         // match _event {
-// //         // EventCode::Key(Enter) => {
-// //         //         // if let Some(focused_view) = self.state.focus_tracker.get_focused_view() {
-// //         //         //     focused_view.handle_event(&EventCode::Enter);
-// //         //         // }
-// //         //         return Some(Event::redraw(Some(0)));
-// //         //     }
-// //         //     EventCode::Tab => {
-// //         //         return self.focus_next()
-// //         //         // if let Some(focused_view) = self.focus_tracker.get_focused_view() {
-// //         //         //     // let's try forward the event first.
-// //         //         //     if !focused_view.focus_next() {
-// //         //         //         // internal view lost focus
-// //         //         //         // we should find the next focusable view in the current window
-// //         //         //         focused_view.focus_lost();
-// //         //         //         if let Some(next) = self.focus_tracker.focus_next() {
-// //         //         //             let view = self.views.get_mut(&next).unwrap();
-// //         //         //             view.focus();
-// //         //         //             return Some(EventCode::Redraw);
-// //         //         //         }
-// //         //         //     }
-// //         //         // } else {
-// //         //         //     // focused view was never set
-// //         //         //     if let Some(next) = self.focus_tracker.focus_next() {
-// //         //         //         let view = self.views.get_mut(&next).unwrap();
-// //         //         //         view.focus();
-// //         //         //         return Some(EventCode::Redraw);
-// //         //         //     }
-// //         //         // }
-// //         //     }
-// //         //     _ => {}
-// //         // }
-// //         None
-// //     }
+    fn is_focus_tracker(&self) -> bool {
+        true
+    }
+}
 
-// //     fn layout(&mut self, area: &Rect) {
-// //         self.state.widget_state.layout_map = (self.do_layout)(&self.state.widget_state, area);
-// //     }
+impl<A, D> IFocusAcceptor for Dialog<A, D> {
+    fn has_focus(&self) -> bool {
+        // dialog is always focused
+        true
+    }
 
-// //     fn can_focus(&self) -> bool {
-// //         true
-// //     }
+    fn set_focus(&mut self) {
+        self.w.set_focus();
+    }
 
-// //     fn get_view_mut(&mut self, name: &str) -> Option<&mut Box<dyn VisualComponent>> {
-// //         let b = self.state.widget_state.buttons.get_mut(name);
-// //         if b.is_some() {
-// //             return b;
-// //         }
-// //         let v = self.root.get_mut(name);
-// //         if v.is_some() {
-// //             return v;
-// //         }
-// //         None
-// //         // let view = Component::get_view_mut(self, name);
-// //         // if view.is_some() {
-// //         //     return view;
-// //         // }
+    fn clear_focus(&mut self) {
+        self.w.clear_focus();
+    }
 
-// //         // if view.is_none() {
-// //         //     for (_, button) in self.state.widget_state.buttons.iter_mut() {
-// //         //         if button.name() == name {
-// //         //             return Some(button);
-// //         //         }
-// //         //     }
-// //         // }
-// //         // None
-// //     }
-// // }
+    fn can_focus(&self) -> bool {
+        true
+    }
+}
+
+impl<A, D> IVisible for Dialog<A, D> {}
+impl<A, D> IEventHandler for Dialog<A, D> {
+    type Action = A;
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Action<Self::Action>> {
+        trace!("Handling key event for dialog: {}", self.w.name);
+        // if Escape is pressed then dismiss the dialog
+        if key.code == crossterm::event::KeyCode::Esc {
+            trace!("Dismissing dialog: {}", self.w.name);
+            return Some(Action::new(self.w.name.clone(), UiActions::DismissDialog));
+        }
+
+        let action = self.w.handle_key_event(key);
+
+        // if Cancel is clicked then dismiss the dialog otherwise forward action
+        if let Some(action) = action {
+            match action.action {
+                UiActions::ButtonClicked(name) => match name.as_str() {
+                    "Cancel" => {
+                        return Some(Action::new(self.w.name.clone(), UiActions::DismissDialog))
+                    }
+                    _ => {
+                        //TODO: call custom button handler to update the state
+                        return None;
+                    }
+                },
+                _ => {
+                    //TODO: call custom button handler to update the state
+                    return Some(action);
+                }
+            }
+        } else {
+            None
+        }
+    }
+}

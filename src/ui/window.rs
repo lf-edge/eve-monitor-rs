@@ -331,7 +331,7 @@ impl<A, D> IPresenter for Window<A, D> {
     // }
 
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
-        (self.do_layout)(area).unwrap();
+        (self.do_layout)(area);
         (self.do_render)(area, frame, &self.layout, &mut self.widgets);
     }
 

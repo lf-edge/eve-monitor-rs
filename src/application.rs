@@ -229,10 +229,11 @@ impl Ui {
         };
 
         let do_render = Box::new(
-            |_area: &Rect,
+            move |area: &Rect,
              frame: &mut Frame<'_>,
-             layout: &LayoutMap,
+             _layout: &LayoutMap,
              widgets: &mut WidgetMap<MonActions>| {
+                let layout = &do_layout(area).unwrap();
                 // let r = layout.get("0-0").unwrap();
                 // let rg = widgets.get_mut("RadioGroup").unwrap();
                 // rg.render(r, frame);

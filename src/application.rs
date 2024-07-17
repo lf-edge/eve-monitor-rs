@@ -1,34 +1,37 @@
+use core::fmt::Debug;
+
+use std::result::Result::Ok;
+
+use anyhow::Result;
+use log::{debug, info, warn};
+
+use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::Constraint::Fill;
 use ratatui::prelude::Constraint::Length;
 use ratatui::prelude::Stylize;
 use ratatui::style::Color;
 use ratatui::style::Modifier;
 use ratatui::text::Line;
-use ratatui::widgets::block::Title;
 use ratatui::widgets::Block;
 use ratatui::widgets::Tabs;
 use ratatui::widgets::Widget;
-use std::borrow::BorrowMut;
-use std::fmt::Debug;
-use std::mem;
-use std::time::Duration;
-use std::{default, thread, vec};
-use strum::EnumCount;
-
-use anyhow::{Ok, Result};
-use crossbeam::select;
-use crossterm::event::KeyCode;
-use crossterm::event::KeyModifiers;
-use log::{debug, info, trace, warn};
-use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::Frame;
+
+use strum::EnumCount;
 use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
 
+use tokio::sync::mpsc;
+use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc::UnboundedSender;
+
+use futures::{FutureExt, StreamExt};
+
+use crossterm::event::KeyCode;
+use crossterm::event::KeyModifiers;
+
 use crate::actions::{IpDialogState, MainWndState, MonActions};
-use crate::dispatcher::EventDispatcher;
-use crate::events::{Event, UiCommand};
+use crate::events::Event;
 use crate::terminal::TerminalWrapper;
-use crate::traits::{IAction, IWindow};
 use crate::ui::action::{Action, UiActions};
 use crate::ui::dialog::Dialog;
 use crate::ui::layer_stack::LayerStack;
@@ -38,93 +41,134 @@ use crate::ui::window::{LayoutMap, WidgetMap, Window};
 
 #[derive(Debug)]
 pub struct Application {
-    dispatcher: EventDispatcher<Event>,
-    action_handler: EventDispatcher<Action<MonActions>>,
+    terminal_rx: UnboundedReceiver<Event>,
+    terminal_tx: UnboundedSender<Event>,
+    action_rx: UnboundedReceiver<Action<MonActions>>,
+    action_tx: UnboundedSender<Action<MonActions>>,
     ui: Ui,
-    //timers: thread::JoinHandle<()>,
-}
-
-impl EventDispatcher<Event> {
-    pub fn send_ui_command(&self, cmd: UiCommand) {
-        self.send(Event::UiCommand(cmd));
-    }
-    pub fn send_redraw(&self) {
-        self.send_ui_command(UiCommand::Redraw);
-    }
+    task: tokio::task::JoinHandle<()>,
 }
 
 impl Application {
     pub fn new() -> Result<Self> {
-        let dispatcher = EventDispatcher::new();
-        let action_handler = EventDispatcher::new();
-        let terminal = TerminalWrapper::new(dispatcher.clone())?;
-        let mut ui = Ui::new(dispatcher.clone(), terminal)?;
+        let (action_tx, action_rx) = mpsc::unbounded_channel::<Action<MonActions>>();
+        let (terminal_tx, terminal_rx) = mpsc::unbounded_channel::<Event>();
+        let terminal = TerminalWrapper::new()?;
+        let mut ui = Ui::new(action_tx.clone(), terminal)?;
         ui.init();
 
-        let dispatcher_clone = dispatcher.clone();
-        // let timers = thread::spawn(move || loop {
-        //     thread::sleep(std::time::Duration::from_millis(50));
-        //     dispatcher_clone.send(EventCode::Redraw);
-        // });
         Ok(Self {
-            dispatcher,
-            action_handler,
+            terminal_rx,
+            terminal_tx,
+            action_rx,
+            action_tx,
             ui,
-            //timers,
+            task: tokio::task::spawn(async {}),
         })
     }
 
-    pub fn run(&mut self) -> Result<()> {
+    pub async fn run(&mut self) -> Result<()> {
         println!("Running application");
         // we never exit the application
         // TODO: handle suspend/resume for the case when we give away /dev/tty
         // because we passed through the GPU to a guest VM
+        let mut terminal_event_stream = self.ui.terminal.get_stream();
 
-        //send inital redraw event
-        self.invalidate();
+        let terminal_tx_clone = self.terminal_tx.clone();
+        self.task = tokio::spawn(async move {
+            loop {
+                let terminal_event = terminal_event_stream.next().fuse();
 
-        loop {
-            select! {
-                recv(self.dispatcher) -> event => {
-                    let event = event?;
-                    match event {
-                        Event::Key(_)  => {
-                            // handle action immediately to response to user input
-                            let action = self.ui.handle_event(event);
-                            if let Some(action) = action {
-                                info!("Event loop got action: {:?}", action);
-                                self.draw_ui()?;
+                tokio::select! {
+                    event = terminal_event => {
+                        match event {
+                            Some(Ok(crossterm::event::Event::Key(key))) => {
+                                terminal_tx_clone.send(Event::Key(key)).unwrap();
+                            }
+                            Some(Ok(_)) => {}
+                            Some(Err(e)) => {
+                                warn!("Error reading terminal event: {:?}", e);
+                            }
+                            None => {
+                                warn!("Terminal event stream ended");
+                                break;
                             }
                         }
-                        Event::UiCommand(cmd) => match cmd {
-                            UiCommand::Redraw => {
-                                // TODO: if evt is redraw, consume all redraw events
-                                // to minimize the number of redraws
-                                // TODO 2: we could implement partial screen update
-                                let _ = self.draw_ui();
+                    },
+
+                }
+            }
+        });
+
+        // send initial redraw event
+        self.invalidate();
+
+        // listen on the action channel and terminal channel
+        loop {
+            tokio::select! {
+                event = self.terminal_rx.recv() => {
+                    match event {
+                        Some(Event::Key(key)) => {
+                            let action = self.ui.handle_event(Event::Key(key));
+                            if let Some(action) = action {
+                                info!("Event loop got action: {:?}", action);
+                                self.draw_ui().unwrap();
                             }
-                            UiCommand::Quit => break,
-                        },
+                        }
+                        None => {
+                            warn!("Terminal event stream ended");
+                            break;
+                        }
+                    }
+
+                }
+                action = self.action_rx.recv() => {
+                    match action {
+                        Some(action) => {
+                            info!("Async Action: {:?}", action);
+                            match action.action {
+                                UiActions::Redraw => {
+                                    self.draw_ui().unwrap();
+                                }
+                                UiActions::Quit => {
+                                    break;
+                                }
+                                // UiActions::UserAction(MonActions::MainWndStateUpdated(state)) => {
+                                //     // update the state of the main window
+                                //     // and redraw the UI
+                                //     self.ui.views[UiTabs::Home as usize]
+                                //         .iter_mut()
+                                //         .filter_map(|layer| {
+                                //             if let Some(w) = layer.as_any().downcast_ref::<Window<MonActions, MainWndState>>() {
+                                //                 Some(w)
+                                //             } else {
+                                //                 None
+                                //             }
+                                //         })
+                                //         .for_each(|w| {
+                                //             w.set_state(state.clone());
+                                //         });
+                                //     self.draw_ui().unwrap();
+                                // }
+                                _ => {}
+                            }
+                        }
+                        None => {
+                            warn!("Action stream ended");
+                            break;
+                        }
                     }
                 }
-                recv(self.action_handler) -> action => {
-                    // these are external actions produced by async tasks
-                    let action = action?;
-                    info!("Async Action: {:?}", action);
-                }
-                // default(Duration::from_millis(500)) => {
-                //     // to emulate the timer
-                //     // TODO: add subscription for actions so we can do partial screen updates
-                //     //self.invalidate();
-                //     self.ui.draw();
-                // }
             }
         }
+
         Ok(())
     }
 
     fn invalidate(&mut self) {
-        self.dispatcher.send_redraw();
+        self.action_tx
+            .send(Action::new("app", UiActions::Redraw))
+            .unwrap();
     }
 
     fn draw_ui(&mut self) -> Result<()> {
@@ -135,7 +179,7 @@ impl Application {
 
 struct Ui {
     terminal: TerminalWrapper,
-    dispatcher: EventDispatcher<Event>,
+    dispatcher: UnboundedSender<Action<MonActions>>,
     views: Vec<LayerStack<MonActions>>,
     selected_tab: UiTabs,
     // this is our model :)
@@ -157,7 +201,10 @@ impl Debug for Ui {
 }
 
 impl Ui {
-    fn new(dispatcher: EventDispatcher<Event>, terminal: TerminalWrapper) -> Result<Self> {
+    fn new(
+        dispatcher: UnboundedSender<Action<MonActions>>,
+        terminal: TerminalWrapper,
+    ) -> Result<Self> {
         Ok(Self {
             terminal,
             dispatcher,
@@ -358,7 +405,9 @@ impl Ui {
     }
 
     fn invalidate(&mut self) {
-        self.dispatcher.send(Event::UiCommand(UiCommand::Redraw));
+        self.dispatcher
+            .send(Action::new("app", UiActions::Redraw))
+            .unwrap();
     }
 
     fn handle_event(&mut self, event: Event) -> Option<Action<MonActions>> {
@@ -370,14 +419,16 @@ impl Ui {
                 if (key.code == KeyCode::Char('q')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {
                 debug!("CTRL+q: application Quit requested");
-                self.dispatcher.send(Event::UiCommand(UiCommand::Quit));
+                self.dispatcher
+                    .send(Action::new("user", UiActions::Quit))
+                    .unwrap();
             }
             // For debugging purposes
             Event::Key(key)
                 if (key.code == KeyCode::Char('r')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {
                 debug!("CTRL+r: manual Redraw requested");
-                self.dispatcher.send_redraw();
+                self.invalidate();
             }
             // For debugging purposes
             Event::Key(key)
@@ -385,7 +436,7 @@ impl Ui {
             {
                 debug!("CTRL+p: manual layer.pop() requested");
                 self.views[self.selected_tab as usize].pop();
-                self.dispatcher.send_redraw();
+                self.invalidate();
             }
             // handle Tab key
             Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
@@ -416,14 +467,14 @@ impl Ui {
             {
                 debug!("CTRL+Left: switching tab view");
                 self.selected_tab = self.selected_tab.previous();
-                self.dispatcher.send_redraw();
+                self.invalidate();
             }
             Event::Key(key)
                 if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right) =>
             {
                 debug!("CTRL+Right: switching tab view");
                 self.selected_tab = self.selected_tab.next();
-                self.dispatcher.send_redraw();
+                self.invalidate();
             }
 
             // forward all other key events to the top layer
@@ -442,7 +493,6 @@ impl Ui {
                     }
                 }
             }
-            _ => {}
         }
 
         None

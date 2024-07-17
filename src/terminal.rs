@@ -6,51 +6,24 @@ use crossterm::{
         LeaveAlternateScreen,
     },
 };
-use log::trace;
 use std::{
     io::stdout,
     ops::{Deref, DerefMut},
-    thread,
 };
 
 use ratatui::{backend::CrosstermBackend, Terminal};
-
-use crate::{dispatcher::EventDispatcher, events::Event};
 
 pub type IO = std::io::Stdout;
 
 #[derive(Debug)]
 pub struct TerminalWrapper {
     terminal: Terminal<CrosstermBackend<IO>>,
-    //TODO: Add a way to stop the thread
-    // we do not need it for EVE since the ap is always running
-    // but would be nice to have it for other applications
-    _terminal_thread_handle: thread::JoinHandle<Result<()>>,
 }
 
 impl TerminalWrapper {
-    pub fn new(dispatcher: EventDispatcher<Event>) -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let terminal = Self::init_terminal()?;
-        let dispatcher = dispatcher.clone();
-        // spawn a thread to listen for events
-        let _terminal_thread_handle = thread::spawn(move || -> Result<()> {
-            loop {
-                // wait for an event
-                // if event is received, send it to the event dispatcher
-                let event = crossterm::event::read()?;
-                trace!("Received event: {:?}", event);
-                // Only handle key events
-                if let crossterm::event::Event::Key(key) = event {
-                    dispatcher.send(Event::Key(key));
-                } else {
-                    trace!("Unhandled event: {:?}", event);
-                }
-            }
-        });
-        Ok(Self {
-            terminal,
-            _terminal_thread_handle,
-        })
+        Ok(Self { terminal })
     }
 
     fn init_terminal() -> Result<Terminal<CrosstermBackend<IO>>> {
@@ -74,13 +47,9 @@ impl TerminalWrapper {
         Ok(())
     }
 
-    // wrapper to call draw on termnial
-    // fn draw<F>(&mut self, f: F) -> Result<CompletedFrame>
-    // where
-    //     F: FnOnce(&mut Frame),
-    // {
-    //     Ok(self.terminal.draw(f)?)
-    // }
+    pub fn get_stream(&self) -> crossterm::event::EventStream {
+        crossterm::event::EventStream::new()
+    }
 }
 
 impl Drop for TerminalWrapper {

@@ -321,16 +321,17 @@ impl<A, D> IFocusAcceptor for Window<A, D> {
     }
 }
 impl<A, D> IPresenter for Window<A, D> {
-    fn do_layout(
-        &mut self,
-        area: &Rect,
-    ) -> std::collections::HashMap<String, ratatui::prelude::Rect> {
-        (self.do_layout)(area).unwrap();
-        //TODO: do we need upper layer to know about the layout? probably not
-        HashMap::new()
-    }
+    // fn do_layout(
+    //     &mut self,
+    //     area: &Rect,
+    // ) -> std::collections::HashMap<String, ratatui::prelude::Rect> {
+    //     (self.do_layout)(area).unwrap();
+    //     //TODO: do we need upper layer to know about the layout? probably not
+    //     HashMap::new()
+    // }
 
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
+        (self.do_layout)(area).unwrap();
         (self.do_render)(area, frame, &self.layout, &mut self.widgets);
     }
 

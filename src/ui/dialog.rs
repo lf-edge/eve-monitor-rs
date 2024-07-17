@@ -122,17 +122,18 @@ impl<A, D> IFocusTracker for Dialog<A, D> {
 }
 
 impl<A: 'static, D: 'static> IPresenter for Dialog<A, D> {
-    fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
-        self.do_layout(area);
-        // get content area and pass it to window
-        let content_area = self.layout.get("content").unwrap();
+    // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
+    //     self.do_layout(area);
+    //     // get content area and pass it to window
+    //     let content_area = self.layout.get("content").unwrap();
 
-        self.w.do_layout(&content_area);
-        HashMap::new()
-    }
+    //     self.w.do_layout(&content_area);
+    //     HashMap::new()
+    // }
 
-    fn render(&mut self, _area: &Rect, frame: &mut Frame<'_>) {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
         trace!("Rendering dialog: {}", self.w.name);
+        self.do_layout(area);
         // render the dialog
         let frame_rect = self.layout.get("frame").unwrap();
 

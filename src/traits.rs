@@ -2,11 +2,8 @@ use crate::ui::action::{Action, UiActions};
 use ratatui::{layout::Rect, Frame};
 use std::collections::HashMap;
 
-pub trait IPresenter
-where
-    Self: IVisible + IFocusAcceptor,
-{
-    fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect>;
+pub trait IPresenter {
+    // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect>;
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>);
     fn is_focus_tracker(&self) -> bool {
         false
@@ -67,7 +64,7 @@ pub trait IWidgetPresenter {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>);
 }
 
-pub trait IWindow: IPresenter + IFocusTracker + IEventHandler {}
+pub trait IWindow: IPresenter + IFocusAcceptor + IFocusTracker + IEventHandler {}
 pub trait IWidget: IWidgetPresenter + IElementEventHandler + IFocusAcceptor {}
 
 pub trait IAction: Clone {

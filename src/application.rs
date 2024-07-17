@@ -400,7 +400,7 @@ impl Ui {
 
             // redraw from the bottom up
             for layer in self.views[self.selected_tab as usize].iter_mut() {
-                layer.do_layout(&body);
+                // layer.do_layout(&body);
                 layer.render(&body, frame);
             }
         });

@@ -79,6 +79,16 @@ impl Application {
         }
     }
 
+    fn get_socket_path() -> String {
+        // try to get XDG_RUNTIME_DIR first if we run a standalone app on development host
+        if let Ok(xdg_runtime_dir) = std::env::var("XDG_RUNTIME_DIR") {
+            return format!("{}/monitor.sock", xdg_runtime_dir);
+        } else {
+            // EVE path
+            return "/run/monitor.sock".to_string();
+        }
+    }
+
     pub async fn run(&mut self) -> Result<()> {
         println!("Running application");
         // we never exit the application
@@ -92,8 +102,10 @@ impl Application {
         let ipc_task = tokio::spawn(async move {
             ipc_tx_clone.send(IpcMessage::Connecting).unwrap();
 
-            info!("Connecting to IPC socket");
-            let stream = IpcClient::connect("/tmp/monitor.sock").await.unwrap();
+            let socket_path = Application::get_socket_path();
+
+            info!("Connecting to IPC socket {} ", &socket_path);
+            let stream = IpcClient::connect(&socket_path).await.unwrap();
             let (mut sink, mut stream) = stream.split();
 
             ipc_tx_clone.send(IpcMessage::Ready).unwrap();

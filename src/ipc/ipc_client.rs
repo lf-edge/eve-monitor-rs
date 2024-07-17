@@ -38,7 +38,7 @@ impl IpcClient {
             let socket_task: JoinHandle<Result<(), anyhow::Error>> =
                 tokio::spawn(async move { wait_for_socket_file(&socket_path).await });
 
-            info!("Waiting for socket file to be created");
+            info!("Waiting for socket file {} to be created", path);
             socket_task.await??;
         }
 

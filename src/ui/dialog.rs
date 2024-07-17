@@ -31,7 +31,7 @@ pub struct Dialog<A, D> {
 impl<A: 'static, D: 'static> Dialog<A, D> {
     pub fn new(size: (u16, u16), buttons: Vec<String>, focused_button: &str, state: D) -> Self {
         let mut w = Window::builder("Dialog")
-            .with_layout(|_, _| Ok(()))
+            .with_layout(|_| None)
             .with_render(Self::do_render)
             .with_focused_view(focused_button)
             .with_state(());

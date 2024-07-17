@@ -189,6 +189,7 @@ struct Ui {
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
 enum UiTabs {
     #[default]
+    Debug,
     Home,
     Network,
     Applications,
@@ -214,7 +215,8 @@ impl Ui {
         })
     }
     pub fn create_main_wnd(&self) -> Window<MonActions, MainWndState> {
-        let do_layout = |area: &Rect, layout: &mut LayoutMap| {
+        let do_layout = |area: &Rect| -> Option<LayoutMap> {
+            let mut layout = LayoutMap::new();
             let cols = Layout::horizontal([Constraint::Ratio(1, 4); 4]).split(*area);
             for (i, col) in cols.iter().enumerate() {
                 let rows = Layout::vertical([Constraint::Ratio(1, 4); 4]).split(*col);
@@ -223,7 +225,7 @@ impl Ui {
                     layout.insert(area_name, *row);
                 }
             }
-            Ok(())
+            Some(layout)
         };
 
         let do_render = Box::new(
@@ -365,7 +367,7 @@ impl Ui {
 
         let w = self.create_main_wnd();
 
-        self.views[UiTabs::Home as usize].push(Box::new(w));
+        self.views[UiTabs::Debug as usize].push(Box::new(w));
 
         let s = IpDialogState {
             ip: "10.208.13.10".to_string(),
@@ -380,7 +382,7 @@ impl Ui {
             s,
         );
 
-        self.views[UiTabs::Home as usize].push(Box::new(d));
+        self.views[UiTabs::Debug as usize].push(Box::new(d));
     }
 
     fn draw(&mut self) {

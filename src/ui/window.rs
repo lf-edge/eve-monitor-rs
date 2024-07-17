@@ -20,7 +20,7 @@ use super::{
 pub type WidgetMap<A> = ElementHashMap<Box<dyn IWidget<Action = A>>>;
 pub type LayoutMap = ElementHashMap<Rect>;
 
-pub type LayoutFn = Box<dyn FnMut(&Rect, &mut LayoutMap) -> Result<()>>;
+pub type LayoutFn = Box<dyn FnMut(&Rect) -> Option<LayoutMap>>;
 pub type RenderFn<A> =
     Box<dyn FnMut(&Rect, &mut ratatui::Frame<'_>, &LayoutMap, &mut WidgetMap<A>)>;
 
@@ -55,7 +55,7 @@ impl<A, D> WindowBuilder<A, D> {
 
     pub fn with_layout<F>(mut self, do_layout: F) -> Self
     where
-        F: FnMut(&Rect, &mut LayoutMap) -> Result<()> + 'static,
+        F: FnMut(&Rect) -> Option<LayoutMap> + 'static,
     {
         self.do_layout = Some(Box::new(do_layout));
         self
@@ -325,7 +325,7 @@ impl<A, D> IPresenter for Window<A, D> {
         &mut self,
         area: &Rect,
     ) -> std::collections::HashMap<String, ratatui::prelude::Rect> {
-        (self.do_layout)(area, &mut self.layout).unwrap();
+        (self.do_layout)(area).unwrap();
         //TODO: do we need upper layer to know about the layout? probably not
         HashMap::new()
     }

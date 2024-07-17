@@ -1,7 +1,4 @@
-use crate::{
-    events::UiCommand,
-    ui::action::{Action, UiActions},
-};
+use crate::ui::action::{Action, UiActions};
 use ratatui::{layout::Rect, Frame};
 use std::collections::HashMap;
 

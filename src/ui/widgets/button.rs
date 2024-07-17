@@ -1,9 +1,6 @@
-use std::rc::Rc;
-
 use crossterm::event::{KeyCode, KeyEvent};
 use log::{info, trace};
 use ratatui::{
-    buffer::Buffer,
     layout::Alignment,
     prelude::Rect,
     style::{Color, Style},
@@ -11,25 +8,12 @@ use ratatui::{
 };
 
 use crate::{
-    application::Application,
-    events::Event,
-    traits::{
-        IAction, IElementEventHandler, IEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter,
-    },
+    traits::{IElementEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
     ui::action::UiActions,
 };
 
-use super::element::{IStandardRenderer, StaticElement, VisualState};
+use super::element::VisualState;
 use ratatui::widgets::WidgetRef;
-
-// pub struct ButtonWidgetState<A>
-// where
-//     A: IAction,
-// {
-//     label: String,
-//     pushed: bool,
-//     on_click: Option<OnButtonClicked<A>>,
-// }
 
 pub type OnButtonClicked<A> = dyn FnMut(&String) -> Option<UiActions<A>>;
 
@@ -43,11 +27,6 @@ pub struct ButtonElement<A> {
 
 impl<A> ButtonElement<A> {
     pub fn new<S: Into<String>>(label: S) -> Self {
-        // let state = ButtonWidgetState {
-        //     label: label.into(),
-        //     pushed: false,
-        //     on_click: None,
-        // };
         Self {
             label: label.into(),
             pushed: false,

@@ -1,6 +1,5 @@
 mod actions;
 mod application;
-mod dispatcher;
 mod events;
 mod mainwnd;
 mod terminal;
@@ -19,11 +18,11 @@ fn init_logging() {
         .write_style(WriteStyle::Always)
         .init();
 }
-
-fn main() -> Result<()> {
+#[tokio::main]
+async fn main() -> Result<()> {
     println!("Hello, world!");
     init_logging();
     let mut app = Application::new()?;
-    app.run()?;
+    app.run().await?;
     Ok(())
 }

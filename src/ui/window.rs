@@ -4,11 +4,8 @@ use crossterm::event::KeyEvent;
 use log::{debug, trace, warn};
 use ratatui::layout::Rect;
 
-use crate::{
-    events::UiCommand,
-    traits::{
-        IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible, IWidget, IWindow,
-    },
+use crate::traits::{
+    IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible, IWidget, IWindow,
 };
 use anyhow::anyhow;
 use anyhow::Result;
@@ -135,7 +132,7 @@ pub struct Window<A, D> {
 }
 
 impl<A, S> Debug for Window<A, S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
 }

@@ -1,12 +1,20 @@
+use crate::actions::MonActions;
+use crate::traits::IEventHandler;
+use crate::traits::IFocusAcceptor;
+use crate::traits::IFocusTracker;
 use crate::traits::IPresenter;
+use crate::traits::IWindow;
+use crate::ui::action::Action;
 use crate::ui::window::LayoutMap;
+use crossterm::event::KeyEvent;
+use log::debug;
 use ratatui::prelude::Constraint;
 use ratatui::prelude::Layout;
 use ratatui::prelude::Rect;
 use ratatui::widgets::Paragraph;
 use ratatui::Frame;
 
-struct HomePage {
+pub struct HomePage {
     state: SummaryState,
     layout: Option<LayoutMap>,
 }
@@ -106,3 +114,36 @@ impl IPresenter for HomePage {
         false
     }
 }
+
+impl IFocusAcceptor for HomePage {
+    fn set_focus(&mut self) {}
+    fn clear_focus(&mut self) {}
+    fn has_focus(&self) -> bool {
+        false
+    }
+    fn can_focus(&self) -> bool {
+        false
+    }
+}
+
+impl IFocusTracker for HomePage {
+    fn focus_next(&mut self) -> Option<String> {
+        None
+    }
+    fn focus_prev(&mut self) -> Option<String> {
+        None
+    }
+    fn get_focused_view_name(&self) -> Option<String> {
+        None
+    }
+}
+
+impl IEventHandler for HomePage {
+    type Action = MonActions;
+    fn handle_key_event(&mut self, event: KeyEvent) -> Option<Action<Self::Action>> {
+        debug!("Ui handle_event {:?}", event);
+        None
+    }
+}
+
+impl IWindow for HomePage {}

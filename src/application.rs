@@ -1,3 +1,4 @@
+use crate::ui::homepage::HomePage;
 use core::fmt::Debug;
 
 use std::result::Result::Ok;
@@ -214,6 +215,7 @@ impl Ui {
             _a: 0,
         })
     }
+
     pub fn create_main_wnd(&self) -> Window<MonActions, MainWndState> {
         let do_layout = |area: &Rect| -> Option<LayoutMap> {
             let mut layout = LayoutMap::new();
@@ -382,8 +384,10 @@ impl Ui {
             "Cancel",
             s,
         );
-
+ 
         self.views[UiTabs::Debug as usize].push(Box::new(d));
+
+        self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
     }
 
     fn draw(&mut self) {

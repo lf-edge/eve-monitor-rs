@@ -1,6 +1,5 @@
 use crate::ui::action::{Action, UiActions};
 use ratatui::{layout::Rect, Frame};
-use std::collections::HashMap;
 
 pub trait IPresenter {
     // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect>;

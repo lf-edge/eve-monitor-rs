@@ -27,12 +27,14 @@ use tokio::sync::mpsc;
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::sync::mpsc::UnboundedSender;
 
-use futures::{FutureExt, StreamExt};
+use futures::{FutureExt, SinkExt, StreamExt};
 
 use crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 
 use crate::actions::{IpDialogState, MainWndState, MonActions};
+use crate::ipc::ipc_client::IpcClient;
+use crate::ipc::message::{IpcMessage, Request, RpcCommand};
 use crate::terminal::TerminalWrapper;
 use crate::ui::action::{Action, UiActions};
 use crate::ui::dialog::Dialog;
@@ -47,6 +49,7 @@ pub struct Application {
     terminal_tx: UnboundedSender<Event>,
     action_rx: UnboundedReceiver<Action>,
     action_tx: UnboundedSender<Action>,
+    ipc_tx: Option<UnboundedSender<IpcMessage>>,
     ui: Ui,
     task: tokio::task::JoinHandle<()>,
 }
@@ -66,11 +69,74 @@ impl Application {
             action_tx,
             ui,
             task: tokio::task::spawn(async {}),
+            ipc_tx: None,
         })
+    }
+
+    pub fn send_ipc_message(&self, msg: IpcMessage) {
+        if let Some(ipc_tx) = &self.ipc_tx {
+            ipc_tx.send(msg).unwrap();
+        }
     }
 
     pub async fn run(&mut self) -> Result<()> {
         println!("Running application");
+        // we never exit the application
+        // TODO: handle suspend/resume for the case when we give away /dev/tty
+        let (ipc_tx, mut ipc_rx) = mpsc::unbounded_channel::<IpcMessage>();
+        let (ipc_cmd_tx, mut ipc_cmd_rx) = mpsc::unbounded_channel::<IpcMessage>();
+
+        // to send IPC messages from the task back to app
+        let ipc_tx_clone = ipc_tx.clone();
+
+        let ipc_task = tokio::spawn(async move {
+            ipc_tx_clone.send(IpcMessage::Connecting).unwrap();
+
+            info!("Connecting to IPC socket");
+            let stream = IpcClient::connect("/tmp/monitor.sock").await.unwrap();
+            let (mut sink, mut stream) = stream.split();
+
+            ipc_tx_clone.send(IpcMessage::Ready).unwrap();
+
+            loop {
+                //let ipc_event = stream.next().fuse();
+
+                tokio::select! {
+                    msg = ipc_cmd_rx.recv() => {
+                        match msg {
+                            Some(msg) => {
+                                sink.send(msg.into()).await.unwrap();
+                            }
+                            None => {
+                                warn!("IPC message stream ended");
+                                break;
+                            }
+                        }
+                    },
+                    msg = stream.next() => {
+                        match msg {
+                            Some(Ok(msg)) => {
+                                ipc_tx_clone.send(IpcMessage::from(msg)).unwrap();
+                            }
+                            Some(Err(e)) => {
+                                warn!("Error reading IPC message: {:?}", e);
+                            }
+                            None => {
+                                warn!("IPC message stream ended");
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        self.ipc_tx = Some(ipc_cmd_tx);
+
+        // request data over IPC
+        self.send_ipc_message(IpcMessage::Request(Request {
+            command: RpcCommand::Ping,
+        }));
+
         // we never exit the application
         // TODO: handle suspend/resume for the case when we give away /dev/tty
         // because we passed through the GPU to a guest VM
@@ -97,7 +163,6 @@ impl Application {
                             }
                         }
                     },
-
                 }
             }
         });
@@ -116,13 +181,25 @@ impl Application {
                                 info!("Event loop got action: {:?}", action);
                             }
                                 self.draw_ui().unwrap();
-                        }
+                            }
                         None => {
                             warn!("Terminal event stream ended");
                             break;
                         }
                     }
 
+                }
+                ipc_event = ipc_rx.recv() => {
+                    match ipc_event {
+                        Some(msg) => {
+                            // handle IPC message
+                            info!("IPC message: {:?}", msg);
+                        }
+                        None => {
+                            warn!("IPC message stream ended");
+                            break;
+                        }
+                    }
                 }
                 action = self.action_rx.recv() => {
                     match action {
@@ -136,22 +213,6 @@ impl Application {
                                     break;
                                 }
                                 // UiActions::UserAction(MonActions::MainWndStateUpdated(state)) => {
-                                //     // update the state of the main window
-                                //     // and redraw the UI
-                                //     self.ui.views[UiTabs::Home as usize]
-                                //         .iter_mut()
-                                //         .filter_map(|layer| {
-                                //             if let Some(w) = layer.as_any().downcast_ref::<Window<MonActions, MainWndState>>() {
-                                //                 Some(w)
-                                //             } else {
-                                //                 None
-                                //             }
-                                //         })
-                                //         .for_each(|w| {
-                                //             w.set_state(state.clone());
-                                //         });
-                                //     self.draw_ui().unwrap();
-                                // }
                                 _ => {}
                             }
                         }
@@ -181,7 +242,7 @@ impl Application {
 
 struct Ui {
     terminal: TerminalWrapper,
-    dispatcher: UnboundedSender<Action>,
+    action_tx: UnboundedSender<Action>,
     views: Vec<LayerStack>,
     selected_tab: UiTabs,
     // this is our model :)
@@ -204,10 +265,10 @@ impl Debug for Ui {
 }
 
 impl Ui {
-    fn new(dispatcher: UnboundedSender<Action>, terminal: TerminalWrapper) -> Result<Self> {
+    fn new(action_tx: UnboundedSender<Action>, terminal: TerminalWrapper) -> Result<Self> {
         Ok(Self {
             terminal,
-            dispatcher,
+            action_tx,
             views: vec![LayerStack::new(); UiTabs::COUNT],
             selected_tab: UiTabs::default(),
             _a: 0,
@@ -233,7 +294,7 @@ impl Ui {
             let cap_c = c.to_uppercase().next().unwrap();
             Some(cap_c)
         });
-
+        // .on_update(|input: &String| {
         let button = ButtonElement::new("Button");
 
         let wnd = Window::builder("MainWnd")
@@ -362,7 +423,7 @@ impl Ui {
     }
 
     fn invalidate(&mut self) {
-        self.dispatcher
+        self.action_tx
             .send(Action::new("app", UiActions::Redraw))
             .unwrap();
     }
@@ -376,7 +437,7 @@ impl Ui {
                 if (key.code == KeyCode::Char('q')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {
                 debug!("CTRL+q: application Quit requested");
-                self.dispatcher
+                self.action_tx
                     .send(Action::new("user", UiActions::Quit))
                     .unwrap();
             }
@@ -397,10 +458,10 @@ impl Ui {
             // handle Tab key
             Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
                 if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
-                        let action = layer.handle_event(Event::Key(key));
-                        if let Some(action) = action {
-                            return Some(action);
-                        }
+                    let action = layer.handle_event(Event::Key(key));
+                    if let Some(action) = action {
+                        return Some(action);
+                    }
                 }
             }
             // handle Tab switching

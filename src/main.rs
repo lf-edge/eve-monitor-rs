@@ -1,6 +1,7 @@
 mod actions;
 mod application;
 mod events;
+mod ipc;
 mod mainwnd;
 mod terminal;
 mod traits;

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use ratatui::widgets::Paragraph;
 
 use crossterm::event::KeyEvent;
 use log::{info, trace};
@@ -11,13 +11,11 @@ use ratatui::{
 
 use crate::traits::{IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible, IWindow};
 
-use anyhow::Result;
-
 use super::{
     action::{Action, UiActions},
     tools::centered_rect_fixed,
     widgets::button::ButtonElement,
-    window::{LayoutMap, WidgetMap, Window},
+    window::{LayoutMap, Window},
 };
 
 pub struct Dialog<A, D> {
@@ -28,11 +26,10 @@ pub struct Dialog<A, D> {
     layout: LayoutMap,
 }
 
-impl<A: 'static, D: 'static> Dialog<A, D> {
+impl<A: 'static, D: 'static + std::fmt::Debug> Dialog<A, D> {
     pub fn new(size: (u16, u16), buttons: Vec<String>, focused_button: &str, state: D) -> Self {
         let mut w = Window::builder("Dialog")
-            .with_layout(|_| None)
-            .with_render(Self::do_render)
+            // .with_render(w.do_render)
             .with_focused_view(focused_button)
             .with_state(());
 
@@ -51,20 +48,11 @@ impl<A: 'static, D: 'static> Dialog<A, D> {
         }
     }
 
-    fn on_ok_yes<F>(f: F) -> Option<UiActions<A>>
+    fn on_ok_yes<F>(_f: F) -> Option<UiActions<A>>
     where
         F: Fn(&D) -> Option<UiActions<A>>,
     {
         Some(UiActions::ButtonClicked("Ok".to_string()))
-    }
-
-    fn with_render(
-        frame: &mut Frame<'_>,
-        layout: &LayoutMap,
-        widgets: &mut WidgetMap<A>,
-    ) -> Result<()> {
-        info!("Rendering dialog content");
-        Ok(())
     }
 
     fn do_layout(&mut self, area: &Rect) {
@@ -95,13 +83,9 @@ impl<A: 'static, D: 'static> Dialog<A, D> {
         self.layout.insert("content".to_string(), content_rect);
     }
 
-    fn do_render(
-        _area: &Rect,
-        frame: &mut Frame<'_>,
-        layout: &LayoutMap,
-        widgets: &mut WidgetMap<A>,
-    ) {
+    fn render(&self, area: &Rect, frame: &mut Frame<'_>) {
         info!("Rendering dialog content");
+        frame.render_widget(Paragraph::new(format!("{0:?}", self.state)), *area);
     }
 }
 

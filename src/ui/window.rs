@@ -21,8 +21,7 @@ pub type WidgetMap<A> = ElementHashMap<Box<dyn IWidget<Action = A>>>;
 pub type LayoutMap = ElementHashMap<Rect>;
 
 pub type LayoutFn = Box<dyn FnMut(&Rect) -> Option<LayoutMap>>;
-pub type RenderFn<A> =
-    Box<dyn FnMut(&Rect, &mut ratatui::Frame<'_>, &LayoutMap, &mut WidgetMap<A>)>;
+pub type RenderFn = Box<dyn FnMut(&Rect, &mut ratatui::Frame<'_>)>;
 
 pub struct WindowBuilder<A, D> {
     name: String,
@@ -30,7 +29,7 @@ pub struct WindowBuilder<A, D> {
     // callback for layout
     do_layout: Option<LayoutFn>,
     // callback for rendering
-    do_render: Option<RenderFn<A>>,
+    do_render: Option<RenderFn>,
     // taborder
     tab_order: Option<Vec<String>>,
     // initial focus
@@ -63,7 +62,7 @@ impl<A, D> WindowBuilder<A, D> {
 
     pub fn with_render<F>(mut self, do_render: F) -> Self
     where
-        F: FnMut(&Rect, &mut ratatui::Frame<'_>, &LayoutMap, &mut WidgetMap<A>) + 'static,
+        F: FnMut(&Rect, &mut ratatui::Frame<'_>) + 'static,
     {
         self.do_render = Some(Box::new(do_render));
         self
@@ -126,7 +125,7 @@ pub struct Window<A, D> {
     pub widgets: ElementHashMap<Box<dyn IWidget<Action = A>>>,
     pub layout: ElementHashMap<Rect>,
     pub do_layout: LayoutFn,
-    pub do_render: RenderFn<A>,
+    pub do_render: RenderFn,
     pub on_action: Option<Box<dyn FnMut(Action<A>, &mut D) -> Option<UiActions<A>>>>,
     pub state: RefCell<D>,
 }
@@ -143,7 +142,7 @@ impl<A, D> Window<A, D> {
         ft: FocusTracker,
         widgets: WidgetMap<A>,
         do_layout: LayoutFn,
-        do_render: RenderFn<A>,
+        do_render: RenderFn,
         on_action: Option<Box<dyn FnMut(Action<A>, &mut D) -> Option<UiActions<A>>>>,
         state: D,
     ) -> Self {
@@ -332,7 +331,7 @@ impl<A, D> IPresenter for Window<A, D> {
 
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
         (self.do_layout)(area);
-        (self.do_render)(area, frame, &self.layout, &mut self.widgets);
+        (self.do_render)(area, frame);
     }
 
     fn is_focus_tracker(&self) -> bool {

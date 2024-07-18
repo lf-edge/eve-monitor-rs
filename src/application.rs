@@ -227,14 +227,18 @@ impl Ui {
                     layout.insert(area_name, *row);
                 }
             }
-            Some(layout)
+            Some(layout) 
         };
+
+        let input = InputFieldElement::new("Input", Some("Type here")).on_char(|c: &char| {
+            info!("Char: {:?}", c);
+            let cap_c = c.to_uppercase().next().unwrap();
+            Some(cap_c)
+        });
 
         let do_render = Box::new(
             move |area: &Rect,
-             frame: &mut Frame<'_>,
-             _layout: &LayoutMap,
-             widgets: &mut WidgetMap<MonActions>| {
+             frame: &mut Frame<'_>| {
                 let layout = &do_layout(area).unwrap();
                 // let r = layout.get("0-0").unwrap();
                 // let rg = widgets.get_mut("RadioGroup").unwrap();
@@ -244,13 +248,14 @@ impl Ui {
                 // let rg = widgets.get_mut("RadioGroup 1").unwrap();
                 // rg.render(r, frame);
 
-                // let r = layout.get("3-3").unwrap();
+                // let r = layout.get("3-3").unwrap(); 
                 // let rg = widgets.get_mut("Label").unwrap();
                 // rg.render(r, frame);
 
                 let r = layout.get("3-0").unwrap();
-                let rg = widgets.get_mut("Input").unwrap();
-                rg.render(r, frame);
+                // let rg = widgets.get_mut("Input").unwrap();
+                input.render(r, frame);
+                frame.render_input_field(input, *r);
 
                 let r = layout.get("0-2").unwrap();
                 let rg = widgets.get_mut("Button").unwrap();
@@ -270,11 +275,7 @@ impl Ui {
 
         //let label = LabelElement::new("Label");
 
-        let input = InputFieldElement::new("Input", Some("Type here")).on_char(|c: &char| {
-            info!("Char: {:?}", c);
-            let cap_c = c.to_uppercase().next().unwrap();
-            Some(cap_c)
-        });
+        
         // .on_update(|input: &String| {
         //     info!("Input updated: {}", input);
         //     Some(MonActions::InputUpdated(input.clone()))

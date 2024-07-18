@@ -1,4 +1,4 @@
-use crate::traits::IAction;
+use crate::{actions::MonActions, traits::IAction};
 #[derive(Debug, Clone)]
 pub enum UiActions {
     Quit,
@@ -8,7 +8,7 @@ pub enum UiActions {
     Input { text: String },
     ButtonClicked(String),
     DismissDialog,
-    MonActions,
+    MonActions(MonActions),
 }
 
 #[derive(Debug, Clone)]

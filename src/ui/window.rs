@@ -1,6 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, fmt::Debug};
+use crate::events;
+use crate::ui::activity::Activity;
+use std::{cell::RefCell, fmt::Debug};
 
-use crossterm::event::KeyEvent;
 use log::{debug, trace, warn};
 use ratatui::layout::Rect;
 
@@ -17,13 +18,13 @@ use super::{
     widgets::element::VisualState,
 };
 
-pub type WidgetMap = ElementHashMap<Box<dyn IWidget<Action = A>>>;
+pub type WidgetMap = ElementHashMap<Box<dyn IWidget>>;
 pub type LayoutMap = ElementHashMap<Rect>;
 
 pub type LayoutFn = Box<dyn FnMut(&Rect) -> Option<LayoutMap>>;
 pub type RenderFn = Box<dyn FnMut(&Rect, &mut ratatui::Frame<'_>)>;
 
-pub struct WindowBuilder<A, D> {
+pub struct WindowBuilder<D> {
     name: String,
     widgets: WidgetMap,
     // callback for layout
@@ -40,12 +41,8 @@ pub struct WindowBuilder<A, D> {
     state: Option<D>,
 }
 
-impl<A, D> WindowBuilder<A, D> {
-    pub fn widget<S: Into<String>>(
-        mut self,
-        name: S,
-        widget: Box<dyn IWidget<Action = A>>,
-    ) -> Self {
+impl<D> WindowBuilder<D> {
+    pub fn widget<S: Into<String>>(mut self, name: S, widget: Box<dyn IWidget>) -> Self {
         self.widgets
             .add(name.into(), widget)
             .expect("Widget name already exists");
@@ -91,7 +88,7 @@ impl<A, D> WindowBuilder<A, D> {
         self
     }
 
-    pub fn build(self) -> Result<Window<A, D>> {
+    pub fn build(self) -> Result<Window<D>> {
         let do_layout = self
             .do_layout
             .ok_or_else(|| anyhow!("Layout function should be set for {}", self.name))?;
@@ -118,11 +115,11 @@ impl<A, D> WindowBuilder<A, D> {
     }
 }
 
-pub struct Window<A, D> {
+pub struct Window<D> {
     pub v: VisualState,
     pub name: String,
     pub ft: FocusTracker,
-    pub widgets: ElementHashMap<Box<dyn IWidget<Action = A>>>,
+    pub widgets: ElementHashMap<Box<dyn IWidget>>,
     pub layout: ElementHashMap<Rect>,
     pub do_layout: LayoutFn,
     pub do_render: RenderFn,
@@ -130,13 +127,13 @@ pub struct Window<A, D> {
     pub state: RefCell<D>,
 }
 
-impl<A, S> Debug for Window<A, S> {
+impl<S> Debug for Window<S> {
     fn fmt(&self, _f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         Ok(())
     }
 }
 
-impl<A, D> Window<A, D> {
+impl<D> Window<D> {
     pub(self) fn new<S: Into<String>>(
         name: S,
         ft: FocusTracker,
@@ -159,7 +156,7 @@ impl<A, D> Window<A, D> {
         }
     }
 
-    pub fn builder<S: Into<String>>(name: S) -> WindowBuilder<A, D> {
+    pub fn builder<S: Into<String>>(name: S) -> WindowBuilder<D> {
         WindowBuilder {
             name: name.into(),
             widgets: ElementHashMap::new(),
@@ -173,29 +170,33 @@ impl<A, D> Window<A, D> {
     }
 }
 
-impl<A, D> IWindow for Window<A, D> {}
+impl<D> IWindow for Window<D> {}
 
-impl<A, D> IEventHandler for Window<A, D> {
-    type Action = A;
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Action> {
-        // forward the event to the focused view
-        if let Some(focused_view) = self.ft.get_focused_view() {
-            let widget = self.widgets.get_mut(&focused_view).unwrap();
-            if let Some(action) = widget.handle_key_event(key) {
-                if let Some(on_action) = self.on_action.as_mut() {
-                    if let Some(new_action) = on_action(
-                        Action {
-                            source: focused_view,
-                            action,
-                            target: None,
-                        },
-                        &mut self.state.borrow_mut(),
-                    ) {
-                        return Some(Action {
-                            source: self.name.clone(),
-                            action: new_action,
-                            target: None,
-                        });
+impl<D> IEventHandler for Window<D> {
+    fn handle_event(&mut self, key: events::Event) -> Option<Action> {
+        match key {
+            events::Event::Key(key) => {
+                // forward the event to the focused view
+                if let Some(focused_view) = self.ft.get_focused_view() {
+                    let widget = self.widgets.get_mut(&focused_view).unwrap();
+                    if let Some(activity) = widget.handle_key_event(key) {
+                        match activity {
+                            Activity::Action(action) => {
+                                if let Some(on_action) = self.on_action.as_mut() {
+                                    if let Some(new_action) = on_action(
+                                        Action {
+                                            source: focused_view,
+                                            action,
+                                            target: None,
+                                        },
+                                        &mut self.state.borrow_mut(),
+                                    ) {
+                                        return Some(Action::new(self.name.clone(), new_action));
+                                    }
+                                }
+                            }
+                            Activity::Event(_) => todo!(),
+                        }
                     }
                 }
             }
@@ -204,7 +205,7 @@ impl<A, D> IEventHandler for Window<A, D> {
     }
 }
 
-impl<A, D> IFocusTracker for Window<A, D> {
+impl<D> IFocusTracker for Window<D> {
     fn focus_next(&mut self) -> Option<String> {
         debug!("focus_next: on: {}", &self.name);
         trace!("focus_next: {:#?}", &self.ft);
@@ -289,8 +290,8 @@ impl<A, D> IFocusTracker for Window<A, D> {
     }
 }
 
-impl<A, D> IVisible for Window<A, D> {}
-impl<A, D> IFocusAcceptor for Window<A, D> {
+impl<D> IVisible for Window<D> {}
+impl<D> IFocusAcceptor for Window<D> {
     fn set_focus(&mut self) {
         self.v.focused = true;
         // set focus on focused view
@@ -319,7 +320,7 @@ impl<A, D> IFocusAcceptor for Window<A, D> {
         self.v.can_focus
     }
 }
-impl<A, D> IPresenter for Window<A, D> {
+impl<D> IPresenter for Window<D> {
     // fn do_layout(
     //     &mut self,
     //     area: &Rect,
@@ -330,8 +331,34 @@ impl<A, D> IPresenter for Window<A, D> {
     // }
 
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
-        (self.do_layout)(area);
+        let layout = (self.do_layout)(area).unwrap();
         (self.do_render)(area, frame);
+
+        self.widgets.iter_mut().for_each(|(name, widge)| {
+            widge.render(layout.get(name).unwrap(), frame);
+        });
+        // let r = layout.get("0-0").unwrap();
+        // let rg = widgets.get_mut("RadioGroup").unwrap();
+        // rg.render(r, frame);
+
+        // let r = layout.get("0-1").unwrap();
+        // let rg = widgets.get_mut("RadioGroup 1").unwrap();
+        // rg.render(r, frame);
+
+        // let r = layout.get("3-3").unwrap();
+        // let rg = widgets.get_mut("Label").unwrap();
+        // rg.render(r, frame);
+
+        // let r = layout.get("3-0").unwrap();
+        // let rg = self.widgets.get_mut("Input").unwrap();
+        // // input.render(r, frame);
+        // rg.render(r, frame);
+        // // frame.render_input_field(input, *r);
+
+        // let r = layout.get("0-2").unwrap();
+        // button.render(r, frame);
+        // let rg = widgets.get_mut("Button").unwrap();
+        // rg.render(r, frame);
     }
 
     fn is_focus_tracker(&self) -> bool {

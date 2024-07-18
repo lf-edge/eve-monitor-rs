@@ -14,7 +14,7 @@ use pretty_env_logger::formatted_builder;
 
 fn init_logging() {
     formatted_builder()
-        .filter(None, LevelFilter::Debug)
+        .filter(None, LevelFilter::Trace)
         .write_style(WriteStyle::Always)
         .init();
 }

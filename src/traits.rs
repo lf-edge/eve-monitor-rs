@@ -1,4 +1,6 @@
-use crate::ui::action::{Action, UiActions};
+use crate::events::Event;
+use crate::ui::action::Action;
+use crate::ui::activity::Activity;
 use ratatui::{layout::Rect, Frame};
 
 pub trait IPresenter {
@@ -40,20 +42,13 @@ pub trait IFocusTracker {
 }
 
 pub trait IEventHandler {
-    type Action;
-    fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<Action> {
+    fn handle_event(&mut self, _event: Event) -> Option<Action> {
         None
     }
 }
 
-pub enum Activity {
-    Action,
-    Event,
-    None,
-}
-
 pub trait IElementEventHandler {
-    fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<UiActions> {
+    fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<Activity> {
         None
     }
 }

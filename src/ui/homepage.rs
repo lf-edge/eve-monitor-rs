@@ -1,4 +1,4 @@
-use crate::actions::MonActions;
+use crate::events;
 use crate::traits::IEventHandler;
 use crate::traits::IFocusAcceptor;
 use crate::traits::IFocusTracker;
@@ -6,7 +6,6 @@ use crate::traits::IPresenter;
 use crate::traits::IWindow;
 use crate::ui::action::Action;
 use crate::ui::window::LayoutMap;
-use crossterm::event::KeyEvent;
 use log::debug;
 use ratatui::prelude::Constraint;
 use ratatui::prelude::Layout;
@@ -36,51 +35,6 @@ impl HomePage {
         };
         hp
     }
-    // pub fn init(&self) -> Window<MonActions, SummaryState> {
-    //     let wnd = Window::builder("MainWnd")
-    //         .with_state(SummaryState {
-    //             a: 42,
-    //             ip: "10.208.13.5".to_string(),
-    //         })
-    //         // .widget("Button", Box::new(button))
-    //         // .widget("Input", Box::new(input))
-    //         .with_layout(HomePage::do_layout)
-    //         .with_render(Self::do_render)
-    //         .with_focused_view("Input")
-    //         .on_action(|action, state: &mut SummaryState| {
-    //             debug!("on_action Action: {:?}", action);
-    //             match action.action {
-    //                 UiActions::CheckBox { checked: _ } => todo!(),
-    //                 UiActions::RadioGroup { selected: _ } => todo!(),
-    //                 UiActions::Input { text } => {
-    //                     info!("Input updated: {}", &text);
-    //                     state.ip = text;
-    //                 }
-
-    //                 _ => {
-    //                     warn!("Unhandled action: {:?}", action);
-    //                 }
-    //             }
-    //             // match action.action {
-    //             //     MonActions::ButtonClicked(label) => {
-    //             //         state.a += 1;
-    //             //         info!("Button clicked: {} counter {}", label, state.a);
-    //             //         return Some(MonActions::MainWndStateUpdated(state.clone()));
-    //             //     }
-    //             //     MonActions::InputUpdated(input) => {
-    //             //         info!("Input updated: {}", input);
-    //             //         return Some(MonActions::MainWndStateUpdated(state.clone()));
-    //             //     }
-    //             //     _ => {}
-    //             // }
-    //             None
-    //         })
-    //         .build()
-    //         .unwrap();
-
-    //     wnd
-    // }
-
     pub fn do_layout(&self, area: &Rect) -> LayoutMap {
         let chunks =
             Layout::horizontal([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(*area);
@@ -139,8 +93,7 @@ impl IFocusTracker for HomePage {
 }
 
 impl IEventHandler for HomePage {
-    type Action = MonActions;
-    fn handle_key_event(&mut self, event: KeyEvent) -> Option<Action> {
+    fn handle_event(&mut self, event: events::Event) -> Option<Action> {
         debug!("Ui handle_event {:?}", event);
         None
     }

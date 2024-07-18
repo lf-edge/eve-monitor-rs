@@ -1,5 +1,6 @@
+use crate::ui::action::Action;
+use crate::ui::activity::Activity;
 use crossterm::event::{KeyCode, KeyEvent};
-use log::trace;
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Position, Rect},
@@ -28,23 +29,23 @@ impl InputMode {
     }
 }
 
-pub type OnContentUpdated<A> = dyn FnMut(&String) -> Option<A>;
+pub type OnContentUpdated = dyn FnMut(&String) -> Option<String>;
 pub type OnChar = dyn FnMut(&char) -> Option<char>;
 
-pub struct InputFieldElement<A> {
+pub struct InputFieldElement {
     v: VisualState,
     caption: String,
     value: Option<String>,
     input_position: usize,
     cursor_position: Position,
     input_mode: InputMode,
-    on_update: Option<Box<OnContentUpdated<A>>>,
+    on_update: Option<Box<OnContentUpdated>>,
     on_char: Option<Box<OnChar>>,
 }
 
-impl<A> IWidget for InputFieldElement<A> {}
+impl IWidget for InputFieldElement {}
 
-impl<A> InputFieldElement<A> {
+impl InputFieldElement {
     pub fn new<S: Into<String>>(caption: S, value: Option<S>) -> Self {
         let value = value.map(|v| v.into());
         let input_position = value.as_ref().map(|v| v.len()).unwrap_or_default();
@@ -64,7 +65,7 @@ impl<A> InputFieldElement<A> {
 
     pub fn on_update<F>(mut self, f: F) -> Self
     where
-        F: FnMut(&String) -> Option<A> + 'static,
+        F: Fn(&String) -> Option<String> + 'static,
     {
         self.on_update = Some(Box::new(f));
         self
@@ -110,9 +111,8 @@ impl<A> InputFieldElement<A> {
     }
 }
 
-impl<A> IElementEventHandler for InputFieldElement<A> {
-    type Action = A;
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
+impl IElementEventHandler for InputFieldElement {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
         let old_value = self.value.clone();
         if let Some(value) = self.value.as_mut() {
             match key.code {
@@ -170,17 +170,16 @@ impl<A> IElementEventHandler for InputFieldElement<A> {
                 _ => {}
             }
             if old_value != self.value {
-                return UiActions::Input {
+                return Some(Activity::Action(UiActions::Input {
                     text: self.value.clone().unwrap_or_default(),
-                }
-                .into();
+                }));
             }
         }
         None
     }
 }
 
-impl<A> IWidgetPresenter for InputFieldElement<A> {
+impl IWidgetPresenter for InputFieldElement {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
         //trace!("rendering: InputFieldElement {:#?}", &self);
         self.render_input_field(area, frame.buffer_mut());
@@ -194,7 +193,7 @@ impl<A> IWidgetPresenter for InputFieldElement<A> {
     }
 }
 
-impl<A> IFocusAcceptor for InputFieldElement<A> {
+impl IFocusAcceptor for InputFieldElement {
     fn set_focus(&mut self) {
         self.v.focused = true;
     }

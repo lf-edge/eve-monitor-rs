@@ -4,6 +4,7 @@ pub mod dialog;
 pub mod focus_tracker;
 // pub mod statusbar;
 pub mod action;
+pub mod activity;
 pub mod homepage;
 pub mod layer_stack;
 pub mod tools;

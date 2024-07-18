@@ -1,3 +1,4 @@
+use crate::events::Event;
 use crate::traits::IWidgetPresenter;
 use crate::ui::homepage::HomePage;
 use core::fmt::Debug;
@@ -32,7 +33,6 @@ use crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 
 use crate::actions::{IpDialogState, MainWndState, MonActions};
-use crate::events::Event;
 use crate::terminal::TerminalWrapper;
 use crate::ui::action::{Action, UiActions};
 use crate::ui::dialog::Dialog;
@@ -182,7 +182,7 @@ impl Application {
 struct Ui {
     terminal: TerminalWrapper,
     dispatcher: UnboundedSender<Action>,
-    views: Vec<LayerStack<MonActions>>,
+    views: Vec<LayerStack>,
     selected_tab: UiTabs,
     // this is our model :)
     _a: u32,
@@ -214,7 +214,7 @@ impl Ui {
         })
     }
 
-    pub fn create_main_wnd(&self) -> Window<MonActions, MainWndState> {
+    pub fn create_main_wnd(&self) -> Window<MainWndState> {
         let do_layout = |area: &Rect| -> Option<LayoutMap> {
             let mut layout = LayoutMap::new();
             let cols = Layout::horizontal([Constraint::Ratio(1, 4); 4]).split(*area);
@@ -234,30 +234,6 @@ impl Ui {
             Some(cap_c)
         });
 
-        let do_render = Box::new(move |area: &Rect, frame: &mut Frame<'_>| {
-            let layout = &do_layout(area).unwrap();
-            // let r = layout.get("0-0").unwrap();
-            // let rg = widgets.get_mut("RadioGroup").unwrap();
-            // rg.render(r, frame);
-
-            // let r = layout.get("0-1").unwrap();
-            // let rg = widgets.get_mut("RadioGroup 1").unwrap();
-            // rg.render(r, frame);
-
-            // let r = layout.get("3-3").unwrap();
-            // let rg = widgets.get_mut("Label").unwrap();
-            // rg.render(r, frame);
-
-            let r = layout.get("3-0").unwrap();
-            // let rg = widgets.get_mut("Input").unwrap();
-            input.render(r, frame);
-            frame.render_input_field(input, *r);
-
-            let r = layout.get("0-2").unwrap();
-            let rg = widgets.get_mut("Button").unwrap();
-            rg.render(r, frame);
-        });
-
         let button = ButtonElement::new("Button");
 
         let wnd = Window::builder("MainWnd")
@@ -268,7 +244,6 @@ impl Ui {
             .widget("Button", Box::new(button))
             .widget("Input", Box::new(input))
             .with_layout(do_layout)
-            .with_render(do_render)
             .with_focused_view("Input")
             .on_action(|action, state: &mut MainWndState| {
                 debug!("on_action Action: {:?}", action);
@@ -283,7 +258,9 @@ impl Ui {
                         state.a += 1;
                         info!("Button clicked: counter {}", state.a);
                         // Send user action to indicate that the state was updated
-                        return Some(MonActions::MainWndStateUpdated(state.clone()));
+                        return Some(UiActions::MonActions(MonActions::MainWndStateUpdated(
+                            state.clone(),
+                        )));
                     }
                     _ => {
                         warn!("Unhandled action: {:?}", action);
@@ -349,11 +326,12 @@ impl Ui {
             gw: "1.1.1.1".to_string(),
         };
 
-        let d: Dialog<MonActions, IpDialogState> = Dialog::new(
+        let d: Dialog<MonActions> = Dialog::new(
             (50, 30),
+            "confirm".to_string(),
             vec!["Ok".to_string(), "Cancel".to_string()],
             "Cancel",
-            s,
+            MonActions::NetworkInterfaceUpdated(s),
         );
 
         self.views[UiTabs::Debug as usize].push(Box::new(d));
@@ -432,10 +410,12 @@ impl Ui {
                     } else {
                         // forward the event to the top layer
                         debug!("Forwarding Tab event to top layer");
-                        let action = layer.handle_key_event(key);
+                        let action = layer.handle_event(Event::Key(key));
                         if let Some(action) = action {
                             return Some(action);
+                            // return Some(action);
                         }
+                        return None;
                     }
                 }
             }
@@ -458,7 +438,7 @@ impl Ui {
             // forward all other key events to the top layer
             Event::Key(key) => {
                 if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
-                    if let Some(action) = layer.handle_key_event(key) {
+                    if let Some(action) = layer.handle_event(Event::Key(key)) {
                         match action.action {
                             UiActions::DismissDialog => {
                                 self.views[self.selected_tab as usize].pop();

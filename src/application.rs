@@ -1,3 +1,4 @@
+use crate::traits::IWidgetPresenter;
 use crate::ui::homepage::HomePage;
 use core::fmt::Debug;
 
@@ -38,21 +39,21 @@ use crate::ui::dialog::Dialog;
 use crate::ui::layer_stack::LayerStack;
 use crate::ui::widgets::button::ButtonElement;
 use crate::ui::widgets::input_field::InputFieldElement;
-use crate::ui::window::{LayoutMap, WidgetMap, Window};
+use crate::ui::window::{LayoutMap, Window};
 
 #[derive(Debug)]
 pub struct Application {
     terminal_rx: UnboundedReceiver<Event>,
     terminal_tx: UnboundedSender<Event>,
-    action_rx: UnboundedReceiver<Action<MonActions>>,
-    action_tx: UnboundedSender<Action<MonActions>>,
+    action_rx: UnboundedReceiver<Action>,
+    action_tx: UnboundedSender<Action>,
     ui: Ui,
     task: tokio::task::JoinHandle<()>,
 }
 
 impl Application {
     pub fn new() -> Result<Self> {
-        let (action_tx, action_rx) = mpsc::unbounded_channel::<Action<MonActions>>();
+        let (action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
         let (terminal_tx, terminal_rx) = mpsc::unbounded_channel::<Event>();
         let terminal = TerminalWrapper::new()?;
         let mut ui = Ui::new(action_tx.clone(), terminal)?;
@@ -180,7 +181,7 @@ impl Application {
 
 struct Ui {
     terminal: TerminalWrapper,
-    dispatcher: UnboundedSender<Action<MonActions>>,
+    dispatcher: UnboundedSender<Action>,
     views: Vec<LayerStack<MonActions>>,
     selected_tab: UiTabs,
     // this is our model :)
@@ -203,10 +204,7 @@ impl Debug for Ui {
 }
 
 impl Ui {
-    fn new(
-        dispatcher: UnboundedSender<Action<MonActions>>,
-        terminal: TerminalWrapper,
-    ) -> Result<Self> {
+    fn new(dispatcher: UnboundedSender<Action>, terminal: TerminalWrapper) -> Result<Self> {
         Ok(Self {
             terminal,
             dispatcher,
@@ -227,7 +225,7 @@ impl Ui {
                     layout.insert(area_name, *row);
                 }
             }
-            Some(layout) 
+            Some(layout)
         };
 
         let input = InputFieldElement::new("Input", Some("Type here")).on_char(|c: &char| {
@@ -236,57 +234,31 @@ impl Ui {
             Some(cap_c)
         });
 
-        let do_render = Box::new(
-            move |area: &Rect,
-             frame: &mut Frame<'_>| {
-                let layout = &do_layout(area).unwrap();
-                // let r = layout.get("0-0").unwrap();
-                // let rg = widgets.get_mut("RadioGroup").unwrap();
-                // rg.render(r, frame);
+        let do_render = Box::new(move |area: &Rect, frame: &mut Frame<'_>| {
+            let layout = &do_layout(area).unwrap();
+            // let r = layout.get("0-0").unwrap();
+            // let rg = widgets.get_mut("RadioGroup").unwrap();
+            // rg.render(r, frame);
 
-                // let r = layout.get("0-1").unwrap();
-                // let rg = widgets.get_mut("RadioGroup 1").unwrap();
-                // rg.render(r, frame);
+            // let r = layout.get("0-1").unwrap();
+            // let rg = widgets.get_mut("RadioGroup 1").unwrap();
+            // rg.render(r, frame);
 
-                // let r = layout.get("3-3").unwrap(); 
-                // let rg = widgets.get_mut("Label").unwrap();
-                // rg.render(r, frame);
+            // let r = layout.get("3-3").unwrap();
+            // let rg = widgets.get_mut("Label").unwrap();
+            // rg.render(r, frame);
 
-                let r = layout.get("3-0").unwrap();
-                // let rg = widgets.get_mut("Input").unwrap();
-                input.render(r, frame);
-                frame.render_input_field(input, *r);
+            let r = layout.get("3-0").unwrap();
+            // let rg = widgets.get_mut("Input").unwrap();
+            input.render(r, frame);
+            frame.render_input_field(input, *r);
 
-                let r = layout.get("0-2").unwrap();
-                let rg = widgets.get_mut("Button").unwrap();
-                rg.render(r, frame);
-            },
-        );
-
-        // let rg1 = Box::new(RadioGroupElement::new(
-        //     vec!["Option 1", "Option 2"],
-        //     "Radio Group",
-        // ));
-
-        // let rg2 = Box::new(RadioGroupElement::new(
-        //     vec!["Option 1", "Option 2"],
-        //     "Radio Group 1",
-        // ));
-
-        //let label = LabelElement::new("Label");
-
-        
-        // .on_update(|input: &String| {
-        //     info!("Input updated: {}", input);
-        //     Some(MonActions::InputUpdated(input.clone()))
-        // });
-
-        let on_click = Box::new(|label: &String| -> Option<UiActions<MonActions>> {
-            info!("Button clicked {}", label);
-            Some(UiActions::ButtonClicked(label.clone()))
+            let r = layout.get("0-2").unwrap();
+            let rg = widgets.get_mut("Button").unwrap();
+            rg.render(r, frame);
         });
 
-        let button = ButtonElement::<MonActions>::new("Button").on_click(on_click);
+        let button = ButtonElement::new("Button");
 
         let wnd = Window::builder("MainWnd")
             .with_state(MainWndState {
@@ -311,9 +283,7 @@ impl Ui {
                         state.a += 1;
                         info!("Button clicked: counter {}", state.a);
                         // Send user action to indicate that the state was updated
-                        return Some(UiActions::new_user_action(MonActions::MainWndStateUpdated(
-                            state.clone(),
-                        )));
+                        return Some(MonActions::MainWndStateUpdated(state.clone()));
                     }
                     _ => {
                         warn!("Unhandled action: {:?}", action);
@@ -385,7 +355,7 @@ impl Ui {
             "Cancel",
             s,
         );
- 
+
         self.views[UiTabs::Debug as usize].push(Box::new(d));
 
         self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
@@ -418,7 +388,7 @@ impl Ui {
             .unwrap();
     }
 
-    fn handle_event(&mut self, event: Event) -> Option<Action<MonActions>> {
+    fn handle_event(&mut self, event: Event) -> Option<Action> {
         debug!("Ui handle_event {:?}", event);
 
         match event {

@@ -140,7 +140,7 @@ impl IFocusTracker for HomePage {
 
 impl IEventHandler for HomePage {
     type Action = MonActions;
-    fn handle_key_event(&mut self, event: KeyEvent) -> Option<Action<Self::Action>> {
+    fn handle_key_event(&mut self, event: KeyEvent) -> Option<Action> {
         debug!("Ui handle_event {:?}", event);
         None
     }

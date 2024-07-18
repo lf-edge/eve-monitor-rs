@@ -1,6 +1,6 @@
 use crate::traits::IAction;
 #[derive(Debug, Clone)]
-pub enum UiActions<A> {
+pub enum UiActions {
     Quit,
     Redraw,
     CheckBox { checked: bool },
@@ -8,31 +8,18 @@ pub enum UiActions<A> {
     Input { text: String },
     ButtonClicked(String),
     DismissDialog,
-    UserAction(A),
-}
-
-impl<A> UiActions<A> {
-    pub fn new_user_action(action: A) -> Self {
-        UiActions::UserAction(action)
-    }
+    MonActions,
 }
 
 #[derive(Debug, Clone)]
-pub struct Action<A> {
+pub struct Action {
     pub source: String,
     pub target: Option<String>,
-    pub action: UiActions<A>,
+    pub action: UiActions,
 }
 
-impl<A> Action<A> {
-    pub fn new_user_action<S: Into<String>>(source: S, action: A) -> Self {
-        Self {
-            source: source.into(),
-            action: UiActions::UserAction(action),
-            target: None,
-        }
-    }
-    pub fn new<S: Into<String>>(source: S, action: UiActions<A>) -> Self {
+impl Action {
+    pub fn new<S: Into<String>>(source: S, action: UiActions) -> Self {
         Self {
             source: source.into(),
             action,
@@ -45,11 +32,8 @@ impl<A> Action<A> {
     }
 }
 
-impl<A> IAction for Action<A>
-where
-    A: Clone,
-{
-    type Target = UiActions<A>;
+impl IAction for Action {
+    type Target = UiActions;
     fn get_source(&self) -> &str {
         &self.source
     }

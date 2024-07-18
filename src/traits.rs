@@ -41,20 +41,19 @@ pub trait IFocusTracker {
 
 pub trait IEventHandler {
     type Action;
-    fn handle_key_event(
-        &mut self,
-        _key: crossterm::event::KeyEvent,
-    ) -> Option<Action<Self::Action>> {
+    fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<Action> {
         None
     }
 }
 
+pub enum Activity {
+    Action,
+    Event,
+    None,
+}
+
 pub trait IElementEventHandler {
-    type Action;
-    fn handle_key_event(
-        &mut self,
-        _key: crossterm::event::KeyEvent,
-    ) -> Option<UiActions<Self::Action>> {
+    fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<UiActions> {
         None
     }
 }

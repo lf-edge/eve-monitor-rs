@@ -13,34 +13,30 @@ use crate::traits::{IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IV
 
 use super::{
     action::{Action, UiActions},
+    focus_tracker::FocusTracker,
     tools::centered_rect_fixed,
     widgets::button::ButtonElement,
     window::{LayoutMap, Window},
 };
 
-pub struct Dialog<A, D> {
-    w: Window<A, ()>,
+pub struct Dialog<D> {
+    name: String,
+    focus: FocusTracker,
     size: (u16, u16),
     buttons: Vec<String>,
     state: D,
     layout: LayoutMap,
 }
 
-impl<A: 'static, D: 'static + std::fmt::Debug> Dialog<A, D> {
+impl<A: 'static, D: 'static + std::fmt::Debug> Dialog<D> {
     pub fn new(size: (u16, u16), buttons: Vec<String>, focused_button: &str, state: D) -> Self {
-        let mut w = Window::builder("Dialog")
-            // .with_render(w.do_render)
-            .with_focused_view(focused_button)
-            .with_state(());
-
         // create buttons and add them to the window builder
         for button_name in buttons.iter() {
-            let button = ButtonElement::<A>::new(button_name);
+            let button = ButtonElement::new(button_name);
             w = w.widget(button_name, Box::new(button));
         }
 
         Self {
-            w: w.build().unwrap(),
             size,
             buttons,
             state,
@@ -48,9 +44,9 @@ impl<A: 'static, D: 'static + std::fmt::Debug> Dialog<A, D> {
         }
     }
 
-    fn on_ok_yes<F>(_f: F) -> Option<UiActions<A>>
+    fn on_ok_yes<F>(_f: F) -> Option<UiActions>
     where
-        F: Fn(&D) -> Option<UiActions<A>>,
+        F: Fn(&D) -> Option<UiActions>,
     {
         Some(UiActions::ButtonClicked("Ok".to_string()))
     }
@@ -89,23 +85,23 @@ impl<A: 'static, D: 'static + std::fmt::Debug> Dialog<A, D> {
     }
 }
 
-impl<A: 'static, D: 'static> IWindow for Dialog<A, D> {}
+impl<D: 'static> IWindow for Dialog<D> {}
 
-impl<A, D> IFocusTracker for Dialog<A, D> {
+impl<D> IFocusTracker for Dialog<D> {
     fn focus_next(&mut self) -> Option<String> {
-        self.w.focus_next()
+        self.focus.focus_next()
     }
 
     fn focus_prev(&mut self) -> Option<String> {
-        self.w.focus_prev()
+        self.focus.focus_prev()
     }
 
     fn get_focused_view_name(&self) -> Option<String> {
-        self.w.get_focused_view_name()
+        self.focus.get_focused_view()
     }
 }
 
-impl<A: 'static, D: 'static> IPresenter for Dialog<A, D> {
+impl<A: 'static, D: 'static> IPresenter for Dialog<D> {
     // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
     //     self.do_layout(area);
     //     // get content area and pass it to window
@@ -146,7 +142,7 @@ impl<A: 'static, D: 'static> IPresenter for Dialog<A, D> {
     }
 }
 
-impl<A, D> IFocusAcceptor for Dialog<A, D> {
+impl<A, D> IFocusAcceptor for Dialog<D> {
     fn has_focus(&self) -> bool {
         // dialog is always focused
         true
@@ -165,10 +161,10 @@ impl<A, D> IFocusAcceptor for Dialog<A, D> {
     }
 }
 
-impl<A, D> IVisible for Dialog<A, D> {}
-impl<A, D> IEventHandler for Dialog<A, D> {
+impl<D> IVisible for Dialog<D> {}
+impl<A, D> IEventHandler for Dialog<D> {
     type Action = A;
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Action<Self::Action>> {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Action> {
         trace!("Handling key event for dialog: {}", self.w.name);
         // if Escape is pressed then dismiss the dialog
         if key.code == crossterm::event::KeyCode::Esc {

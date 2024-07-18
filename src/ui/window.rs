@@ -17,7 +17,7 @@ use super::{
     widgets::element::VisualState,
 };
 
-pub type WidgetMap<A> = ElementHashMap<Box<dyn IWidget<Action = A>>>;
+pub type WidgetMap = ElementHashMap<Box<dyn IWidget<Action = A>>>;
 pub type LayoutMap = ElementHashMap<Rect>;
 
 pub type LayoutFn = Box<dyn FnMut(&Rect) -> Option<LayoutMap>>;
@@ -25,7 +25,7 @@ pub type RenderFn = Box<dyn FnMut(&Rect, &mut ratatui::Frame<'_>)>;
 
 pub struct WindowBuilder<A, D> {
     name: String,
-    widgets: WidgetMap<A>,
+    widgets: WidgetMap,
     // callback for layout
     do_layout: Option<LayoutFn>,
     // callback for rendering
@@ -35,7 +35,7 @@ pub struct WindowBuilder<A, D> {
     // initial focus
     focused_view: Option<String>,
 
-    on_action: Option<Box<dyn FnMut(Action<A>, &mut D) -> Option<UiActions<A>>>>,
+    on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
 
     state: Option<D>,
 }
@@ -80,7 +80,7 @@ impl<A, D> WindowBuilder<A, D> {
 
     pub fn on_action<F>(mut self, on_action: F) -> Self
     where
-        F: FnMut(Action<A>, &mut D) -> Option<UiActions<A>> + 'static,
+        F: FnMut(Action, &mut D) -> Option<UiActions> + 'static,
     {
         self.on_action = Some(Box::new(on_action));
         self
@@ -126,7 +126,7 @@ pub struct Window<A, D> {
     pub layout: ElementHashMap<Rect>,
     pub do_layout: LayoutFn,
     pub do_render: RenderFn,
-    pub on_action: Option<Box<dyn FnMut(Action<A>, &mut D) -> Option<UiActions<A>>>>,
+    pub on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
     pub state: RefCell<D>,
 }
 
@@ -140,10 +140,10 @@ impl<A, D> Window<A, D> {
     pub(self) fn new<S: Into<String>>(
         name: S,
         ft: FocusTracker,
-        widgets: WidgetMap<A>,
+        widgets: WidgetMap,
         do_layout: LayoutFn,
         do_render: RenderFn,
-        on_action: Option<Box<dyn FnMut(Action<A>, &mut D) -> Option<UiActions<A>>>>,
+        on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
         state: D,
     ) -> Self {
         Self {
@@ -177,7 +177,7 @@ impl<A, D> IWindow for Window<A, D> {}
 
 impl<A, D> IEventHandler for Window<A, D> {
     type Action = A;
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Action<Self::Action>> {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Action> {
         // forward the event to the focused view
         if let Some(focused_view) = self.ft.get_focused_view() {
             let widget = self.widgets.get_mut(&focused_view).unwrap();

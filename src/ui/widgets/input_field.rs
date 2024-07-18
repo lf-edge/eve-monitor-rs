@@ -112,7 +112,7 @@ impl<A> InputFieldElement<A> {
 
 impl<A> IElementEventHandler for InputFieldElement<A> {
     type Action = A;
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions<Self::Action>> {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
         let old_value = self.value.clone();
         if let Some(value) = self.value.as_mut() {
             match key.code {

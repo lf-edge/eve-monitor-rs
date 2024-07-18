@@ -36,7 +36,7 @@ impl IpcClient {
         // TODO 2: get rid of it and just keep retrying?
         if !socket_path.exists() {
             let socket_task: JoinHandle<Result<(), anyhow::Error>> =
-                tokio::spawn(async move { wait_for_socket_file(&socket_path).await });
+                tokio::spawn(async move { Self::wait_for_socket_file(&socket_path).await });
 
             info!("Waiting for socket file {} to be created", path);
             socket_task.await??;
@@ -55,25 +55,24 @@ impl IpcClient {
             .new_framed(unix_stream);
         Ok(stream)
     }
-}
-
-async fn wait_for_socket_file(path: &Path) -> Result<(), anyhow::Error> {
-    let dir = Path::new(path).parent().unwrap();
-    let mut watcher = Watcher::init();
-    let mut wd = watcher.add(dir, &async_inotify::WatchMask::CREATE);
-    if let Ok(mut wd) = wd {
-        loop {
-            if let Some(event) = watcher.next().await {
-                debug!("{:?}: {:?}", event.mask(), event.path());
-                if *event.mask() == EventMask::CREATE && event.path() == path {
-                    info!("Socket file {} created", path.display());
-                    break;
+    async fn wait_for_socket_file(path: &Path) -> Result<(), anyhow::Error> {
+        let dir = Path::new(path).parent().unwrap();
+        let mut watcher = Watcher::init();
+        let mut wd = watcher.add(dir, &async_inotify::WatchMask::CREATE);
+        if let Ok(mut wd) = wd {
+            loop {
+                if let Some(event) = watcher.next().await {
+                    debug!("{:?}: {:?}", event.mask(), event.path());
+                    if *event.mask() == EventMask::CREATE && event.path() == path {
+                        info!("Socket file {} created", path.display());
+                        break;
+                    }
                 }
             }
+            if let Err(e) = watcher.remove(wd) {
+                return Err(anyhow!("Failed to remove watch: {}", e));
+            }
         }
-        if let Err(e) = watcher.remove(wd) {
-            return Err(anyhow!("Failed to remove watch: {}", e));
-        }
+        Ok(())
     }
-    Ok(())
 }

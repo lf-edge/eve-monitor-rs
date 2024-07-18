@@ -145,9 +145,9 @@ impl Application {
         self.ipc_tx = Some(ipc_cmd_tx);
 
         // request data over IPC
-        self.send_ipc_message(IpcMessage::Request(Request {
-            command: RpcCommand::Ping,
-        }));
+        // self.send_ipc_message(IpcMessage::Request(Request {
+        //     command: RpcCommand::Ping,
+        // }));
 
         // we never exit the application
         // TODO: handle suspend/resume for the case when we give away /dev/tty

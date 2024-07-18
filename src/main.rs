@@ -22,7 +22,7 @@ fn init_logging() -> log2::Handle {
         // we use XDG_RUNTIME_DIR to detect the fact that we are running on desktop linux
         PathBuf::from("./")
     } else {
-        PathBuf::from("/run")
+        PathBuf::from("/persist")
     };
 
     let log_file = log_dir.join("./monitor.log").to_string_lossy().to_string();

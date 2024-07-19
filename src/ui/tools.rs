@@ -24,16 +24,16 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 
 pub fn centered_rect_fixed(width: u16, height: u16, r: Rect) -> Rect {
     let popup_layout = Layout::vertical([
-        Constraint::Length((r.height - height) / 2),
+        Constraint::Length(r.height.saturating_sub(height) / 2),
         Constraint::Length(height),
-        Constraint::Length((r.height - height) / 2),
+        Constraint::Length(r.height.saturating_sub(height) / 2),
     ])
     .split(r);
 
     Layout::horizontal([
-        Constraint::Length((r.width - width) / 2),
+        Constraint::Length(r.width.saturating_sub(width) / 2),
         Constraint::Length(width),
-        Constraint::Length((r.width - width) / 2),
+        Constraint::Length(r.width.saturating_sub(width) / 2),
     ])
     .split(popup_layout[1])[1]
 }

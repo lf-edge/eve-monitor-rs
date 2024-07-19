@@ -1,4 +1,5 @@
 use crate::events;
+use crate::traits;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use ratatui::widgets::Paragraph;
@@ -22,7 +23,10 @@ use super::{
     window::{LayoutMap, WidgetMap},
 };
 
-pub struct Dialog<D> {
+pub struct Dialog<D>
+// where
+// D: IPresenter,
+{
     name: String,
     focus: FocusTracker,
     size: (u16, u16),
@@ -155,8 +159,9 @@ impl<D: 'static> IPresenter for Dialog<D> {
         }
 
         // render the content
-        let content_area = self.layout.get("content").unwrap().clone();
-        self.render(&content_area, frame);
+        // if let Some(self.state){}
+        // let content_area = self.layout.get("content").unwrap().clone();
+        // self.render(&content_area, frame);
     }
 
     fn is_focus_tracker(&self) -> bool {

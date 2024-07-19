@@ -241,8 +241,8 @@ impl Ui {
                 a: 42,
                 ip: "10.208.13.5".to_string(),
             })
-            .widget("Button", Box::new(button))
-            .widget("Input", Box::new(input))
+            .widget("3-1", Box::new(button))
+            .widget("1-3", Box::new(input))
             .with_layout(do_layout)
             .with_focused_view("Input")
             .on_action(|action, state: &mut MainWndState| {

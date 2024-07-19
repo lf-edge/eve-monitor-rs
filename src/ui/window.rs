@@ -89,13 +89,6 @@ impl<D> WindowBuilder<D> {
     }
 
     pub fn build(self) -> Result<Window<D>> {
-        let do_layout = self
-            .do_layout
-            .ok_or_else(|| anyhow!("Layout function should be set for {}", self.name))?;
-        let do_render = self
-            .do_render
-            .ok_or_else(|| anyhow!("Render function should be set for {}", self.name))?;
-
         //TODO: check focused view exists in widgets
         let ft = if let Some(order) = self.tab_order {
             FocusTracker::create_from_taborder(order, self.focused_view, FocusMode::Wrap)
@@ -107,8 +100,8 @@ impl<D> WindowBuilder<D> {
             &self.name,
             ft,
             self.widgets,
-            do_layout,
-            do_render,
+            self.do_layout,
+            self.do_render,
             self.on_action,
             self.state.unwrap(),
         ))
@@ -121,8 +114,8 @@ pub struct Window<D> {
     pub ft: FocusTracker,
     pub widgets: ElementHashMap<Box<dyn IWidget>>,
     pub layout: ElementHashMap<Rect>,
-    pub do_layout: LayoutFn,
-    pub do_render: RenderFn,
+    pub do_layout: Option<LayoutFn>,
+    pub do_render: Option<RenderFn>,
     pub on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
     pub state: RefCell<D>,
 }
@@ -138,8 +131,8 @@ impl<D> Window<D> {
         name: S,
         ft: FocusTracker,
         widgets: WidgetMap,
-        do_layout: LayoutFn,
-        do_render: RenderFn,
+        do_layout: Option<LayoutFn>,
+        do_render: Option<RenderFn>,
         on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
         state: D,
     ) -> Self {
@@ -148,8 +141,8 @@ impl<D> Window<D> {
             ft,
             widgets,
             layout: ElementHashMap::new(),
-            do_layout,
-            do_render,
+            do_layout: do_layout,
+            do_render: do_render,
             on_action,
             state: RefCell::new(state),
             v: Default::default(),
@@ -331,12 +324,25 @@ impl<D> IPresenter for Window<D> {
     // }
 
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
-        let layout = (self.do_layout)(area).unwrap();
-        (self.do_render)(area, frame);
+        if let Some(custom_render) = &mut self.do_render {
+            (custom_render)(area, frame)
+        };
 
-        self.widgets.iter_mut().for_each(|(name, widge)| {
-            widge.render(layout.get(name).unwrap(), frame);
-        });
+        if let Some(layouter) = &mut self.do_layout {
+            let layout = (layouter)(area).unwrap();
+
+            self.widgets.iter_mut().for_each(|(name, widget)| {
+                layout.get(name).and_then(|rect| {
+                    widget.render(rect, frame);
+                    None::<D>
+                });
+            });
+        } else {
+            self.widgets
+                .iter_mut()
+                .for_each(|(_name, widget)| widget.render(area, frame));
+        }
+
         // let r = layout.get("0-0").unwrap();
         // let rg = widgets.get_mut("RadioGroup").unwrap();
         // rg.render(r, frame);

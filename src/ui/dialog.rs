@@ -1,4 +1,9 @@
-use std::collections::HashMap;
+use crate::events;
+use crate::traits;
+use crate::traits::IElementEventHandler;
+use crate::ui::activity::Activity;
+use log::debug;
+use ratatui::widgets::Paragraph;
 
 use crossterm::event::KeyEvent;
 use log::{info, trace};
@@ -11,39 +16,54 @@ use ratatui::{
 
 use crate::traits::{IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible, IWindow};
 
-use anyhow::Result;
-
 use super::{
     action::{Action, UiActions},
+    focus_tracker::FocusTracker,
     tools::centered_rect_fixed,
     widgets::button::ButtonElement,
-    window::{LayoutMap, WidgetMap, Window},
+    window::{LayoutMap, WidgetMap},
 };
 
-pub struct Dialog<A, D> {
-    w: Window<A, ()>,
+pub struct Dialog<D>
+// where
+// D: IPresenter,
+{
+    name: String,
+    focus: FocusTracker,
     size: (u16, u16),
     buttons: Vec<String>,
     state: D,
     layout: LayoutMap,
+    widgets: WidgetMap,
 }
 
-impl<A: 'static, D: 'static> Dialog<A, D> {
-    pub fn new(size: (u16, u16), buttons: Vec<String>, focused_button: &str, state: D) -> Self {
-        let mut w = Window::builder("Dialog")
-            .with_layout(|_, _| Ok(()))
-            .with_render(Self::do_render)
-            .with_focused_view(focused_button)
-            .with_state(());
-
+impl<D: 'static> Dialog<D> {
+    pub fn new(
+        size: (u16, u16),
+        name: String,
+        buttons: Vec<String>,
+        focused_button: &str,
+        state: D,
+    ) -> Self {
         // create buttons and add them to the window builder
+        let mut widgets = WidgetMap::new();
         for button_name in buttons.iter() {
-            let button = ButtonElement::<A>::new(button_name);
-            w = w.widget(button_name, Box::new(button));
+            let button = ButtonElement::new(button_name);
+            widgets
+                .add(button_name.to_string(), Box::new(button))
+                .expect("Widget name already exists");
         }
 
+        let focus = FocusTracker::new(
+            buttons.clone(),
+            Some(focused_button.to_string()),
+            super::focus_tracker::FocusMode::Wrap,
+        );
+
         Self {
-            w: w.build().unwrap(),
+            name,
+            focus,
+            widgets,
             size,
             buttons,
             state,
@@ -51,20 +71,11 @@ impl<A: 'static, D: 'static> Dialog<A, D> {
         }
     }
 
-    fn on_ok_yes<F>(f: F) -> Option<UiActions<A>>
+    fn on_ok_yes<F>(_f: F) -> Option<UiActions>
     where
-        F: Fn(&D) -> Option<UiActions<A>>,
+        F: Fn(&D) -> Option<UiActions>,
     {
         Some(UiActions::ButtonClicked("Ok".to_string()))
-    }
-
-    fn with_render(
-        frame: &mut Frame<'_>,
-        layout: &LayoutMap,
-        widgets: &mut WidgetMap<A>,
-    ) -> Result<()> {
-        info!("Rendering dialog content");
-        Ok(())
     }
 
     fn do_layout(&mut self, area: &Rect) {
@@ -95,44 +106,41 @@ impl<A: 'static, D: 'static> Dialog<A, D> {
         self.layout.insert("content".to_string(), content_rect);
     }
 
-    fn do_render(
-        _area: &Rect,
-        frame: &mut Frame<'_>,
-        layout: &LayoutMap,
-        widgets: &mut WidgetMap<A>,
-    ) {
+    fn render_contents(&self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
         info!("Rendering dialog content");
+        frame.render_widget(Paragraph::new("AAAAAARRRRRRGGGGHHHHH"), *area);
     }
 }
 
-impl<A: 'static, D: 'static> IWindow for Dialog<A, D> {}
+impl<D: 'static> IWindow for Dialog<D> {}
 
-impl<A, D> IFocusTracker for Dialog<A, D> {
+impl<D> IFocusTracker for Dialog<D> {
     fn focus_next(&mut self) -> Option<String> {
-        self.w.focus_next()
+        self.focus.focus_next()
     }
 
     fn focus_prev(&mut self) -> Option<String> {
-        self.w.focus_prev()
+        self.focus.focus_prev()
     }
 
     fn get_focused_view_name(&self) -> Option<String> {
-        self.w.get_focused_view_name()
+        self.focus.get_focused_view()
     }
 }
 
-impl<A: 'static, D: 'static> IPresenter for Dialog<A, D> {
-    fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
+impl<D: 'static> IPresenter for Dialog<D> {
+    // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
+    //     self.do_layout(area);
+    //     // get content area and pass it to window
+    //     let content_area = self.layout.get("content").unwrap();
+
+    //     self.w.do_layout(&content_area);
+    //     HashMap::new()
+    // }
+
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, dialog_focused: bool) {
+        trace!("Rendering dialog: {}", self.name);
         self.do_layout(area);
-        // get content area and pass it to window
-        let content_area = self.layout.get("content").unwrap();
-
-        self.w.do_layout(&content_area);
-        HashMap::new()
-    }
-
-    fn render(&mut self, _area: &Rect, frame: &mut Frame<'_>) {
-        trace!("Rendering dialog: {}", self.w.name);
         // render the dialog
         let frame_rect = self.layout.get("frame").unwrap();
 
@@ -141,19 +149,33 @@ impl<A: 'static, D: 'static> IPresenter for Dialog<A, D> {
             .border_type(BorderType::Thick)
             .border_style(Style::default().fg(Color::White))
             .style(Style::default().bg(Color::Black))
-            .title(self.w.name.as_str());
+            .title(self.name.as_str());
 
         block.render(*frame_rect, frame.buffer_mut());
+
+        let focused_button = self
+            .focus
+            .get_focused_view()
+            .or(Some("".to_string()))
+            .unwrap();
+
+        debug!("focused button: {focused_button}");
+
         // render the buttons
         for button_name in self.buttons.iter() {
             let button_rect = self.layout.get(button_name).unwrap();
-            let button = self.w.widgets.get_mut(button_name).unwrap();
-            button.render(button_rect, frame);
+            let button = self.widgets.get_mut(button_name).unwrap();
+            button.render(
+                button_rect,
+                frame,
+                (*button_name == focused_button) && dialog_focused,
+            );
         }
 
         // render the content
-        let content_area = self.layout.get("content").unwrap();
-        self.w.render(content_area, frame);
+        // if let Some(self.state){}
+        let content_area = self.layout.get("content").unwrap().clone();
+        self.render_contents(&content_area, frame, dialog_focused);
     }
 
     fn is_focus_tracker(&self) -> bool {
@@ -161,18 +183,16 @@ impl<A: 'static, D: 'static> IPresenter for Dialog<A, D> {
     }
 }
 
-impl<A, D> IFocusAcceptor for Dialog<A, D> {
+impl<D> IFocusAcceptor for Dialog<D> {
     fn has_focus(&self) -> bool {
         // dialog is always focused
         true
     }
 
-    fn set_focus(&mut self) {
-        self.w.set_focus();
-    }
+    fn set_focus(&mut self, _: bool) {}
 
     fn clear_focus(&mut self) {
-        self.w.clear_focus();
+        // NOP, as dialog is always focused
     }
 
     fn can_focus(&self) -> bool {
@@ -180,38 +200,57 @@ impl<A, D> IFocusAcceptor for Dialog<A, D> {
     }
 }
 
-impl<A, D> IVisible for Dialog<A, D> {}
-impl<A, D> IEventHandler for Dialog<A, D> {
-    type Action = A;
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Action<Self::Action>> {
-        trace!("Handling key event for dialog: {}", self.w.name);
+impl<D> IVisible for Dialog<D> {}
+impl<D> IEventHandler for Dialog<D> {
+    fn handle_event(&mut self, event: events::Event) -> Option<Action> {
+        match event {
+            events::Event::Key(key) => {
+                if let Some(act) = self.handle_key_event(key) {
+                    match act {
+                        Activity::Action(action) => {
+                            return Some(Action::new(self.name.clone(), action))
+                        }
+                        Activity::Event(_) => (),
+                    }
+                }
+                None
+            }
+        }
+    }
+}
+impl<D> IElementEventHandler for Dialog<D> {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
+        trace!("Handling key event for dialog {}: {:?}", self.name, key);
         // if Escape is pressed then dismiss the dialog
         if key.code == crossterm::event::KeyCode::Esc {
-            trace!("Dismissing dialog: {}", self.w.name);
-            return Some(Action::new(self.w.name.clone(), UiActions::DismissDialog));
+            trace!("Dismissing dialog: {}", self.name);
+            return Some(Activity::Action(UiActions::DismissDialog));
         }
 
-        let action = self.w.handle_key_event(key);
+        if let Some(act) = self.focus.handle_key_event(key) {
+            match act {
+                Activity::Action(action) => {
+                    if let UiActions::ButtonClicked(ref name) = action {
+                        if name == "Cancel" {
+                            return Some(Activity::Action(UiActions::DismissDialog));
+                        }
+                    }
 
-        // if Cancel is clicked then dismiss the dialog otherwise forward action
-        if let Some(action) = action {
-            match action.action {
-                UiActions::ButtonClicked(name) => match name.as_str() {
-                    "Cancel" => {
-                        return Some(Action::new(self.w.name.clone(), UiActions::DismissDialog))
+                    return Some(Activity::Action(action));
+                }
+                Activity::Event(key) => {
+                    if let Some(elem_name) = self.focus.get_focused_view() {
+                        self.widgets
+                            .get_mut(&elem_name)
+                            .unwrap()
+                            .handle_key_event(key)
+                    } else {
+                        None
                     }
-                    _ => {
-                        //TODO: call custom button handler to update the state
-                        return None;
-                    }
-                },
-                _ => {
-                    //TODO: call custom button handler to update the state
-                    return Some(action);
                 }
             }
         } else {
-            None
+            return None;
         }
     }
 }

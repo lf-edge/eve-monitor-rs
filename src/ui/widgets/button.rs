@@ -1,3 +1,4 @@
+use crate::ui::activity::Activity;
 use crossterm::event::{KeyCode, KeyEvent};
 use log::{info, trace};
 use ratatui::{
@@ -15,50 +16,42 @@ use crate::{
 use super::element::VisualState;
 use ratatui::widgets::WidgetRef;
 
-pub type OnButtonClicked<A> = dyn FnMut(&String) -> Option<UiActions<A>>;
-
 //pub type ButtonElement<A> = Element<ButtonWidgetState<A>>;
-pub struct ButtonElement<A> {
+pub struct ButtonElement {
     v: VisualState,
     label: String,
     pushed: bool,
-    on_click: Option<Box<OnButtonClicked<A>>>,
 }
 
-impl<A> ButtonElement<A> {
+impl ButtonElement {
     pub fn new<S: Into<String>>(label: S) -> Self {
         Self {
             label: label.into(),
             pushed: false,
-            on_click: None,
             v: Default::default(),
         }
-    }
-    pub fn on_click(mut self, f: Box<OnButtonClicked<A>>) -> Self {
-        self.on_click = Some(f);
-        self
     }
     fn is_pushed(&self) -> bool {
         self.pushed
     }
 }
 
-impl<'a, A> IWidgetPresenter for ButtonElement<A> {
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
+impl IWidgetPresenter for ButtonElement {
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
         trace!(
             "Rendering button: {:?}: focused: {}",
             self.label.as_str(),
-            self.has_focus()
+            focused
         );
         // set border style based on focus
-        let border_style = if self.has_focus() {
+        let border_style = if focused {
             Style::default().fg(Color::White)
         } else {
             Style::default().fg(Color::Gray)
         };
 
         // set border type based on push state
-        let border_type = if self.has_focus() {
+        let border_type = if focused {
             BorderType::Thick
         } else {
             BorderType::Rounded
@@ -85,24 +78,19 @@ impl<'a, A> IWidgetPresenter for ButtonElement<A> {
     }
 }
 
-impl<'a, A> IElementEventHandler for ButtonElement<A> {
-    type Action = A;
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions<Self::Action>> {
+impl IElementEventHandler for ButtonElement {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
         info!("Handling key event: {:?}", key);
         match key.code {
             KeyCode::Enter | KeyCode::Char(' ') => {
                 if key.kind == crossterm::event::KeyEventKind::Press {
                     self.pushed = true;
                     info!("Button pushed");
-                    if let Some(f) = self.on_click.as_deref_mut() {
-                        let custom_action = (f)(&self.label);
-                        if let Some(action) = custom_action {
-                            return Some(action);
-                        }
-                    } else {
-                        return UiActions::ButtonClicked(self.label.clone()).into();
-                    }
-                    return None;
+
+                    return Some(Activity::Action(UiActions::ButtonClicked(
+                        self.label.clone(),
+                    )));
+
                 // TODO: Release event never comes if crossterm::event::PushKeyboardEnhancementFlags
                 // is not enabled.
                 } else if key.kind == crossterm::event::KeyEventKind::Release {
@@ -118,11 +106,11 @@ impl<'a, A> IElementEventHandler for ButtonElement<A> {
     }
 }
 
-impl<A> IWidget for ButtonElement<A> {}
+impl IWidget for ButtonElement {}
 
-impl<A> IFocusAcceptor for ButtonElement<A> {
-    fn set_focus(&mut self) {
-        self.v.focused = true;
+impl IFocusAcceptor for ButtonElement {
+    fn set_focus(&mut self, focus: bool) {
+        self.v.focused = focus;
     }
 
     fn clear_focus(&mut self) {

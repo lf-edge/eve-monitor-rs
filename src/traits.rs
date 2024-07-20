@@ -1,13 +1,11 @@
-use crate::ui::action::{Action, UiActions};
+use crate::events::Event;
+use crate::ui::action::Action;
+use crate::ui::activity::Activity;
 use ratatui::{layout::Rect, Frame};
-use std::collections::HashMap;
 
-pub trait IPresenter
-where
-    Self: IVisible + IFocusAcceptor,
-{
-    fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect>;
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>);
+pub trait IPresenter {
+    // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect>;
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool);
     fn is_focus_tracker(&self) -> bool {
         false
     }
@@ -21,7 +19,7 @@ pub trait IVisible {
 }
 
 pub trait IFocusAcceptor {
-    fn set_focus(&mut self) {}
+    fn set_focus(&mut self, _focus: bool) {}
     fn clear_focus(&mut self) {}
     fn has_focus(&self) -> bool {
         false
@@ -44,30 +42,22 @@ pub trait IFocusTracker {
 }
 
 pub trait IEventHandler {
-    type Action;
-    fn handle_key_event(
-        &mut self,
-        _key: crossterm::event::KeyEvent,
-    ) -> Option<Action<Self::Action>> {
+    fn handle_event(&mut self, _event: Event) -> Option<Action> {
         None
     }
 }
 
 pub trait IElementEventHandler {
-    type Action;
-    fn handle_key_event(
-        &mut self,
-        _key: crossterm::event::KeyEvent,
-    ) -> Option<UiActions<Self::Action>> {
+    fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<Activity> {
         None
     }
 }
 
 pub trait IWidgetPresenter {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>);
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool);
 }
 
-pub trait IWindow: IPresenter + IFocusTracker + IEventHandler {}
+pub trait IWindow: IPresenter + IFocusAcceptor + IFocusTracker + IEventHandler {}
 pub trait IWidget: IWidgetPresenter + IElementEventHandler + IFocusAcceptor {}
 
 pub trait IAction: Clone {

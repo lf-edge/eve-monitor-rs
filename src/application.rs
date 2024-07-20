@@ -1,3 +1,6 @@
+use crate::events::Event;
+use crate::traits::IWidgetPresenter;
+use crate::ui::homepage::HomePage;
 use core::fmt::Debug;
 
 use std::result::Result::Ok;
@@ -30,28 +33,27 @@ use crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
 
 use crate::actions::{IpDialogState, MainWndState, MonActions};
-use crate::events::Event;
 use crate::terminal::TerminalWrapper;
 use crate::ui::action::{Action, UiActions};
 use crate::ui::dialog::Dialog;
 use crate::ui::layer_stack::LayerStack;
 use crate::ui::widgets::button::ButtonElement;
 use crate::ui::widgets::input_field::InputFieldElement;
-use crate::ui::window::{LayoutMap, WidgetMap, Window};
+use crate::ui::window::{LayoutMap, Window};
 
 #[derive(Debug)]
 pub struct Application {
     terminal_rx: UnboundedReceiver<Event>,
     terminal_tx: UnboundedSender<Event>,
-    action_rx: UnboundedReceiver<Action<MonActions>>,
-    action_tx: UnboundedSender<Action<MonActions>>,
+    action_rx: UnboundedReceiver<Action>,
+    action_tx: UnboundedSender<Action>,
     ui: Ui,
     task: tokio::task::JoinHandle<()>,
 }
 
 impl Application {
     pub fn new() -> Result<Self> {
-        let (action_tx, action_rx) = mpsc::unbounded_channel::<Action<MonActions>>();
+        let (action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
         let (terminal_tx, terminal_rx) = mpsc::unbounded_channel::<Event>();
         let terminal = TerminalWrapper::new()?;
         let mut ui = Ui::new(action_tx.clone(), terminal)?;
@@ -112,8 +114,8 @@ impl Application {
                             let action = self.ui.handle_event(Event::Key(key));
                             if let Some(action) = action {
                                 info!("Event loop got action: {:?}", action);
-                                self.draw_ui().unwrap();
                             }
+                                self.draw_ui().unwrap();
                         }
                         None => {
                             warn!("Terminal event stream ended");
@@ -179,8 +181,8 @@ impl Application {
 
 struct Ui {
     terminal: TerminalWrapper,
-    dispatcher: UnboundedSender<Action<MonActions>>,
-    views: Vec<LayerStack<MonActions>>,
+    dispatcher: UnboundedSender<Action>,
+    views: Vec<LayerStack>,
     selected_tab: UiTabs,
     // this is our model :)
     _a: u32,
@@ -189,6 +191,7 @@ struct Ui {
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
 enum UiTabs {
     #[default]
+    Debug,
     Home,
     Network,
     Applications,
@@ -201,10 +204,7 @@ impl Debug for Ui {
 }
 
 impl Ui {
-    fn new(
-        dispatcher: UnboundedSender<Action<MonActions>>,
-        terminal: TerminalWrapper,
-    ) -> Result<Self> {
+    fn new(dispatcher: UnboundedSender<Action>, terminal: TerminalWrapper) -> Result<Self> {
         Ok(Self {
             terminal,
             dispatcher,
@@ -213,8 +213,10 @@ impl Ui {
             _a: 0,
         })
     }
-    pub fn create_main_wnd(&self) -> Window<MonActions, MainWndState> {
-        let do_layout = |area: &Rect, layout: &mut LayoutMap| {
+
+    pub fn create_main_wnd(&self) -> Window<MainWndState> {
+        let do_layout = |area: &Rect| -> Option<LayoutMap> {
+            let mut layout = LayoutMap::new();
             let cols = Layout::horizontal([Constraint::Ratio(1, 4); 4]).split(*area);
             for (i, col) in cols.iter().enumerate() {
                 let rows = Layout::vertical([Constraint::Ratio(1, 4); 4]).split(*col);
@@ -223,74 +225,25 @@ impl Ui {
                     layout.insert(area_name, *row);
                 }
             }
-            Ok(())
+            Some(layout)
         };
-
-        let do_render = Box::new(
-            |_area: &Rect,
-             frame: &mut Frame<'_>,
-             layout: &LayoutMap,
-             widgets: &mut WidgetMap<MonActions>| {
-                // let r = layout.get("0-0").unwrap();
-                // let rg = widgets.get_mut("RadioGroup").unwrap();
-                // rg.render(r, frame);
-
-                // let r = layout.get("0-1").unwrap();
-                // let rg = widgets.get_mut("RadioGroup 1").unwrap();
-                // rg.render(r, frame);
-
-                // let r = layout.get("3-3").unwrap();
-                // let rg = widgets.get_mut("Label").unwrap();
-                // rg.render(r, frame);
-
-                let r = layout.get("3-0").unwrap();
-                let rg = widgets.get_mut("Input").unwrap();
-                rg.render(r, frame);
-
-                let r = layout.get("0-2").unwrap();
-                let rg = widgets.get_mut("Button").unwrap();
-                rg.render(r, frame);
-            },
-        );
-
-        // let rg1 = Box::new(RadioGroupElement::new(
-        //     vec!["Option 1", "Option 2"],
-        //     "Radio Group",
-        // ));
-
-        // let rg2 = Box::new(RadioGroupElement::new(
-        //     vec!["Option 1", "Option 2"],
-        //     "Radio Group 1",
-        // ));
-
-        //let label = LabelElement::new("Label");
 
         let input = InputFieldElement::new("Input", Some("Type here")).on_char(|c: &char| {
             info!("Char: {:?}", c);
             let cap_c = c.to_uppercase().next().unwrap();
             Some(cap_c)
         });
-        // .on_update(|input: &String| {
-        //     info!("Input updated: {}", input);
-        //     Some(MonActions::InputUpdated(input.clone()))
-        // });
 
-        let on_click = Box::new(|label: &String| -> Option<UiActions<MonActions>> {
-            info!("Button clicked {}", label);
-            Some(UiActions::ButtonClicked(label.clone()))
-        });
-
-        let button = ButtonElement::<MonActions>::new("Button").on_click(on_click);
+        let button = ButtonElement::new("Button");
 
         let wnd = Window::builder("MainWnd")
             .with_state(MainWndState {
                 a: 42,
                 ip: "10.208.13.5".to_string(),
             })
-            .widget("Button", Box::new(button))
-            .widget("Input", Box::new(input))
+            .widget("3-1", Box::new(button))
+            .widget("0-3", Box::new(input))
             .with_layout(do_layout)
-            .with_render(do_render)
             .with_focused_view("Input")
             .on_action(|action, state: &mut MainWndState| {
                 debug!("on_action Action: {:?}", action);
@@ -305,7 +258,7 @@ impl Ui {
                         state.a += 1;
                         info!("Button clicked: counter {}", state.a);
                         // Send user action to indicate that the state was updated
-                        return Some(UiActions::new_user_action(MonActions::MainWndStateUpdated(
+                        return Some(UiActions::MonActions(MonActions::MainWndStateUpdated(
                             state.clone(),
                         )));
                     }
@@ -365,7 +318,7 @@ impl Ui {
 
         let w = self.create_main_wnd();
 
-        self.views[UiTabs::Home as usize].push(Box::new(w));
+        self.views[UiTabs::Debug as usize].push(Box::new(w));
 
         let s = IpDialogState {
             ip: "10.208.13.10".to_string(),
@@ -373,14 +326,17 @@ impl Ui {
             gw: "1.1.1.1".to_string(),
         };
 
-        let d: Dialog<MonActions, IpDialogState> = Dialog::new(
+        let d: Dialog<MonActions> = Dialog::new(
             (50, 30),
+            "confirm".to_string(),
             vec!["Ok".to_string(), "Cancel".to_string()],
             "Cancel",
-            s,
+            MonActions::NetworkInterfaceUpdated(s),
         );
 
-        self.views[UiTabs::Home as usize].push(Box::new(d));
+        self.views[UiTabs::Debug as usize].push(Box::new(d));
+
+        self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
     }
 
     fn draw(&mut self) {
@@ -397,9 +353,10 @@ impl Ui {
                 .render(tabs, frame.buffer_mut());
 
             // redraw from the bottom up
-            for layer in self.views[self.selected_tab as usize].iter_mut() {
-                layer.do_layout(&body);
-                layer.render(&body, frame);
+            let stack = &mut self.views[self.selected_tab as usize];
+            let last_index = stack.len().saturating_sub(1);
+            for (index, layer) in stack.iter_mut().enumerate() {
+                layer.render(&body, frame, index == last_index);
             }
         });
     }
@@ -410,7 +367,7 @@ impl Ui {
             .unwrap();
     }
 
-    fn handle_event(&mut self, event: Event) -> Option<Action<MonActions>> {
+    fn handle_event(&mut self, event: Event) -> Option<Action> {
         debug!("Ui handle_event {:?}", event);
 
         match event {
@@ -436,29 +393,14 @@ impl Ui {
             {
                 debug!("CTRL+p: manual layer.pop() requested");
                 self.views[self.selected_tab as usize].pop();
-                self.invalidate();
             }
             // handle Tab key
             Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
                 if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
-                    //TODO: I can hide the focus tracker from the user
-                    // by making it a private field in the layer
-                    // and implement handle_focus_event on the layer
-                    if layer.is_focus_tracker() {
-                        if key.code == KeyCode::Tab {
-                            layer.focus_prev();
-                        } else {
-                            layer.focus_next();
-                        }
-                        self.invalidate();
-                    } else {
-                        // forward the event to the top layer
-                        debug!("Forwarding Tab event to top layer");
-                        let action = layer.handle_key_event(key);
+                        let action = layer.handle_event(Event::Key(key));
                         if let Some(action) = action {
                             return Some(action);
                         }
-                    }
                 }
             }
             // handle Tab switching
@@ -467,24 +409,22 @@ impl Ui {
             {
                 debug!("CTRL+Left: switching tab view");
                 self.selected_tab = self.selected_tab.previous();
-                self.invalidate();
             }
             Event::Key(key)
                 if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right) =>
             {
                 debug!("CTRL+Right: switching tab view");
                 self.selected_tab = self.selected_tab.next();
-                self.invalidate();
             }
 
             // forward all other key events to the top layer
             Event::Key(key) => {
                 if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
-                    if let Some(action) = layer.handle_key_event(key) {
+                    if let Some(action) = layer.handle_event(Event::Key(key)) {
                         match action.action {
                             UiActions::DismissDialog => {
                                 self.views[self.selected_tab as usize].pop();
-                                self.invalidate();
+                                // self.invalidate();
                             }
                             _ => {
                                 return Some(action);

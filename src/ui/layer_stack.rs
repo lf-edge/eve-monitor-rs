@@ -11,7 +11,7 @@ impl LayerStack {
         Self { layers: Vec::new() }
     }
     pub fn push(&mut self, mut layer: Box<dyn IWindow>) {
-        layer.set_focus();
+        layer.set_focus(true);
         // clear focus on current top layer
         if let Some(top) = self.layers.last_mut() {
             top.clear_focus();
@@ -25,7 +25,7 @@ impl LayerStack {
         }
         // if there is still a layer set the focus
         if let Some(layer) = self.layers.last_mut() {
-            layer.set_focus();
+            layer.set_focus(true);
         }
         top
     }
@@ -34,6 +34,10 @@ impl LayerStack {
     }
     pub fn iter_mut(&mut self) -> std::slice::IterMut<'_, Box<dyn IWindow>> {
         self.layers.iter_mut()
+    }
+
+    pub fn len(&self) -> usize {
+        self.layers.len()
     }
 }
 

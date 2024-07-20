@@ -43,8 +43,8 @@ impl<D> IFocusAcceptor for StaticElement<D>
 where
     Self: IWidgetPresenter,
 {
-    fn set_focus(&mut self) {
-        self.v.focused = true;
+    fn set_focus(&mut self, focus: bool) {
+        self.v.focused = focus;
     }
 
     fn clear_focus(&mut self) {
@@ -68,7 +68,8 @@ impl<S> IWidgetPresenter for StaticElement<S>
 where
     Self: IStandardRenderer,
 {
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
+        self.set_focus(focused);
         // call render from IStandardRenderer
         <StaticElement<S> as IStandardRenderer>::render(self, area, frame.buffer_mut());
     }

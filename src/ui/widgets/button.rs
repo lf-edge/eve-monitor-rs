@@ -1,4 +1,3 @@
-use crate::ui::action::Action;
 use crate::ui::activity::Activity;
 use crossterm::event::{KeyCode, KeyEvent};
 use log::{info, trace};
@@ -38,21 +37,21 @@ impl ButtonElement {
 }
 
 impl IWidgetPresenter for ButtonElement {
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
         trace!(
             "Rendering button: {:?}: focused: {}",
             self.label.as_str(),
-            self.has_focus()
+            focused
         );
         // set border style based on focus
-        let border_style = if self.has_focus() {
+        let border_style = if focused {
             Style::default().fg(Color::White)
         } else {
             Style::default().fg(Color::Gray)
         };
 
         // set border type based on push state
-        let border_type = if self.has_focus() {
+        let border_type = if focused {
             BorderType::Thick
         } else {
             BorderType::Rounded
@@ -110,8 +109,8 @@ impl IElementEventHandler for ButtonElement {
 impl IWidget for ButtonElement {}
 
 impl IFocusAcceptor for ButtonElement {
-    fn set_focus(&mut self) {
-        self.v.focused = true;
+    fn set_focus(&mut self, focus: bool) {
+        self.v.focused = focus;
     }
 
     fn clear_focus(&mut self) {

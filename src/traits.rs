@@ -5,7 +5,7 @@ use ratatui::{layout::Rect, Frame};
 
 pub trait IPresenter {
     // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect>;
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>);
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool);
     fn is_focus_tracker(&self) -> bool {
         false
     }
@@ -19,7 +19,7 @@ pub trait IVisible {
 }
 
 pub trait IFocusAcceptor {
-    fn set_focus(&mut self) {}
+    fn set_focus(&mut self, _focus: bool) {}
     fn clear_focus(&mut self) {}
     fn has_focus(&self) -> bool {
         false
@@ -54,7 +54,7 @@ pub trait IElementEventHandler {
 }
 
 pub trait IWidgetPresenter {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>);
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool);
 }
 
 pub trait IWindow: IPresenter + IFocusAcceptor + IFocusTracker + IEventHandler {}

@@ -180,13 +180,13 @@ impl IElementEventHandler for InputFieldElement {
 }
 
 impl IWidgetPresenter for InputFieldElement {
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
         //trace!("rendering: InputFieldElement {:#?}", &self);
         self.render_input_field(area, frame.buffer_mut());
 
         // set cursor position must be called every time to display the cursor
         // on the next redraw cycle
-        if self.has_focus() {
+        if focused {
             let pos = self.cursor_position;
             frame.set_cursor(pos.x, pos.y);
         }
@@ -194,8 +194,8 @@ impl IWidgetPresenter for InputFieldElement {
 }
 
 impl IFocusAcceptor for InputFieldElement {
-    fn set_focus(&mut self) {
-        self.v.focused = true;
+    fn set_focus(&mut self, focus: bool) {
+        self.v.focused = focus;
     }
 
     fn clear_focus(&mut self) {

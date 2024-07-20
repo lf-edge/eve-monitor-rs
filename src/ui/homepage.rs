@@ -61,7 +61,7 @@ impl HomePage {
 
 impl IPresenter for HomePage {
     // add code here
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _: bool) {
         self.do_render(area, frame)
     }
     fn is_focus_tracker(&self) -> bool {
@@ -69,16 +69,7 @@ impl IPresenter for HomePage {
     }
 }
 
-impl IFocusAcceptor for HomePage {
-    fn set_focus(&mut self) {}
-    fn clear_focus(&mut self) {}
-    fn has_focus(&self) -> bool {
-        false
-    }
-    fn can_focus(&self) -> bool {
-        false
-    }
-}
+impl IFocusAcceptor for HomePage {}
 
 impl IFocusTracker for HomePage {
     fn focus_next(&mut self) -> Option<String> {

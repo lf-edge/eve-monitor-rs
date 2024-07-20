@@ -1,4 +1,5 @@
 use crate::events;
+use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use std::{cell::RefCell, fmt::Debug};
 
@@ -141,8 +142,8 @@ impl<D> Window<D> {
             ft,
             widgets,
             layout: ElementHashMap::new(),
-            do_layout: do_layout,
-            do_render: do_render,
+            do_layout,
+            do_render,
             on_action,
             state: RefCell::new(state),
             v: Default::default(),
@@ -188,7 +189,14 @@ impl<D> IEventHandler for Window<D> {
                                     }
                                 }
                             }
-                            Activity::Event(_) => todo!(),
+                            Activity::Event(event) => {
+                                return self.ft.handle_key_event(event).and_then(|act| match act {
+                                    Activity::Action(action) => {
+                                        Some(Action::new(self.name.clone(), action))
+                                    }
+                                    Activity::Event(_) => None,
+                                });
+                            }
                         }
                     }
                 }
@@ -222,7 +230,7 @@ impl<D> IFocusTracker for Window<D> {
                     if let Some(widget) = self.widgets.get_mut(&focused_view) {
                         if widget.can_focus() {
                             debug!("setting focus: {}", focused_view);
-                            widget.set_focus();
+                            widget.set_focus(true);
                             return Some(focused_view);
                         } else {
                             trace!("Next focused view is not a focus tracker: {}", focused_view);
@@ -261,7 +269,7 @@ impl<D> IFocusTracker for Window<D> {
                     if let Some(widget) = self.widgets.get_mut(&focused_view) {
                         if widget.can_focus() {
                             debug!("setting focus: {}", focused_view);
-                            widget.set_focus();
+                            widget.set_focus(true);
                             return Some(focused_view);
                         } else {
                             trace!("Next focused view is not a focus tracker: {}", focused_view);
@@ -285,12 +293,12 @@ impl<D> IFocusTracker for Window<D> {
 
 impl<D> IVisible for Window<D> {}
 impl<D> IFocusAcceptor for Window<D> {
-    fn set_focus(&mut self) {
-        self.v.focused = true;
+    fn set_focus(&mut self, focus: bool) {
+        self.v.focused = focus;
         // set focus on focused view
         if let Some(focused_view) = self.ft.get_focused_view() {
             if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                widget.set_focus();
+                widget.set_focus(true);
             }
         }
     }
@@ -323,24 +331,29 @@ impl<D> IPresenter for Window<D> {
     //     HashMap::new()
     // }
 
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>) {
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
         if let Some(custom_render) = &mut self.do_render {
             (custom_render)(area, frame)
         };
 
+        let focused_widget = if focused {
+            self.ft.get_focused_view().or(Some("".to_string())).unwrap()
+        } else {
+            "".to_string()
+        };
         if let Some(layouter) = &mut self.do_layout {
             let layout = (layouter)(area).unwrap();
 
             self.widgets.iter_mut().for_each(|(name, widget)| {
                 layout.get(name).and_then(|rect| {
-                    widget.render(rect, frame);
+                    widget.render(rect, frame, *name == focused_widget);
                     None::<D>
                 });
             });
         } else {
             self.widgets
                 .iter_mut()
-                .for_each(|(_name, widget)| widget.render(area, frame));
+                .for_each(|(name, widget)| widget.render(area, frame, *name == focused_widget));
         }
 
         // let r = layout.get("0-0").unwrap();

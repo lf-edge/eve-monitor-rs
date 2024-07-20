@@ -2,6 +2,7 @@ use crate::events;
 use crate::traits;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
+use log::debug;
 use ratatui::widgets::Paragraph;
 
 use crossterm::event::KeyEvent;
@@ -105,7 +106,7 @@ impl<D: 'static> Dialog<D> {
         self.layout.insert("content".to_string(), content_rect);
     }
 
-    fn render(&self, area: &Rect, frame: &mut Frame<'_>) {
+    fn render_contents(&self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
         info!("Rendering dialog content");
         frame.render_widget(Paragraph::new("AAAAAARRRRRRGGGGHHHHH"), *area);
     }
@@ -137,7 +138,7 @@ impl<D: 'static> IPresenter for Dialog<D> {
     //     HashMap::new()
     // }
 
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>) {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, dialog_focused: bool) {
         trace!("Rendering dialog: {}", self.name);
         self.do_layout(area);
         // render the dialog
@@ -151,17 +152,30 @@ impl<D: 'static> IPresenter for Dialog<D> {
             .title(self.name.as_str());
 
         block.render(*frame_rect, frame.buffer_mut());
+
+        let focused_button = self
+            .focus
+            .get_focused_view()
+            .or(Some("".to_string()))
+            .unwrap();
+
+        debug!("focused button: {focused_button}");
+
         // render the buttons
         for button_name in self.buttons.iter() {
             let button_rect = self.layout.get(button_name).unwrap();
             let button = self.widgets.get_mut(button_name).unwrap();
-            button.render(button_rect, frame);
+            button.render(
+                button_rect,
+                frame,
+                (*button_name == focused_button) && dialog_focused,
+            );
         }
 
         // render the content
         // if let Some(self.state){}
-        // let content_area = self.layout.get("content").unwrap().clone();
-        // self.render(&content_area, frame);
+        let content_area = self.layout.get("content").unwrap().clone();
+        self.render_contents(&content_area, frame, dialog_focused);
     }
 
     fn is_focus_tracker(&self) -> bool {
@@ -175,7 +189,7 @@ impl<D> IFocusAcceptor for Dialog<D> {
         true
     }
 
-    fn set_focus(&mut self) {}
+    fn set_focus(&mut self, _: bool) {}
 
     fn clear_focus(&mut self) {
         // NOP, as dialog is always focused
@@ -193,7 +207,10 @@ impl<D> IEventHandler for Dialog<D> {
             events::Event::Key(key) => {
                 if let Some(act) = self.handle_key_event(key) {
                     match act {
-                        Activity::Action(_) | Activity::Event(_) => todo!(),
+                        Activity::Action(action) => {
+                            return Some(Action::new(self.name.clone(), action))
+                        }
+                        Activity::Event(_) => (),
                     }
                 }
                 None
@@ -203,7 +220,7 @@ impl<D> IEventHandler for Dialog<D> {
 }
 impl<D> IElementEventHandler for Dialog<D> {
     fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
-        trace!("Handling key event for dialog: {}", self.name);
+        trace!("Handling key event for dialog {}: {:?}", self.name, key);
         // if Escape is pressed then dismiss the dialog
         if key.code == crossterm::event::KeyCode::Esc {
             trace!("Dismissing dialog: {}", self.name);
@@ -217,7 +234,6 @@ impl<D> IElementEventHandler for Dialog<D> {
                         if name == "Cancel" {
                             return Some(Activity::Action(UiActions::DismissDialog));
                         }
-                        return Some(Activity::Action(action));
                     }
 
                     return Some(Activity::Action(action));

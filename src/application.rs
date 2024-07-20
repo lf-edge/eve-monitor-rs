@@ -242,7 +242,7 @@ impl Ui {
                 ip: "10.208.13.5".to_string(),
             })
             .widget("3-1", Box::new(button))
-            .widget("1-3", Box::new(input))
+            .widget("0-3", Box::new(input))
             .with_layout(do_layout)
             .with_focused_view("Input")
             .on_action(|action, state: &mut MainWndState| {
@@ -353,9 +353,10 @@ impl Ui {
                 .render(tabs, frame.buffer_mut());
 
             // redraw from the bottom up
-            for layer in self.views[self.selected_tab as usize].iter_mut() {
-                // layer.do_layout(&body);
-                layer.render(&body, frame);
+            let stack = &mut self.views[self.selected_tab as usize];
+            let last_index = stack.len()-1;
+            for (index, layer) in stack.iter_mut().enumerate() {
+                layer.render(&body, frame, index == last_index);
             }
         });
     }
@@ -397,26 +398,10 @@ impl Ui {
             // handle Tab key
             Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
                 if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
-                    //TODO: I can hide the focus tracker from the user
-                    // by making it a private field in the layer
-                    // and implement handle_focus_event on the layer
-                    if layer.is_focus_tracker() {
-                        if key.code == KeyCode::Tab {
-                            layer.focus_prev();
-                        } else {
-                            layer.focus_next();
-                        }
-                        self.invalidate();
-                    } else {
-                        // forward the event to the top layer
-                        debug!("Forwarding Tab event to top layer");
                         let action = layer.handle_event(Event::Key(key));
                         if let Some(action) = action {
                             return Some(action);
-                            // return Some(action);
                         }
-                        return None;
-                    }
                 }
             }
             // handle Tab switching

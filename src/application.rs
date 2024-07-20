@@ -354,7 +354,7 @@ impl Ui {
 
             // redraw from the bottom up
             let stack = &mut self.views[self.selected_tab as usize];
-            let last_index = stack.len()-1;
+            let last_index = stack.len().saturating_sub(1);
             for (index, layer) in stack.iter_mut().enumerate() {
                 layer.render(&body, frame, index == last_index);
             }

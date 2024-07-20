@@ -9,7 +9,6 @@ use ratatui::layout::Rect;
 use crate::traits::{
     IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible, IWidget, IWindow,
 };
-use anyhow::anyhow;
 use anyhow::Result;
 
 use super::{

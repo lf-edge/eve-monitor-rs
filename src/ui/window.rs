@@ -170,6 +170,14 @@ impl<D> IEventHandler for Window<D> {
     fn handle_event(&mut self, key: events::Event) -> Option<Action> {
         match key {
             events::Event::Key(key) => {
+                if let Some(activity) = self.ft.handle_key_event(key) {
+                    match activity {
+                        Activity::Action(action) => {
+                            return Some(Action::new(self.name.clone(), action))
+                        }
+                        Activity::Event(_) => {}
+                    }
+                }
                 // forward the event to the focused view
                 if let Some(focused_view) = self.ft.get_focused_view() {
                     let widget = self.widgets.get_mut(&focused_view).unwrap();

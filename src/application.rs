@@ -114,8 +114,8 @@ impl Application {
                             let action = self.ui.handle_event(Event::Key(key));
                             if let Some(action) = action {
                                 info!("Event loop got action: {:?}", action);
-                                self.draw_ui().unwrap();
                             }
+                                self.draw_ui().unwrap();
                         }
                         None => {
                             warn!("Terminal event stream ended");
@@ -393,7 +393,6 @@ impl Ui {
             {
                 debug!("CTRL+p: manual layer.pop() requested");
                 self.views[self.selected_tab as usize].pop();
-                self.invalidate();
             }
             // handle Tab key
             Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
@@ -410,14 +409,12 @@ impl Ui {
             {
                 debug!("CTRL+Left: switching tab view");
                 self.selected_tab = self.selected_tab.previous();
-                self.invalidate();
             }
             Event::Key(key)
                 if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right) =>
             {
                 debug!("CTRL+Right: switching tab view");
                 self.selected_tab = self.selected_tab.next();
-                self.invalidate();
             }
 
             // forward all other key events to the top layer
@@ -427,7 +424,7 @@ impl Ui {
                         match action.action {
                             UiActions::DismissDialog => {
                                 self.views[self.selected_tab as usize].pop();
-                                self.invalidate();
+                                // self.invalidate();
                             }
                             _ => {
                                 return Some(action);

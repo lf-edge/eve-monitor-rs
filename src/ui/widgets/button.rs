@@ -39,9 +39,10 @@ impl ButtonElement {
 impl IWidgetPresenter for ButtonElement {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
         trace!(
-            "Rendering button: {:?}: focused: {}",
+            "Rendering button: {:?}: focused: {} self.has_focus: {}",
             self.label.as_str(),
-            focused
+            focused,
+            self.has_focus()
         );
         // set border style based on focus
         let border_style = if focused {

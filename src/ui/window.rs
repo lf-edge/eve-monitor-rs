@@ -208,6 +208,7 @@ impl<D> IEventHandler for Window<D> {
                     }
                 }
             }
+            _ => {}
         }
         None
     }
@@ -351,12 +352,17 @@ impl<D> IPresenter for Window<D> {
         if let Some(layouter) = &mut self.do_layout {
             let layout = (layouter)(area).unwrap();
 
-            self.widgets.iter_mut().for_each(|(name, widget)| {
-                layout.get(name).and_then(|rect| {
-                    widget.render(rect, frame, *name == focused_widget);
-                    None::<D>
+            self.widgets
+                .iter_mut()
+                .filter_map(|(name, widget)| {
+                    layout
+                        .get(name)
+                        .inspect(|f| trace!("Layout for {}: {:#?}", name, f))
+                        .map(|r| (r, widget, *name == focused_widget))
+                })
+                .for_each(|(rect, widget, focused)| {
+                    widget.render(rect, frame, focused);
                 });
-            });
         } else {
             self.widgets
                 .iter_mut()

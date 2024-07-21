@@ -6,7 +6,7 @@ use core::fmt::Debug;
 use std::result::Result::Ok;
 
 use anyhow::Result;
-use log::{debug, info, warn};
+use log::{debug, info, trace, warn};
 
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::prelude::Constraint::Fill;
@@ -165,6 +165,9 @@ impl Application {
                             Some(Ok(crossterm::event::Event::Key(key))) => {
                                 terminal_tx_clone.send(Event::Key(key)).unwrap();
                             }
+                            Some(Ok(crossterm::event::Event::Resize(w, h))) => {
+                                terminal_tx_clone.send(Event::TerminalResize(w,h)).unwrap();
+                            }
                             Some(Ok(_)) => {}
                             Some(Err(e)) => {
                                 warn!("Error reading terminal event: {:?}", e);
@@ -194,6 +197,10 @@ impl Application {
                             }
                                 self.draw_ui().unwrap();
                             }
+                        Some(Event::TerminalResize(w, h)) => {
+                            info!("Terminal resized: {}x{}", w, h);
+                            self.draw_ui().unwrap();
+                        }
                         None => {
                             warn!("Terminal event stream ended");
                             break;
@@ -469,8 +476,10 @@ impl Ui {
             }
             // handle Tab key
             Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
+                trace!("Handling Tab key");
                 if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
                     let action = layer.handle_event(Event::Key(key));
+                    trace!("Tab key handled: {:?}", action);
                     if let Some(action) = action {
                         return Some(action);
                     }
@@ -506,6 +515,7 @@ impl Ui {
                     }
                 }
             }
+            _ => {}
         }
 
         None

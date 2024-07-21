@@ -1,6 +1,7 @@
 use crate::ui::action::Action;
 use crate::ui::activity::Activity;
 use crossterm::event::{KeyCode, KeyEvent};
+use log::trace;
 use ratatui::{
     buffer::Buffer,
     layout::{Alignment, Position, Rect},
@@ -79,7 +80,7 @@ impl InputFieldElement {
         self
     }
 
-    fn render_input_field(&mut self, area: &Rect, buf: &mut Buffer) {
+    fn render_input_field(&mut self, area: &Rect, buf: &mut Buffer, _focused: bool) {
         let style = if self.has_focus() {
             Style::default().fg(Color::Yellow)
         } else {
@@ -181,8 +182,13 @@ impl IElementEventHandler for InputFieldElement {
 
 impl IWidgetPresenter for InputFieldElement {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
-        //trace!("rendering: InputFieldElement {:#?}", &self);
-        self.render_input_field(area, frame.buffer_mut());
+        trace!(
+            "rendering: InputFieldElement {:#?}. fucused={} self.has_focus()={}",
+            &self.caption,
+            focused,
+            self.has_focus()
+        );
+        self.render_input_field(area, frame.buffer_mut(), focused);
 
         // set cursor position must be called every time to display the cursor
         // on the next redraw cycle

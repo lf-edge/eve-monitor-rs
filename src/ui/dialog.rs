@@ -215,6 +215,7 @@ impl<D> IEventHandler for Dialog<D> {
                 }
                 None
             }
+            _ => None,
         }
     }
 }

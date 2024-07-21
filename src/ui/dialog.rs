@@ -3,6 +3,7 @@ use crate::traits;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use log::debug;
+use ratatui::widgets::Clear;
 use ratatui::widgets::Paragraph;
 
 use crossterm::event::KeyEvent;
@@ -141,8 +142,10 @@ impl<D: 'static> IPresenter for Dialog<D> {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, dialog_focused: bool) {
         trace!("Rendering dialog: {}", self.name);
         self.do_layout(area);
+
         // render the dialog
         let frame_rect = self.layout.get("frame").unwrap();
+        Clear.render(*frame_rect, frame.buffer_mut());
 
         let block = Block::default()
             .borders(Borders::ALL)

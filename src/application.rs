@@ -1,6 +1,7 @@
 use crate::events::Event;
 use crate::traits::IWidgetPresenter;
 use crate::ui::homepage::HomePage;
+use crate::ui::widgets::label::{self, LabelElement};
 use core::fmt::Debug;
 
 use std::result::Result::Ok;
@@ -340,6 +341,12 @@ impl Ui {
         // .on_update(|input: &String| {
         let button = ButtonElement::new("Button");
 
+        let clock = LabelElement::new("Clock").on_tick(|label| {
+            let now = chrono::Local::now();
+            let time = now.format("%H:%M:%S").to_string();
+            label.set_text(time);
+        });
+
         let wnd = Window::builder("MainWnd")
             .with_state(MainWndState {
                 a: 42,
@@ -347,6 +354,7 @@ impl Ui {
             })
             .widget("3-1", Box::new(button))
             .widget("0-3", Box::new(input))
+            .widget("2-2", Box::new(clock))
             .with_layout(do_layout)
             .with_focused_view("Input")
             .on_action(|action, state: &mut MainWndState| {

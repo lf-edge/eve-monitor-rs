@@ -511,17 +511,29 @@ impl Ui {
                 debug!("CTRL+p: manual layer.pop() requested");
                 self.views[self.selected_tab as usize].pop();
             }
-            // handle Tab key
-            Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
-                trace!("Handling Tab key");
-                if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
-                    let action = layer.handle_event(Event::Key(key));
-                    trace!("Tab key handled: {:?}", action);
-                    if let Some(action) = action {
-                        return Some(action);
-                    }
-                }
+
+            // show dialog on ctrl+d
+            Event::Key(key)
+                if (key.code == KeyCode::Char('d')) && (key.modifiers == KeyModifiers::CONTROL) =>
+            {
+                debug!("CTRL+d: show dialog");
+
+                let s = IpDialogState {
+                    ip: "10.208.13.10".to_string(),
+                    mode: "DHCP".to_string(),
+                    gw: "1.1.1.1".to_string(),
+                };
+
+                let d: Dialog<MonActions> = Dialog::new(
+                    (50, 30),
+                    "confirm".to_string(),
+                    vec!["Ok".to_string(), "Cancel".to_string()],
+                    "Cancel",
+                    MonActions::NetworkInterfaceUpdated(s),
+                );
+                self.views[self.selected_tab as usize].push(Box::new(d));
             }
+
             // handle Tab switching
             Event::Key(key)
                 if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Left) =>

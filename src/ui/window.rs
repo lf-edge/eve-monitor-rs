@@ -89,7 +89,12 @@ impl<D> WindowBuilder<D> {
     pub fn build(self) -> Result<Window<D>> {
         //TODO: check focused view exists in widgets
         let ft = if let Some(order) = self.tab_order {
-            FocusTracker::create_from_taborder(order, self.focused_view, FocusMode::Wrap)
+            let tab_order = order
+                .clone()
+                .into_iter()
+                .filter(|name| self.widgets.get(name).is_some_and(|f| f.can_focus()))
+                .collect();
+            FocusTracker::create_from_taborder(tab_order, self.focused_view, FocusMode::Wrap)
         } else {
             FocusTracker::create_from_views(&self.widgets, self.focused_view, FocusMode::Wrap)
         };
@@ -211,7 +216,7 @@ impl<D> IEventHandler for Window<D> {
 
                 // forward to all widgets
                 self.widgets.iter_mut().for_each(|(_, widget)| {
-                    if let Some(activity) = widget.handle_tick() {
+                    if let Some(_activity) = widget.handle_tick() {
                         // match activity {
                         //     Activity::Action(action) => {
                         //         if let Some(on_action) = self.on_action.as_mut() {
@@ -386,7 +391,7 @@ impl<D> IPresenter for Window<D> {
         // rg.render(r, frame);
     }
 
-    fn is_focus_tracker(&self) -> bool {
+    fn can_focus(&self) -> bool {
         true
     }
 }

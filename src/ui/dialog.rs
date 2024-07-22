@@ -166,7 +166,7 @@ impl<D: 'static> IPresenter for Dialog<D> {
         self.render_contents(&content_area, frame, dialog_focused);
     }
 
-    fn is_focus_tracker(&self) -> bool {
+    fn can_focus(&self) -> bool {
         true
     }
 }

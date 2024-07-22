@@ -60,7 +60,7 @@ impl IPresenter for HomePage {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _: bool) {
         self.do_render(area, frame)
     }
-    fn is_focus_tracker(&self) -> bool {
+    fn can_focus(&self) -> bool {
         false
     }
 }

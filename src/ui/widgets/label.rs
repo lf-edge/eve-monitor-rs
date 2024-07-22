@@ -57,6 +57,10 @@ impl IWidgetPresenter for LabelElement {
             .style(Style::default().fg(Color::White));
         p.render_ref(*area, frame.buffer_mut());
     }
+
+    fn can_focus(&self) -> bool {
+        false
+    }
 }
 
 impl IElementEventHandler for LabelElement {

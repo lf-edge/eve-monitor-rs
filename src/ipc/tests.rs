@@ -65,9 +65,9 @@ fn test_device_network_status() {
 fn test_network_port_status() {
     let json_data = r#"
     {
-        "IfName": "eth1",
-        "Phylabel": "eth1",
-        "Logicallabel": "eth1",
+        "IfName": "eth0",
+        "Phylabel": "eth0",
+        "Logicallabel": "eth0",
         "Alias": "",
         "IsMgmt": true,
         "IsL3Port": true,
@@ -75,18 +75,18 @@ fn test_network_port_status() {
         "Dhcp": 4,
         "Type": 0,
         "Subnet": {
-            "IP": "192.168.2.0",
+            "IP": "192.168.1.0",
             "Mask": "////AA=="
         },
         "NtpServer": "",
         "DomainName": "",
         "DNSServers": [
-            "192.168.2.3"
+            "192.168.1.3"
         ],
         "NtpServers": null,
         "AddrInfoList": [
             {
-                "Addr": "192.168.2.10",
+                "Addr": "192.168.1.10",
                 "Geo": {
                     "ip": "",
                     "hostname": "",
@@ -100,7 +100,7 @@ fn test_network_port_status() {
                 "LastGeoTimestamp": "0001-01-01T00:00:00Z"
             },
             {
-                "Addr": "fec0::a9b0:f6ad:c7bd:8f25",
+                "Addr": "fec0::6e70:6edc:1bd3:4119",
                 "Geo": {
                     "ip": "",
                     "hostname": "",
@@ -114,7 +114,7 @@ fn test_network_port_status() {
                 "LastGeoTimestamp": "0001-01-01T00:00:00Z"
             },
             {
-                "Addr": "fe80::e552:bd0:adc7:b760",
+                "Addr": "fe80::ac64:4852:7b50:dc95",
                 "Geo": {
                     "ip": "",
                     "hostname": "",
@@ -129,9 +129,9 @@ fn test_network_port_status() {
             }
         ],
         "Up": true,
-        "MacAddr": "UlQAEjRX",
+        "MacAddr": "UlQAEjRW",
         "DefaultRouters": [
-            "192.168.2.2",
+            "192.168.1.2",
             "fe80::2"
         ],
         "MTU": 1500,
@@ -189,52 +189,47 @@ fn test_network_port_status() {
                 "LocationTracking": false
             }
         },
-        "ProxyConfig": {
-            "Proxies": null,
-            "Exceptions": "",
-            "Pacfile": "",
-            "NetworkProxyEnable": false,
-            "NetworkProxyURL": "",
-            "WpadURL": "",
-            "pubsub-large-ProxyCertPEM": null
+        "Proxies": null,
+        "Exceptions": "",
+        "Pacfile": "",
+        "NetworkProxyEnable": false,
+        "NetworkProxyURL": "",
+        "WpadURL": "",
+        "pubsub-large-ProxyCertPEM": null,
+        "L2Type": 0,
+        "VLAN": {
+            "ParentPort": "",
+            "ID": 0
         },
-        "L2LinkConfig": {
-            "L2Type": 0,
-            "VLAN": {
-                "ParentPort": "",
-                "ID": 0
+        "Bond": {
+            "AggregatedPorts": null,
+            "Mode": 0,
+            "LacpRate": 0,
+            "MIIMonitor": {
+                "Enabled": false,
+                "Interval": 0,
+                "UpDelay": 0,
+                "DownDelay": 0
             },
-            "Bond": {
-                "AggregatedPorts": null,
-                "Mode": 0,
-                "LacpRate": 0,
-                "MIIMonitor": {
-                    "Enabled": false,
-                    "Interval": 0,
-                    "UpDelay": 0,
-                    "DownDelay": 0
-                },
-                "ARPMonitor": {
-                    "Enabled": false,
-                    "Interval": 0,
-                    "IPTargets": null
-                }
+            "ARPMonitor": {
+                "Enabled": false,
+                "Interval": 0,
+                "IPTargets": null
             }
         },
-        "TestResults": {
-            "LastFailed": "0001-01-01T00:00:00Z",
-            "LastSucceeded": "2024-07-20T13:42:25.337286665Z",
-            "LastError": ""
-        }
-    }"#;
+        "LastFailed": "0001-01-01T00:00:00Z",
+        "LastSucceeded": "2024-07-22T06:27:18.593306585Z",
+        "LastError": ""
+    }
+    "#;
 
     let result: NetworkPortStatus = serde_json::from_str(&json_data).unwrap();
-    assert_eq!(result.if_name, "eth1");
+    assert_eq!(result.if_name, "eth0");
     assert_eq!(result.dhcp, DhcpType::Client);
     assert_eq!(
         result.subnet,
         GoIpNetwork {
-            ip: "192.168.2.0".to_string(),
+            ip: "192.168.1.0".to_string(),
             mask: "////AA==".to_string()
         }
     );
@@ -366,7 +361,7 @@ fn test_device_network_status_full() {
         "RadioSilence": {
             "Imposed": false,
             "ChangeInProgress": false,
-            "ChangeRequestedAt": "2024-07-20T13:42:22.968104941Z",
+            "ChangeRequestedAt": "2024-07-22T06:27:09.366225129Z",
             "ConfigError": ""
         },
         "Ports": [
@@ -406,7 +401,7 @@ fn test_device_network_status_full() {
                         "LastGeoTimestamp": "0001-01-01T00:00:00Z"
                     },
                     {
-                        "Addr": "fec0::afcd:7a81:e8f6:c6e0",
+                        "Addr": "fec0::6e70:6edc:1bd3:4119",
                         "Geo": {
                             "ip": "",
                             "hostname": "",
@@ -420,7 +415,7 @@ fn test_device_network_status_full() {
                         "LastGeoTimestamp": "0001-01-01T00:00:00Z"
                     },
                     {
-                        "Addr": "fe80::5cfb:e97f:f5d1:3bd3",
+                        "Addr": "fe80::ac64:4852:7b50:dc95",
                         "Geo": {
                             "ip": "",
                             "hostname": "",
@@ -495,43 +490,37 @@ fn test_device_network_status_full() {
                         "LocationTracking": false
                     }
                 },
-                "ProxyConfig": {
-                    "Proxies": null,
-                    "Exceptions": "",
-                    "Pacfile": "",
-                    "NetworkProxyEnable": false,
-                    "NetworkProxyURL": "",
-                    "WpadURL": "",
-                    "pubsub-large-ProxyCertPEM": null
+                "Proxies": null,
+                "Exceptions": "",
+                "Pacfile": "",
+                "NetworkProxyEnable": false,
+                "NetworkProxyURL": "",
+                "WpadURL": "",
+                "pubsub-large-ProxyCertPEM": null,
+                "L2Type": 0,
+                "VLAN": {
+                    "ParentPort": "",
+                    "ID": 0
                 },
-                "L2LinkConfig": {
-                    "L2Type": 0,
-                    "VLAN": {
-                        "ParentPort": "",
-                        "ID": 0
+                "Bond": {
+                    "AggregatedPorts": null,
+                    "Mode": 0,
+                    "LacpRate": 0,
+                    "MIIMonitor": {
+                        "Enabled": false,
+                        "Interval": 0,
+                        "UpDelay": 0,
+                        "DownDelay": 0
                     },
-                    "Bond": {
-                        "AggregatedPorts": null,
-                        "Mode": 0,
-                        "LacpRate": 0,
-                        "MIIMonitor": {
-                            "Enabled": false,
-                            "Interval": 0,
-                            "UpDelay": 0,
-                            "DownDelay": 0
-                        },
-                        "ARPMonitor": {
-                            "Enabled": false,
-                            "Interval": 0,
-                            "IPTargets": null
-                        }
+                    "ARPMonitor": {
+                        "Enabled": false,
+                        "Interval": 0,
+                        "IPTargets": null
                     }
                 },
-                "TestResults": {
-                    "LastFailed": "2024-07-20T13:42:25.337571756Z",
-                    "LastSucceeded": "0001-01-01T00:00:00Z",
-                    "LastError": "interface eth0: no suitable IP address available"
-                }
+                "LastFailed": "0001-01-01T00:00:00Z",
+                "LastSucceeded": "2024-07-22T06:27:18.593306585Z",
+                "LastError": ""
             },
             {
                 "IfName": "eth1",
@@ -569,7 +558,7 @@ fn test_device_network_status_full() {
                         "LastGeoTimestamp": "0001-01-01T00:00:00Z"
                     },
                     {
-                        "Addr": "fec0::a9b0:f6ad:c7bd:8f25",
+                        "Addr": "fec0::21b8:b579:8b9c:3cda",
                         "Geo": {
                             "ip": "",
                             "hostname": "",
@@ -583,7 +572,7 @@ fn test_device_network_status_full() {
                         "LastGeoTimestamp": "0001-01-01T00:00:00Z"
                     },
                     {
-                        "Addr": "fe80::e552:bd0:adc7:b760",
+                        "Addr": "fe80::6f27:5660:de21:d553",
                         "Geo": {
                             "ip": "",
                             "hostname": "",
@@ -658,46 +647,41 @@ fn test_device_network_status_full() {
                         "LocationTracking": false
                     }
                 },
-                "ProxyConfig": {
-                    "Proxies": null,
-                    "Exceptions": "",
-                    "Pacfile": "",
-                    "NetworkProxyEnable": false,
-                    "NetworkProxyURL": "",
-                    "WpadURL": "",
-                    "pubsub-large-ProxyCertPEM": null
+                "Proxies": null,
+                "Exceptions": "",
+                "Pacfile": "",
+                "NetworkProxyEnable": false,
+                "NetworkProxyURL": "",
+                "WpadURL": "",
+                "pubsub-large-ProxyCertPEM": null,
+                "L2Type": 0,
+                "VLAN": {
+                    "ParentPort": "",
+                    "ID": 0
                 },
-                "L2LinkConfig": {
-                    "L2Type": 0,
-                    "VLAN": {
-                        "ParentPort": "",
-                        "ID": 0
+                "Bond": {
+                    "AggregatedPorts": null,
+                    "Mode": 0,
+                    "LacpRate": 0,
+                    "MIIMonitor": {
+                        "Enabled": false,
+                        "Interval": 0,
+                        "UpDelay": 0,
+                        "DownDelay": 0
                     },
-                    "Bond": {
-                        "AggregatedPorts": null,
-                        "Mode": 0,
-                        "LacpRate": 0,
-                        "MIIMonitor": {
-                            "Enabled": false,
-                            "Interval": 0,
-                            "UpDelay": 0,
-                            "DownDelay": 0
-                        },
-                        "ARPMonitor": {
-                            "Enabled": false,
-                            "Interval": 0,
-                            "IPTargets": null
-                        }
+                    "ARPMonitor": {
+                        "Enabled": false,
+                        "Interval": 0,
+                        "IPTargets": null
                     }
                 },
-                "TestResults": {
-                    "LastFailed": "0001-01-01T00:00:00Z",
-                    "LastSucceeded": "2024-07-20T13:42:25.337286665Z",
-                    "LastError": ""
-                }
+                "LastFailed": "2024-07-22T06:27:12.052879635Z",
+                "LastSucceeded": "0001-01-01T00:00:00Z",
+                "LastError": "All attempts to connect to https://zedcloud.alpha.zededa.net/api/v2/edgedevice/ping failed: interface eth1: no DNS server available"
             }
         ]
-    }"#;
+    }
+    "#;
 
     let result: DeviceNetworkStatus = serde_json::from_str(json_data).unwrap();
     assert_eq!(result.dpc_key, "lastresort");
@@ -725,12 +709,10 @@ fn test_dpc_list_full() {
                 "State": 3,
                 "ShaFile": "",
                 "ShaValue": null,
-                "TestResults": {
-                    "LastFailed": "0001-01-01T00:00:00Z",
-                    "LastSucceeded": "2024-07-20T13:42:25.337627565Z",
-                    "LastError": ""
-                },
-                "LastIPAndDNS": "2024-07-20T13:42:25.337627377Z",
+                "LastFailed": "0001-01-01T00:00:00Z",
+                "LastSucceeded": "2024-07-22T06:27:18.593415043Z",
+                "LastError": "",
+                "LastIPAndDNS": "2024-07-22T06:27:18.593414631Z",
                 "Ports": [
                     {
                         "IfName": "eth0",
@@ -743,45 +725,39 @@ fn test_dpc_list_full() {
                         "IsMgmt": true,
                         "IsL3Port": true,
                         "Cost": 0,
-                        "DhcpConfig": {
-                            "Dhcp": 4,
-                            "AddrSubnet": "",
-                            "Gateway": "",
-                            "DomainName": "",
-                            "NTPServer": "",
-                            "DNSServers": null,
-                            "Type": 0
+                        "Dhcp": 4,
+                        "AddrSubnet": "",
+                        "Gateway": "",
+                        "DomainName": "",
+                        "NTPServer": "",
+                        "DNSServers": null,
+                        "Type": 0,
+                        "Proxies": null,
+                        "Exceptions": "",
+                        "Pacfile": "",
+                        "NetworkProxyEnable": false,
+                        "NetworkProxyURL": "",
+                        "WpadURL": "",
+                        "pubsub-large-ProxyCertPEM": null,
+                        "L2Type": 0,
+                        "VLAN": {
+                            "ParentPort": "",
+                            "ID": 0
                         },
-                        "ProxyConfig": {
-                            "Proxies": null,
-                            "Exceptions": "",
-                            "Pacfile": "",
-                            "NetworkProxyEnable": false,
-                            "NetworkProxyURL": "",
-                            "WpadURL": "",
-                            "pubsub-large-ProxyCertPEM": null
-                        },
-                        "L2LinkConfig": {
-                            "L2Type": 0,
-                            "VLAN": {
-                                "ParentPort": "",
-                                "ID": 0
+                        "Bond": {
+                            "AggregatedPorts": null,
+                            "Mode": 0,
+                            "LacpRate": 0,
+                            "MIIMonitor": {
+                                "Enabled": false,
+                                "Interval": 0,
+                                "UpDelay": 0,
+                                "DownDelay": 0
                             },
-                            "Bond": {
-                                "AggregatedPorts": null,
-                                "Mode": 0,
-                                "LacpRate": 0,
-                                "MIIMonitor": {
-                                    "Enabled": false,
-                                    "Interval": 0,
-                                    "UpDelay": 0,
-                                    "DownDelay": 0
-                                },
-                                "ARPMonitor": {
-                                    "Enabled": false,
-                                    "Interval": 0,
-                                    "IPTargets": null
-                                }
+                            "ARPMonitor": {
+                                "Enabled": false,
+                                "Interval": 0,
+                                "IPTargets": null
                             }
                         },
                         "WirelessCfg": {
@@ -797,11 +773,9 @@ fn test_dpc_list_full() {
                             "Wifi": null,
                             "Cellular": null
                         },
-                        "TestResults": {
-                            "LastFailed": "2024-07-20T13:42:25.337571756Z",
-                            "LastSucceeded": "0001-01-01T00:00:00Z",
-                            "LastError": "interface eth0: no suitable IP address available"
-                        }
+                        "LastFailed": "0001-01-01T00:00:00Z",
+                        "LastSucceeded": "2024-07-22T06:27:18.593306585Z",
+                        "LastError": ""
                     },
                     {
                         "IfName": "eth1",
@@ -814,45 +788,39 @@ fn test_dpc_list_full() {
                         "IsMgmt": true,
                         "IsL3Port": true,
                         "Cost": 0,
-                        "DhcpConfig": {
-                            "Dhcp": 4,
-                            "AddrSubnet": "",
-                            "Gateway": "",
-                            "DomainName": "",
-                            "NTPServer": "",
-                            "DNSServers": null,
-                            "Type": 0
+                        "Dhcp": 4,
+                        "AddrSubnet": "",
+                        "Gateway": "",
+                        "DomainName": "",
+                        "NTPServer": "",
+                        "DNSServers": null,
+                        "Type": 0,
+                        "Proxies": null,
+                        "Exceptions": "",
+                        "Pacfile": "",
+                        "NetworkProxyEnable": false,
+                        "NetworkProxyURL": "",
+                        "WpadURL": "",
+                        "pubsub-large-ProxyCertPEM": null,
+                        "L2Type": 0,
+                        "VLAN": {
+                            "ParentPort": "",
+                            "ID": 0
                         },
-                        "ProxyConfig": {
-                            "Proxies": null,
-                            "Exceptions": "",
-                            "Pacfile": "",
-                            "NetworkProxyEnable": false,
-                            "NetworkProxyURL": "",
-                            "WpadURL": "",
-                            "pubsub-large-ProxyCertPEM": null
-                        },
-                        "L2LinkConfig": {
-                            "L2Type": 0,
-                            "VLAN": {
-                                "ParentPort": "",
-                                "ID": 0
+                        "Bond": {
+                            "AggregatedPorts": null,
+                            "Mode": 0,
+                            "LacpRate": 0,
+                            "MIIMonitor": {
+                                "Enabled": false,
+                                "Interval": 0,
+                                "UpDelay": 0,
+                                "DownDelay": 0
                             },
-                            "Bond": {
-                                "AggregatedPorts": null,
-                                "Mode": 0,
-                                "LacpRate": 0,
-                                "MIIMonitor": {
-                                    "Enabled": false,
-                                    "Interval": 0,
-                                    "UpDelay": 0,
-                                    "DownDelay": 0
-                                },
-                                "ARPMonitor": {
-                                    "Enabled": false,
-                                    "Interval": 0,
-                                    "IPTargets": null
-                                }
+                            "ARPMonitor": {
+                                "Enabled": false,
+                                "Interval": 0,
+                                "IPTargets": null
                             }
                         },
                         "WirelessCfg": {
@@ -868,11 +836,9 @@ fn test_dpc_list_full() {
                             "Wifi": null,
                             "Cellular": null
                         },
-                        "TestResults": {
-                            "LastFailed": "0001-01-01T00:00:00Z",
-                            "LastSucceeded": "2024-07-20T13:42:25.337286665Z",
-                            "LastError": ""
-                        }
+                        "LastFailed": "2024-07-22T06:27:12.052879635Z",
+                        "LastSucceeded": "0001-01-01T00:00:00Z",
+                        "LastError": "All attempts to connect to https://zedcloud.alpha.zededa.net/api/v2/edgedevice/ping failed: interface eth1: no DNS server available"
                     }
                 ]
             }

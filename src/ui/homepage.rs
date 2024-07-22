@@ -1,9 +1,5 @@
 use crate::events;
-use crate::traits::IEventHandler;
-use crate::traits::IFocusAcceptor;
-use crate::traits::IFocusTracker;
-use crate::traits::IPresenter;
-use crate::traits::IWindow;
+use crate::traits::{IEventHandler, IPresenter, IWindow};
 use crate::ui::action::Action;
 use crate::ui::window::LayoutMap;
 use log::debug;
@@ -66,20 +62,6 @@ impl IPresenter for HomePage {
     }
     fn is_focus_tracker(&self) -> bool {
         false
-    }
-}
-
-impl IFocusAcceptor for HomePage {}
-
-impl IFocusTracker for HomePage {
-    fn focus_next(&mut self) -> Option<String> {
-        None
-    }
-    fn focus_prev(&mut self) -> Option<String> {
-        None
-    }
-    fn get_focused_view_name(&self) -> Option<String> {
-        None
     }
 }
 

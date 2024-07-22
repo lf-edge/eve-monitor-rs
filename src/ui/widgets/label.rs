@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::{
-    traits::{IElementEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
+    traits::{IElementEventHandler, IWidget, IWidgetPresenter},
     ui::activity::Activity,
 };
 
@@ -46,12 +46,6 @@ impl LabelElement {
             self.text = new_text;
             self.state_updated = true;
         }
-    }
-}
-
-impl IFocusAcceptor for LabelElement {
-    fn can_focus(&self) -> bool {
-        false
     }
 }
 

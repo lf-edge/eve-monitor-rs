@@ -6,9 +6,7 @@ use std::{cell::RefCell, fmt::Debug};
 use log::{debug, trace, warn};
 use ratatui::layout::Rect;
 
-use crate::traits::{
-    IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible, IWidget, IWindow,
-};
+use crate::traits::{IEventHandler, IPresenter, IVisible, IWidget, IWindow};
 use anyhow::Result;
 
 use super::{
@@ -241,121 +239,92 @@ impl<D> IEventHandler for Window<D> {
     }
 }
 
-impl<D> IFocusTracker for Window<D> {
-    fn focus_next(&mut self) -> Option<String> {
-        debug!("focus_next: on: {}", &self.name);
-        trace!("focus_next: {:#?}", &self.ft);
+// impl<D> IFocusTracker for Window<D> {
+//     fn focus_next(&mut self) -> Option<String> {
+//         debug!("focus_next: on: {}", &self.name);
+//         trace!("focus_next: {:#?}", &self.ft);
 
-        // Clear focus from the current focused view, if there is one
-        if let Some(focused_view) = self.ft.get_focused_view() {
-            if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                widget.clear_focus();
-            } else {
-                warn!("Focused view not found in widgets: {}", focused_view);
-            }
-        }
+//         // Clear focus from the current focused view, if there is one
+//         if let Some(focused_view) = self.ft.get_focused_view() {
+//             if let Some(widget) = self.widgets.get_mut(&focused_view) {
+//                 widget.clear_focus();
+//             } else {
+//                 warn!("Focused view not found in widgets: {}", focused_view);
+//             }
+//         }
 
-        // Loop to find the next view that can take focus
-        loop {
-            let next = self.ft.focus_next();
-            trace!("Next focused view candidate: {:?}", &next);
+//         // Loop to find the next view that can take focus
+//         loop {
+//             let next = self.ft.focus_next();
+//             trace!("Next focused view candidate: {:?}", &next);
 
-            match next {
-                Some(focused_view) => {
-                    if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                        if widget.can_focus() {
-                            debug!("setting focus: {}", focused_view);
-                            widget.set_focus(true);
-                            return Some(focused_view);
-                        } else {
-                            trace!("Next focused view is not a focus tracker: {}", focused_view);
-                        }
-                    } else {
-                        warn!("Next focused view not found in widgets: {}", focused_view);
-                    }
-                }
-                None => {
-                    // Break the loop if there are no more views to focus on
-                    return None;
-                }
-            }
-        }
-    }
+//             match next {
+//                 Some(focused_view) => {
+//                     if let Some(widget) = self.widgets.get_mut(&focused_view) {
+//                         if widget.can_focus() {
+//                             debug!("setting focus: {}", focused_view);
+//                             widget.set_focus(true);
+//                             return Some(focused_view);
+//                         } else {
+//                             trace!("Next focused view is not a focus tracker: {}", focused_view);
+//                         }
+//                     } else {
+//                         warn!("Next focused view not found in widgets: {}", focused_view);
+//                     }
+//                 }
+//                 None => {
+//                     // Break the loop if there are no more views to focus on
+//                     return None;
+//                 }
+//             }
+//         }
+//     }
 
-    fn focus_prev(&mut self) -> Option<String> {
-        debug!("focus_prev: on: {}", &self.name);
-        trace!("focus_prev: {:#?}", &self.ft);
-        // Clear focus from the current focused view, if there is one
-        if let Some(focused_view) = self.ft.get_focused_view() {
-            if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                widget.clear_focus();
-            } else {
-                warn!("Focused view not found in widgets: {}", focused_view);
-            }
-        }
+//     fn focus_prev(&mut self) -> Option<String> {
+//         debug!("focus_prev: on: {}", &self.name);
+//         trace!("focus_prev: {:#?}", &self.ft);
+//         // Clear focus from the current focused view, if there is one
+//         if let Some(focused_view) = self.ft.get_focused_view() {
+//             if let Some(widget) = self.widgets.get_mut(&focused_view) {
+//                 widget.clear_focus();
+//             } else {
+//                 warn!("Focused view not found in widgets: {}", focused_view);
+//             }
+//         }
 
-        // Loop to find the next view that can take focus
-        loop {
-            let next = self.ft.focus_prev();
-            trace!("Next focused view candidate: {:#?}", &next);
+//         // Loop to find the next view that can take focus
+//         loop {
+//             let next = self.ft.focus_prev();
+//             trace!("Next focused view candidate: {:#?}", &next);
 
-            match next {
-                Some(focused_view) => {
-                    if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                        if widget.can_focus() {
-                            debug!("setting focus: {}", focused_view);
-                            widget.set_focus(true);
-                            return Some(focused_view);
-                        } else {
-                            trace!("Next focused view is not a focus tracker: {}", focused_view);
-                        }
-                    } else {
-                        warn!("Next focused view not found in widgets: {}", focused_view);
-                    }
-                }
-                None => {
-                    // Break the loop if there are no more views to focus on
-                    return None;
-                }
-            }
-        }
-    }
+//             match next {
+//                 Some(focused_view) => {
+//                     if let Some(widget) = self.widgets.get_mut(&focused_view) {
+//                         if widget.can_focus() {
+//                             debug!("setting focus: {}", focused_view);
+//                             widget.set_focus(true);
+//                             return Some(focused_view);
+//                         } else {
+//                             trace!("Next focused view is not a focus tracker: {}", focused_view);
+//                         }
+//                     } else {
+//                         warn!("Next focused view not found in widgets: {}", focused_view);
+//                     }
+//                 }
+//                 None => {
+//                     // Break the loop if there are no more views to focus on
+//                     return None;
+//                 }
+//             }
+//         }
+//     }
 
-    fn get_focused_view_name(&self) -> Option<String> {
-        self.ft.get_focused_view()
-    }
-}
+//     fn get_focused_view_name(&self) -> Option<String> {
+//         self.ft.get_focused_view()
+//     }
+// }
 
 impl<D> IVisible for Window<D> {}
-impl<D> IFocusAcceptor for Window<D> {
-    fn set_focus(&mut self, focus: bool) {
-        self.v.focused = focus;
-        // set focus on focused view
-        if let Some(focused_view) = self.ft.get_focused_view() {
-            if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                widget.set_focus(true);
-            }
-        }
-    }
-
-    fn clear_focus(&mut self) {
-        self.v.focused = false;
-        // clear focus on focused view
-        if let Some(focused_view) = self.ft.get_focused_view() {
-            if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                widget.clear_focus();
-            }
-        }
-    }
-
-    fn has_focus(&self) -> bool {
-        self.v.focused
-    }
-
-    fn can_focus(&self) -> bool {
-        self.v.can_focus
-    }
-}
 impl<D> IPresenter for Window<D> {
     // fn do_layout(
     //     &mut self,

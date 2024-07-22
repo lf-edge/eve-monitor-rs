@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::{
-    traits::{IElementEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
+    traits::{IElementEventHandler, IWidget, IWidgetPresenter},
     ui::action::UiActions,
 };
 
@@ -39,10 +39,9 @@ impl ButtonElement {
 impl IWidgetPresenter for ButtonElement {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
         trace!(
-            "Rendering button: {:?}: focused: {} self.has_focus: {}",
+            "Rendering button: {:?}: focused: {}",
             self.label.as_str(),
-            focused,
-            self.has_focus()
+            focused
         );
         // set border style based on focus
         let border_style = if focused {
@@ -108,21 +107,3 @@ impl IElementEventHandler for ButtonElement {
 }
 
 impl IWidget for ButtonElement {}
-
-impl IFocusAcceptor for ButtonElement {
-    fn set_focus(&mut self, focus: bool) {
-        self.v.focused = focus;
-    }
-
-    fn clear_focus(&mut self) {
-        self.v.focused = false;
-    }
-
-    fn has_focus(&self) -> bool {
-        self.v.focused
-    }
-
-    fn can_focus(&self) -> bool {
-        self.v.can_focus
-    }
-}

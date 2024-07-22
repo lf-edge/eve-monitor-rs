@@ -1,5 +1,4 @@
 use crate::events;
-use crate::traits;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use log::debug;
@@ -15,7 +14,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::traits::{IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible, IWindow};
+use crate::traits::{IEventHandler, IPresenter, IVisible, IWindow};
 
 use super::{
     action::{Action, UiActions},
@@ -115,20 +114,6 @@ impl<D: 'static> Dialog<D> {
 
 impl<D: 'static> IWindow for Dialog<D> {}
 
-impl<D> IFocusTracker for Dialog<D> {
-    fn focus_next(&mut self) -> Option<String> {
-        self.focus.focus_next()
-    }
-
-    fn focus_prev(&mut self) -> Option<String> {
-        self.focus.focus_prev()
-    }
-
-    fn get_focused_view_name(&self) -> Option<String> {
-        self.focus.get_focused_view()
-    }
-}
-
 impl<D: 'static> IPresenter for Dialog<D> {
     // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect> {
     //     self.do_layout(area);
@@ -182,23 +167,6 @@ impl<D: 'static> IPresenter for Dialog<D> {
     }
 
     fn is_focus_tracker(&self) -> bool {
-        true
-    }
-}
-
-impl<D> IFocusAcceptor for Dialog<D> {
-    fn has_focus(&self) -> bool {
-        // dialog is always focused
-        true
-    }
-
-    fn set_focus(&mut self, _: bool) {}
-
-    fn clear_focus(&mut self) {
-        // NOP, as dialog is always focused
-    }
-
-    fn can_focus(&self) -> bool {
         true
     }
 }

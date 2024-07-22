@@ -1,5 +1,3 @@
-use std::rc::Rc;
-
 use crossterm::event::{KeyCode, KeyEvent};
 use log::{info, trace};
 use ratatui::{
@@ -10,7 +8,7 @@ use ratatui::{
 };
 
 use crate::{
-    traits::{IElementEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
+    traits::{IElementEventHandler, IWidget, IWidgetPresenter},
     ui::activity::Activity,
 };
 
@@ -45,9 +43,9 @@ impl RadioGroupElement {
 }
 
 impl IWidgetPresenter for RadioGroupElement {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool) {
         //trace!("rendering: RadioGroupElement {:#?}", &self);
-        let style = if self.has_focus() {
+        let style = if focused {
             Style::default().fg(Color::Yellow)
         } else {
             Style::default().fg(Color::White)
@@ -76,7 +74,7 @@ impl IWidgetPresenter for RadioGroupElement {
                 format!("{} ( )", label)
             };
 
-            if self.focused == i {
+            if self.focused == i && focused {
                 style = style.add_modifier(selected_style);
             }
 
@@ -106,23 +104,5 @@ impl IElementEventHandler for RadioGroupElement {
                 return None;
             }
         }
-    }
-}
-
-impl IFocusAcceptor for RadioGroupElement {
-    fn set_focus(&mut self, focus: bool) {
-        self.v.focused = focus;
-    }
-
-    fn clear_focus(&mut self) {
-        self.v.focused = false;
-    }
-
-    fn has_focus(&self) -> bool {
-        self.v.focused
-    }
-
-    fn can_focus(&self) -> bool {
-        true
     }
 }

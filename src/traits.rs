@@ -18,29 +18,6 @@ pub trait IVisible {
     fn set_visible(&mut self, _visible: bool) {}
 }
 
-pub trait IFocusAcceptor {
-    fn set_focus(&mut self, _focus: bool) {}
-    fn clear_focus(&mut self) {}
-    fn has_focus(&self) -> bool {
-        false
-    }
-    fn can_focus(&self) -> bool {
-        true
-    }
-}
-
-pub trait IFocusTracker {
-    fn focus_next(&mut self) -> Option<String> {
-        None
-    }
-    fn focus_prev(&mut self) -> Option<String> {
-        None
-    }
-    fn get_focused_view_name(&self) -> Option<String> {
-        None
-    }
-}
-
 pub trait IEventHandler {
     fn handle_event(&mut self, _event: Event) -> Option<Action> {
         None
@@ -60,8 +37,8 @@ pub trait IWidgetPresenter {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool);
 }
 
-pub trait IWindow: IPresenter + IFocusAcceptor + IFocusTracker + IEventHandler {}
-pub trait IWidget: IWidgetPresenter + IElementEventHandler + IFocusAcceptor {}
+pub trait IWindow: IPresenter + IEventHandler {}
+pub trait IWidget: IWidgetPresenter + IElementEventHandler {}
 
 pub trait IAction: Clone {
     type Target;

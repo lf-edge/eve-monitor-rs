@@ -196,8 +196,12 @@ impl Application {
         // send initial redraw event
         self.invalidate();
 
+        let mut do_redraw = false;
+
         // listen on the action channel and terminal channel
         loop {
+            do_redraw = false;
+
             tokio::select! {
                 tick = timer_rx.recv() => {
                     match tick {
@@ -205,6 +209,9 @@ impl Application {
                             let action = self.ui.handle_event(event);
                             if let Some(action) = action {
                                 trace!("Event loop got action on tick: {:?}", action);
+                                if action.action == UiActions::Redraw {
+                                    do_redraw = true;
+                                }
                             }
                         }
                         None => {
@@ -219,12 +226,14 @@ impl Application {
                             let action = self.ui.handle_event(Event::Key(key));
                             if let Some(action) = action {
                                 info!("Event loop got action: {:?}", action);
+                                if action.action == UiActions::Redraw {
+                                    do_redraw = true;
+                                }
                             }
-                                self.draw_ui().unwrap();
-                            }
+                         }
                         Some(Event::TerminalResize(w, h)) => {
                             info!("Terminal resized: {}x{}", w, h);
-                            self.draw_ui().unwrap();
+                            do_redraw = true;
                         }
                         None => {
                             warn!("Terminal event stream ended");
@@ -252,7 +261,8 @@ impl Application {
                             info!("Async Action: {:?}", action);
                             match action.action {
                                 UiActions::Redraw => {
-                                    self.draw_ui().unwrap();
+                                    // TODO: try receive all Readraw
+                                    do_redraw = true;
                                 }
                                 UiActions::Quit => {
                                     break;
@@ -267,6 +277,10 @@ impl Application {
                         }
                     }
                 }
+            }
+            if do_redraw {
+                trace!("Redraw requested");
+                self.draw_ui()?;
             }
         }
 
@@ -380,7 +394,9 @@ impl Ui {
                         )));
                     }
                     _ => {
-                        warn!("Unhandled action: {:?}", action);
+                        if action.action != UiActions::Redraw {
+                            warn!("Unhandled action: {:?}", action);
+                        }
                     }
                 }
                 // match action.action {

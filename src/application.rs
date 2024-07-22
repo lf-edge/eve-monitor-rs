@@ -95,6 +95,7 @@ impl Application {
         // TODO: handle suspend/resume for the case when we give away /dev/tty
         let (ipc_tx, mut ipc_rx) = mpsc::unbounded_channel::<IpcMessage>();
         let (ipc_cmd_tx, mut ipc_cmd_rx) = mpsc::unbounded_channel::<IpcMessage>();
+        let (timer_tx, mut timer_rx) = mpsc::unbounded_channel::<Event>();
 
         // to send IPC messages from the task back to app
         let ipc_tx_clone = ipc_tx.clone();
@@ -183,11 +184,33 @@ impl Application {
         });
 
         // send initial redraw event
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                timer_tx.send(Event::Tick).unwrap();
+            }
+        });
+
+        // send initial redraw event
         self.invalidate();
 
         // listen on the action channel and terminal channel
         loop {
             tokio::select! {
+                tick = timer_rx.recv() => {
+                    match tick {
+                        Some(event) => {
+                            let action = self.ui.handle_event(event);
+                            if let Some(action) = action {
+                                trace!("Event loop got action on tick: {:?}", action);
+                            }
+                        }
+                        None => {
+                            warn!("Timer stream ended");
+                            break;
+                        }
+                    }
+                }
                 event = self.terminal_rx.recv() => {
                     match event {
                         Some(Event::Key(key)) => {
@@ -205,6 +228,7 @@ impl Application {
                             warn!("Terminal event stream ended");
                             break;
                         }
+                        _ => {}
                     }
 
                 }
@@ -515,7 +539,17 @@ impl Ui {
                     }
                 }
             }
-            _ => {}
+            Event::Tick => {
+                // forward tick event to all layers. Callect actions
+                for layer in self.views[self.selected_tab as usize].iter_mut() {
+                    if let Some(action) = layer.handle_event(Event::Tick) {
+                        self.action_tx.send(action).unwrap();
+                    }
+                }
+            }
+            _ => {
+                debug!("Unhandled event: {:?}", event);
+            }
         }
 
         None

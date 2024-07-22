@@ -1,6 +1,6 @@
 use ratatui::{buffer::Buffer, layout::Rect};
 
-use crate::traits::{IFocusAcceptor, IVisible, IWidgetPresenter};
+use crate::traits::{IVisible, IWidgetPresenter};
 
 #[derive(Debug)]
 pub struct VisualState {
@@ -39,27 +39,6 @@ where
     }
 }
 
-impl<D> IFocusAcceptor for StaticElement<D>
-where
-    Self: IWidgetPresenter,
-{
-    fn set_focus(&mut self, focus: bool) {
-        self.v.focused = focus;
-    }
-
-    fn clear_focus(&mut self) {
-        self.v.focused = false;
-    }
-
-    fn has_focus(&self) -> bool {
-        self.v.focused
-    }
-
-    fn can_focus(&self) -> bool {
-        self.v.can_focus
-    }
-}
-
 pub trait IStandardRenderer {
     fn render(&self, area: &Rect, buf: &mut Buffer);
 }
@@ -68,8 +47,7 @@ impl<S> IWidgetPresenter for StaticElement<S>
 where
     Self: IStandardRenderer,
 {
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
-        self.set_focus(focused);
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, _focused: bool) {
         // call render from IStandardRenderer
         <StaticElement<S> as IStandardRenderer>::render(self, area, frame.buffer_mut());
     }

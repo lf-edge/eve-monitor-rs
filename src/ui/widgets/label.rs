@@ -9,7 +9,7 @@ use ratatui::{
 };
 
 use crate::{
-    traits::{IElementEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
+    traits::{IElementEventHandler, IWidget, IWidgetPresenter},
     ui::activity::Activity,
 };
 
@@ -49,12 +49,6 @@ impl LabelElement {
     }
 }
 
-impl IFocusAcceptor for LabelElement {
-    fn can_focus(&self) -> bool {
-        false
-    }
-}
-
 impl IWidgetPresenter for LabelElement {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
         let text = self.text.clone();
@@ -62,6 +56,10 @@ impl IWidgetPresenter for LabelElement {
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::White));
         p.render_ref(*area, frame.buffer_mut());
+    }
+
+    fn can_focus(&self) -> bool {
+        false
     }
 }
 

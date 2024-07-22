@@ -1,7 +1,6 @@
 use crate::events::Event;
-use crate::traits::IWidgetPresenter;
 use crate::ui::homepage::HomePage;
-use crate::ui::widgets::label::{self, LabelElement};
+use crate::ui::widgets::label::LabelElement;
 use crate::ui::widgets::radiogroup::RadioGroupElement;
 use core::fmt::Debug;
 
@@ -20,7 +19,6 @@ use ratatui::text::Line;
 use ratatui::widgets::Block;
 use ratatui::widgets::Tabs;
 use ratatui::widgets::Widget;
-use ratatui::Frame;
 
 use strum::EnumCount;
 use strum::{Display, EnumIter, FromRepr, IntoEnumIterator};
@@ -36,7 +34,7 @@ use crossterm::event::KeyModifiers;
 
 use crate::actions::{IpDialogState, MainWndState, MonActions};
 use crate::ipc::ipc_client::IpcClient;
-use crate::ipc::message::{IpcMessage, Request, RpcCommand};
+use crate::ipc::message::IpcMessage;
 use crate::terminal::TerminalWrapper;
 use crate::ui::action::{Action, UiActions};
 use crate::ui::dialog::Dialog;

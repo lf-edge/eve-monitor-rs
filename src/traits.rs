@@ -6,8 +6,8 @@ use ratatui::{layout::Rect, Frame};
 pub trait IPresenter {
     // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect>;
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool);
-    fn is_focus_tracker(&self) -> bool {
-        false
+    fn can_focus(&self) -> bool {
+        true
     }
 }
 
@@ -16,29 +16,6 @@ pub trait IVisible {
         true
     }
     fn set_visible(&mut self, _visible: bool) {}
-}
-
-pub trait IFocusAcceptor {
-    fn set_focus(&mut self, _focus: bool) {}
-    fn clear_focus(&mut self) {}
-    fn has_focus(&self) -> bool {
-        false
-    }
-    fn can_focus(&self) -> bool {
-        true
-    }
-}
-
-pub trait IFocusTracker {
-    fn focus_next(&mut self) -> Option<String> {
-        None
-    }
-    fn focus_prev(&mut self) -> Option<String> {
-        None
-    }
-    fn get_focused_view_name(&self) -> Option<String> {
-        None
-    }
 }
 
 pub trait IEventHandler {
@@ -58,10 +35,13 @@ pub trait IElementEventHandler {
 
 pub trait IWidgetPresenter {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool);
+    fn can_focus(&self) -> bool {
+        true
+    }
 }
 
-pub trait IWindow: IPresenter + IFocusAcceptor + IFocusTracker + IEventHandler {}
-pub trait IWidget: IWidgetPresenter + IElementEventHandler + IFocusAcceptor {}
+pub trait IWindow: IPresenter + IEventHandler {}
+pub trait IWidget: IWidgetPresenter + IElementEventHandler {}
 
 pub trait IAction: Clone {
     type Target;

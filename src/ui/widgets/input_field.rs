@@ -1,4 +1,3 @@
-use crate::ui::action::Action;
 use crate::ui::activity::Activity;
 use crossterm::event::{KeyCode, KeyEvent};
 use log::trace;
@@ -10,7 +9,7 @@ use ratatui::{
 };
 
 use crate::{
-    traits::{IElementEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
+    traits::{IElementEventHandler, IWidget, IWidgetPresenter},
     ui::action::UiActions,
 };
 
@@ -84,8 +83,8 @@ impl InputFieldElement {
         self
     }
 
-    fn render_input_field(&mut self, area: &Rect, buf: &mut Buffer, _focused: bool) {
-        let style = if self.has_focus() {
+    fn render_input_field(&mut self, area: &Rect, buf: &mut Buffer, focused: bool) {
+        let style = if focused {
             Style::default().fg(Color::Yellow)
         } else {
             Style::default().fg(Color::White)
@@ -218,10 +217,9 @@ impl IElementEventHandler for InputFieldElement {
 impl IWidgetPresenter for InputFieldElement {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
         trace!(
-            "rendering: InputFieldElement {:#?}. fucused={} self.has_focus()={}",
+            "rendering: InputFieldElement {:#?}. fucused={}",
             &self.caption,
-            focused,
-            self.has_focus()
+            focused
         );
         self.render_input_field(area, frame.buffer_mut(), focused);
 
@@ -230,23 +228,5 @@ impl IWidgetPresenter for InputFieldElement {
         if focused {
             frame.set_cursor(self.text_area.x + self.cursor_position, self.text_area.y);
         }
-    }
-}
-
-impl IFocusAcceptor for InputFieldElement {
-    fn set_focus(&mut self, focus: bool) {
-        self.v.focused = focus;
-    }
-
-    fn clear_focus(&mut self) {
-        self.v.focused = false;
-    }
-
-    fn has_focus(&self) -> bool {
-        self.v.focused
-    }
-
-    fn can_focus(&self) -> bool {
-        true
     }
 }

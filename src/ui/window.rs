@@ -3,12 +3,10 @@ use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use std::{cell::RefCell, fmt::Debug};
 
-use log::{debug, trace, warn};
+use log::trace;
 use ratatui::layout::Rect;
 
-use crate::traits::{
-    IEventHandler, IFocusAcceptor, IFocusTracker, IPresenter, IVisible, IWidget, IWindow,
-};
+use crate::traits::{IEventHandler, IPresenter, IVisible, IWidget, IWindow};
 use anyhow::Result;
 
 use super::{
@@ -91,7 +89,12 @@ impl<D> WindowBuilder<D> {
     pub fn build(self) -> Result<Window<D>> {
         //TODO: check focused view exists in widgets
         let ft = if let Some(order) = self.tab_order {
-            FocusTracker::create_from_taborder(order, self.focused_view, FocusMode::Wrap)
+            let tab_order = order
+                .clone()
+                .into_iter()
+                .filter(|name| self.widgets.get(name).is_some_and(|f| f.can_focus()))
+                .collect();
+            FocusTracker::create_from_taborder(tab_order, self.focused_view, FocusMode::Wrap)
         } else {
             FocusTracker::create_from_views(&self.widgets, self.focused_view, FocusMode::Wrap)
         };
@@ -213,7 +216,7 @@ impl<D> IEventHandler for Window<D> {
 
                 // forward to all widgets
                 self.widgets.iter_mut().for_each(|(_, widget)| {
-                    if let Some(activity) = widget.handle_tick() {
+                    if let Some(_activity) = widget.handle_tick() {
                         // match activity {
                         //     Activity::Action(action) => {
                         //         if let Some(on_action) = self.on_action.as_mut() {
@@ -241,132 +244,9 @@ impl<D> IEventHandler for Window<D> {
     }
 }
 
-impl<D> IFocusTracker for Window<D> {
-    fn focus_next(&mut self) -> Option<String> {
-        debug!("focus_next: on: {}", &self.name);
-        trace!("focus_next: {:#?}", &self.ft);
-
-        // Clear focus from the current focused view, if there is one
-        if let Some(focused_view) = self.ft.get_focused_view() {
-            if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                widget.clear_focus();
-            } else {
-                warn!("Focused view not found in widgets: {}", focused_view);
-            }
-        }
-
-        // Loop to find the next view that can take focus
-        loop {
-            let next = self.ft.focus_next();
-            trace!("Next focused view candidate: {:?}", &next);
-
-            match next {
-                Some(focused_view) => {
-                    if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                        if widget.can_focus() {
-                            debug!("setting focus: {}", focused_view);
-                            widget.set_focus(true);
-                            return Some(focused_view);
-                        } else {
-                            trace!("Next focused view is not a focus tracker: {}", focused_view);
-                        }
-                    } else {
-                        warn!("Next focused view not found in widgets: {}", focused_view);
-                    }
-                }
-                None => {
-                    // Break the loop if there are no more views to focus on
-                    return None;
-                }
-            }
-        }
-    }
-
-    fn focus_prev(&mut self) -> Option<String> {
-        debug!("focus_prev: on: {}", &self.name);
-        trace!("focus_prev: {:#?}", &self.ft);
-        // Clear focus from the current focused view, if there is one
-        if let Some(focused_view) = self.ft.get_focused_view() {
-            if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                widget.clear_focus();
-            } else {
-                warn!("Focused view not found in widgets: {}", focused_view);
-            }
-        }
-
-        // Loop to find the next view that can take focus
-        loop {
-            let next = self.ft.focus_prev();
-            trace!("Next focused view candidate: {:#?}", &next);
-
-            match next {
-                Some(focused_view) => {
-                    if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                        if widget.can_focus() {
-                            debug!("setting focus: {}", focused_view);
-                            widget.set_focus(true);
-                            return Some(focused_view);
-                        } else {
-                            trace!("Next focused view is not a focus tracker: {}", focused_view);
-                        }
-                    } else {
-                        warn!("Next focused view not found in widgets: {}", focused_view);
-                    }
-                }
-                None => {
-                    // Break the loop if there are no more views to focus on
-                    return None;
-                }
-            }
-        }
-    }
-
-    fn get_focused_view_name(&self) -> Option<String> {
-        self.ft.get_focused_view()
-    }
-}
-
 impl<D> IVisible for Window<D> {}
-impl<D> IFocusAcceptor for Window<D> {
-    fn set_focus(&mut self, focus: bool) {
-        self.v.focused = focus;
-        // set focus on focused view
-        if let Some(focused_view) = self.ft.get_focused_view() {
-            if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                widget.set_focus(true);
-            }
-        }
-    }
-
-    fn clear_focus(&mut self) {
-        self.v.focused = false;
-        // clear focus on focused view
-        if let Some(focused_view) = self.ft.get_focused_view() {
-            if let Some(widget) = self.widgets.get_mut(&focused_view) {
-                widget.clear_focus();
-            }
-        }
-    }
-
-    fn has_focus(&self) -> bool {
-        self.v.focused
-    }
-
-    fn can_focus(&self) -> bool {
-        self.v.can_focus
-    }
-}
 impl<D> IPresenter for Window<D> {
-    // fn do_layout(
-    //     &mut self,
-    //     area: &Rect,
-    // ) -> std::collections::HashMap<String, ratatui::prelude::Rect> {
-    //     (self.do_layout)(area).unwrap();
-    //     //TODO: do we need upper layer to know about the layout? probably not
-    //     HashMap::new()
-    // }
-
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, _focused: bool) {
         if let Some(custom_render) = &mut self.do_render {
             (custom_render)(area, frame)
         };
@@ -392,32 +272,9 @@ impl<D> IPresenter for Window<D> {
                 .iter_mut()
                 .for_each(|(name, widget)| widget.render(area, frame, *name == focused_widget));
         }
-
-        // let r = layout.get("0-0").unwrap();
-        // let rg = widgets.get_mut("RadioGroup").unwrap();
-        // rg.render(r, frame);
-
-        // let r = layout.get("0-1").unwrap();
-        // let rg = widgets.get_mut("RadioGroup 1").unwrap();
-        // rg.render(r, frame);
-
-        // let r = layout.get("3-3").unwrap();
-        // let rg = widgets.get_mut("Label").unwrap();
-        // rg.render(r, frame);
-
-        // let r = layout.get("3-0").unwrap();
-        // let rg = self.widgets.get_mut("Input").unwrap();
-        // // input.render(r, frame);
-        // rg.render(r, frame);
-        // // frame.render_input_field(input, *r);
-
-        // let r = layout.get("0-2").unwrap();
-        // button.render(r, frame);
-        // let rg = widgets.get_mut("Button").unwrap();
-        // rg.render(r, frame);
     }
 
-    fn is_focus_tracker(&self) -> bool {
+    fn can_focus(&self) -> bool {
         true
     }
 }

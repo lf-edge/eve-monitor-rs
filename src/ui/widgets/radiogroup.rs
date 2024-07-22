@@ -12,10 +12,7 @@ use crate::{
     ui::activity::Activity,
 };
 
-use super::element::VisualState;
-
 pub struct RadioGroupElement {
-    v: VisualState,
     pub labels: Vec<String>,
     pub selected: usize,
     pub focused: usize,
@@ -27,7 +24,6 @@ impl IWidget for RadioGroupElement {}
 impl RadioGroupElement {
     pub fn new<S: Into<String>, P: Into<String>>(labels: Vec<S>, title: P) -> Self {
         Self {
-            v: Default::default(),
             labels: labels.into_iter().map(|s| s.into()).collect(),
             selected: 0,
             focused: 0,

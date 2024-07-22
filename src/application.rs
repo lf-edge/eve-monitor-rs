@@ -1,5 +1,4 @@
 use crate::events::Event;
-use crate::traits::IWidgetPresenter;
 use crate::ui::homepage::HomePage;
 use crate::ui::widgets::label::LabelElement;
 use crate::ui::widgets::radiogroup::RadioGroupElement;

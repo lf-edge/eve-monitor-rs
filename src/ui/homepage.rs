@@ -37,8 +37,8 @@ impl HomePage {
         let [left, right] = [chunks[0], chunks[1]];
 
         let mut lm = LayoutMap::new();
-        lm.add("left".to_string(), left.clone());
-        lm.add("right".to_string(), right.clone());
+        let _ = lm.add("left".to_string(), left.clone());
+        let _ = lm.add("right".to_string(), right.clone());
         lm
     }
 
@@ -51,8 +51,6 @@ impl HomePage {
         let left = Paragraph::new(format!("{0:?}", self.state));
         frame.render_widget(left, layout["left"]);
     }
-
-    fn draw(&self, _frame: &mut Frame, _area: Rect) {}
 }
 
 impl IPresenter for HomePage {

@@ -13,12 +13,10 @@ use crate::{
     ui::action::UiActions,
 };
 
-use super::element::VisualState;
 use ratatui::widgets::WidgetRef;
 
 //pub type ButtonElement<A> = Element<ButtonWidgetState<A>>;
 pub struct ButtonElement {
-    v: VisualState,
     label: String,
     pushed: bool,
 }
@@ -28,7 +26,6 @@ impl ButtonElement {
         Self {
             label: label.into(),
             pushed: false,
-            v: Default::default(),
         }
     }
     fn is_pushed(&self) -> bool {

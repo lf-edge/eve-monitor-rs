@@ -7,10 +7,7 @@ mod terminal;
 mod traits;
 mod ui;
 
-use std::{
-    env,
-    path::{Path, PathBuf},
-};
+use std::path::PathBuf;
 
 use anyhow::Result;
 use application::Application;

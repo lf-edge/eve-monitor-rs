@@ -200,7 +200,8 @@ impl Application {
 
         // listen on the action channel and terminal channel
         loop {
-            do_redraw = false;
+            // TODO: set to true by default to make live easier for now
+            do_redraw = true;
 
             tokio::select! {
                 tick = timer_rx.recv() => {

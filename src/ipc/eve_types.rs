@@ -187,8 +187,11 @@ pub struct NetworkPortStatus {
     pub mtu: u16,
     pub wireless_cfg: WirelessConfig,
     pub wireless_status: WirelessStatus,
+    #[serde(flatten)]
     pub proxy_config: ProxyConfig,
+    #[serde(flatten)]
     pub l2_link_config: L2LinkConfig,
+    #[serde(flatten)]
     pub test_results: TestResults,
 }
 
@@ -472,6 +475,7 @@ pub struct DevicePortConfig {
     pub state: DPCState,
     pub sha_file: String,
     pub sha_value: Option<Vec<u8>>,
+    #[serde(flatten)]
     pub test_results: TestResults,
     #[serde(rename = "LastIPAndDNS")]
     pub last_ip_and_dns: DateTime<Utc>,
@@ -505,10 +509,14 @@ pub struct NetworkPortConfig {
     pub is_mgmt: bool,
     pub is_l3_port: bool,
     pub cost: u8,
+    #[serde(flatten)]
     pub dhcp_config: DhcpConfig,
+    #[serde(flatten)]
     pub proxy_config: ProxyConfig,
+    #[serde(flatten)]
     pub l2_link_config: L2LinkConfig,
     pub wireless_cfg: WirelessConfig,
+    #[serde(flatten)]
     pub test_results: TestResults,
 }
 

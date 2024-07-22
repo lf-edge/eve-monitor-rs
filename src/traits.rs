@@ -51,6 +51,9 @@ pub trait IElementEventHandler {
     fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<Activity> {
         None
     }
+    fn handle_tick(&mut self) -> Option<Activity> {
+        None
+    }
 }
 
 pub trait IWidgetPresenter {

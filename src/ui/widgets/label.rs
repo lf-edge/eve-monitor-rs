@@ -1,45 +1,89 @@
+use std::{borrow::BorrowMut, fmt::Debug, rc::Rc};
+
+use log::trace;
 use ratatui::{
-    buffer::Buffer,
     layout::{Alignment, Rect},
     style::{Color, Style},
     widgets::{Paragraph, WidgetRef},
+    Frame,
 };
 
-use crate::traits::{IEventHandler, IWidget};
+use crate::{
+    traits::{IElementEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
+    ui::activity::Activity,
+};
 
-use super::element::{IStandardRenderer, StaticElement};
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LabelWidgetState {
+pub struct LabelElement {
     text: String,
+    on_tick: Option<Rc<dyn Fn(&mut LabelElement) -> ()>>,
+    state_updated: bool,
 }
 
-pub type LabelElement = StaticElement<LabelWidgetState>;
+impl Debug for LabelElement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("LabelElement")
+            .field("text", &self.text)
+            .finish()
+    }
+}
 
 impl LabelElement {
     pub fn new<S: Into<String>>(text: S) -> Self {
-        let state = LabelWidgetState { text: text.into() };
-        let mut ret = Self {
-            d: state,
-            v: Default::default(),
-            phantom: Default::default(),
-        };
-        ret.v.can_focus = false;
-        ret
+        Self {
+            text: text.into(),
+            on_tick: None,
+            state_updated: false,
+        }
+    }
+    pub fn on_tick<F: Fn(&mut LabelElement) + 'static>(mut self, f: F) -> Self {
+        self.on_tick = Some(Rc::new(f));
+        self
+    }
+
+    pub fn set_text<S: Into<String>>(&mut self, text: S) {
+        let new_text = text.into();
+        if new_text != self.text {
+            self.text = new_text;
+            self.state_updated = true;
+        }
     }
 }
 
-impl IStandardRenderer for LabelElement {
-    fn render(&self, area: &Rect, buf: &mut Buffer) {
-        let text = self.d.text.clone();
+impl IFocusAcceptor for LabelElement {
+    fn can_focus(&self) -> bool {
+        false
+    }
+}
+
+impl IWidgetPresenter for LabelElement {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
+        let text = self.text.clone();
         let p = Paragraph::new(text)
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::White));
-        p.render_ref(*area, buf);
+        p.render_ref(*area, frame.buffer_mut());
     }
 }
 
-impl IEventHandler for LabelElement {
-    type Action = ();
+impl IElementEventHandler for LabelElement {
+    fn handle_key_event(
+        &mut self,
+        _key: crossterm::event::KeyEvent,
+    ) -> Option<crate::ui::activity::Activity> {
+        None
+    }
+
+    fn handle_tick(&mut self) -> Option<crate::ui::activity::Activity> {
+        trace!("LabelElement::handle_tick");
+        self.state_updated = false;
+        if let Some(on_tick) = self.on_tick.borrow_mut() {
+            let on_tick = on_tick.clone();
+            on_tick(self);
+            if self.state_updated {
+                return Some(Activity::redraw());
+            }
+        }
+        None
+    }
 }
 impl IWidget for LabelElement {}

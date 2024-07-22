@@ -1,5 +1,5 @@
 use crate::{actions::MonActions, traits::IAction};
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum UiActions {
     Quit,
     Redraw,

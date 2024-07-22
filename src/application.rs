@@ -1,6 +1,8 @@
 use crate::events::Event;
 use crate::traits::IWidgetPresenter;
 use crate::ui::homepage::HomePage;
+use crate::ui::widgets::label::{self, LabelElement};
+use crate::ui::widgets::radiogroup::RadioGroupElement;
 use core::fmt::Debug;
 
 use std::result::Result::Ok;
@@ -95,6 +97,7 @@ impl Application {
         // TODO: handle suspend/resume for the case when we give away /dev/tty
         let (ipc_tx, mut ipc_rx) = mpsc::unbounded_channel::<IpcMessage>();
         let (ipc_cmd_tx, mut ipc_cmd_rx) = mpsc::unbounded_channel::<IpcMessage>();
+        let (timer_tx, mut timer_rx) = mpsc::unbounded_channel::<Event>();
 
         // to send IPC messages from the task back to app
         let ipc_tx_clone = ipc_tx.clone();
@@ -183,11 +186,39 @@ impl Application {
         });
 
         // send initial redraw event
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+                timer_tx.send(Event::Tick).unwrap();
+            }
+        });
+
+        // send initial redraw event
         self.invalidate();
+
+        let mut do_redraw = true;
 
         // listen on the action channel and terminal channel
         loop {
+            // TODO: set to true by default to make life easier for now
+            // Set to false in an action handler if it occurs often and doesn't require a redraw
+            do_redraw = true;
+
             tokio::select! {
+                tick = timer_rx.recv() => {
+                    match tick {
+                        Some(event) => {
+                            let action = self.ui.handle_event(event);
+                            if let Some(action) = action {
+                                trace!("Event loop got action on tick: {:?}", action);
+                            }
+                        }
+                        None => {
+                            warn!("Timer stream ended");
+                            break;
+                        }
+                    }
+                }
                 event = self.terminal_rx.recv() => {
                     match event {
                         Some(Event::Key(key)) => {
@@ -195,16 +226,15 @@ impl Application {
                             if let Some(action) = action {
                                 info!("Event loop got action: {:?}", action);
                             }
-                                self.draw_ui().unwrap();
-                            }
+                         }
                         Some(Event::TerminalResize(w, h)) => {
                             info!("Terminal resized: {}x{}", w, h);
-                            self.draw_ui().unwrap();
                         }
                         None => {
                             warn!("Terminal event stream ended");
                             break;
                         }
+                        _ => {}
                     }
 
                 }
@@ -225,9 +255,6 @@ impl Application {
                         Some(action) => {
                             info!("Async Action: {:?}", action);
                             match action.action {
-                                UiActions::Redraw => {
-                                    self.draw_ui().unwrap();
-                                }
                                 UiActions::Quit => {
                                     break;
                                 }
@@ -241,6 +268,10 @@ impl Application {
                         }
                     }
                 }
+            }
+            if do_redraw {
+                trace!("Redraw requested");
+                self.draw_ui()?;
             }
         }
 
@@ -315,6 +346,13 @@ impl Ui {
         });
         // .on_update(|input: &String| {
         let button = ButtonElement::new("Button");
+        let rgrp = RadioGroupElement::new(vec!["Option 1", "Option 2", "Option 3"], "Radio Group");
+
+        let clock = LabelElement::new("Clock").on_tick(|label| {
+            let now = chrono::Local::now();
+            let time = now.format("%H:%M:%S").to_string();
+            label.set_text(time);
+        });
 
         let wnd = Window::builder("MainWnd")
             .with_state(MainWndState {
@@ -323,13 +361,17 @@ impl Ui {
             })
             .widget("3-1", Box::new(button))
             .widget("0-3", Box::new(input))
+            .widget("1-1", Box::new(rgrp))
+            .widget("2-2", Box::new(clock))
             .with_layout(do_layout)
-            .with_focused_view("Input")
+            .with_focused_view("0-3")
             .on_action(|action, state: &mut MainWndState| {
                 debug!("on_action Action: {:?}", action);
                 match action.action {
                     UiActions::CheckBox { checked: _ } => todo!(),
-                    UiActions::RadioGroup { selected: _ } => todo!(),
+                    UiActions::RadioGroup { selected } => {
+                        info!("RadioGroup updated: {}", selected);
+                    }
                     UiActions::Input { text } => {
                         info!("Input updated: {}", &text);
                         state.ip = text;
@@ -343,7 +385,9 @@ impl Ui {
                         )));
                     }
                     _ => {
-                        warn!("Unhandled action: {:?}", action);
+                        if action.action != UiActions::Redraw {
+                            warn!("Unhandled action: {:?}", action);
+                        }
                     }
                 }
                 // match action.action {
@@ -474,17 +518,29 @@ impl Ui {
                 debug!("CTRL+p: manual layer.pop() requested");
                 self.views[self.selected_tab as usize].pop();
             }
-            // handle Tab key
-            Event::Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
-                trace!("Handling Tab key");
-                if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
-                    let action = layer.handle_event(Event::Key(key));
-                    trace!("Tab key handled: {:?}", action);
-                    if let Some(action) = action {
-                        return Some(action);
-                    }
-                }
+
+            // show dialog on ctrl+d
+            Event::Key(key)
+                if (key.code == KeyCode::Char('d')) && (key.modifiers == KeyModifiers::CONTROL) =>
+            {
+                debug!("CTRL+d: show dialog");
+
+                let s = IpDialogState {
+                    ip: "10.208.13.10".to_string(),
+                    mode: "DHCP".to_string(),
+                    gw: "1.1.1.1".to_string(),
+                };
+
+                let d: Dialog<MonActions> = Dialog::new(
+                    (50, 30),
+                    "confirm".to_string(),
+                    vec!["Ok".to_string(), "Cancel".to_string()],
+                    "Cancel",
+                    MonActions::NetworkInterfaceUpdated(s),
+                );
+                self.views[self.selected_tab as usize].push(Box::new(d));
             }
+
             // handle Tab switching
             Event::Key(key)
                 if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Left) =>
@@ -515,7 +571,17 @@ impl Ui {
                     }
                 }
             }
-            _ => {}
+            Event::Tick => {
+                // forward tick event to all layers. Callect actions
+                for layer in self.views[self.selected_tab as usize].iter_mut() {
+                    if let Some(action) = layer.handle_event(Event::Tick) {
+                        self.action_tx.send(action).unwrap();
+                    }
+                }
+            }
+            _ => {
+                debug!("Unhandled event: {:?}", event);
+            }
         }
 
         None

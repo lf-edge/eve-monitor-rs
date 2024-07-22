@@ -112,8 +112,8 @@ pub struct Window<D> {
     pub v: VisualState,
     pub name: String,
     pub ft: FocusTracker,
-    pub widgets: ElementHashMap<Box<dyn IWidget>>,
-    pub layout: ElementHashMap<Rect>,
+    pub widgets: WidgetMap,
+    pub layout: LayoutMap,
     pub do_layout: Option<LayoutFn>,
     pub do_render: Option<RenderFn>,
     pub on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
@@ -166,8 +166,8 @@ impl<D> Window<D> {
 impl<D> IWindow for Window<D> {}
 
 impl<D> IEventHandler for Window<D> {
-    fn handle_event(&mut self, key: events::Event) -> Option<Action> {
-        match key {
+    fn handle_event(&mut self, event: events::Event) -> Option<Action> {
+        match event {
             events::Event::Key(key) => {
                 if let Some(activity) = self.ft.handle_key_event(key) {
                     match activity {
@@ -207,6 +207,33 @@ impl<D> IEventHandler for Window<D> {
                         }
                     }
                 }
+            }
+            events::Event::Tick => {
+                // trace!("handle_event {:?}", event);
+
+                // forward to all widgets
+                self.widgets.iter_mut().for_each(|(_, widget)| {
+                    if let Some(activity) = widget.handle_tick() {
+                        // match activity {
+                        //     Activity::Action(action) => {
+                        //         if let Some(on_action) = self.on_action.as_mut() {
+                        //             if let Some(new_action) = on_action(
+                        //                 Action {
+                        //                     source: "".to_string(),
+                        //                     action,
+                        //                     target: None,
+                        //                 },
+                        //                 &mut self.state.borrow_mut(),
+                        //             ) {
+                        //                 return Some(Action::new(self.name.clone(), new_action));
+                        //             }
+                        //         }
+                        //     }
+                        //     Activity::Event(_) => {}
+                        // }
+                    }
+                });
+                return Some(Action::new(self.name.clone(), UiActions::Redraw));
             }
             _ => {}
         }
@@ -344,11 +371,8 @@ impl<D> IPresenter for Window<D> {
             (custom_render)(area, frame)
         };
 
-        let focused_widget = if focused {
-            self.ft.get_focused_view().or(Some("".to_string())).unwrap()
-        } else {
-            "".to_string()
-        };
+        let focused_widget = self.ft.get_focused_view().unwrap_or_default();
+
         if let Some(layouter) = &mut self.do_layout {
             let layout = (layouter)(area).unwrap();
 

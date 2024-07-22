@@ -246,7 +246,7 @@ impl<D> IEventHandler for Window<D> {
 
 impl<D> IVisible for Window<D> {}
 impl<D> IPresenter for Window<D> {
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, _focused: bool) {
+    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
         if let Some(custom_render) = &mut self.do_render {
             (custom_render)(area, frame)
         };
@@ -264,13 +264,13 @@ impl<D> IPresenter for Window<D> {
                         .inspect(|f| trace!("Layout for {}: {:#?}", name, f))
                         .map(|r| (r, widget, *name == focused_widget))
                 })
-                .for_each(|(rect, widget, focused)| {
-                    widget.render(rect, frame, focused);
+                .for_each(|(rect, widget, w_focused)| {
+                    widget.render(rect, frame, w_focused && focused);
                 });
         } else {
-            self.widgets
-                .iter_mut()
-                .for_each(|(name, widget)| widget.render(area, frame, *name == focused_widget));
+            self.widgets.iter_mut().for_each(|(name, widget)| {
+                widget.render(area, frame, (*name == focused_widget) && focused)
+            });
         }
     }
 

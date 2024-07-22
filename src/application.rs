@@ -356,7 +356,7 @@ impl Ui {
             .widget("0-3", Box::new(input))
             .widget("2-2", Box::new(clock))
             .with_layout(do_layout)
-            .with_focused_view("Input")
+            .with_focused_view("0-3")
             .on_action(|action, state: &mut MainWndState| {
                 debug!("on_action Action: {:?}", action);
                 match action.action {

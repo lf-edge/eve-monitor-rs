@@ -1,47 +1,51 @@
+use std::rc::Rc;
+
 use crossterm::event::{KeyCode, KeyEvent};
 use log::{info, trace};
 use ratatui::{
-    buffer::Buffer,
     layout::{Constraint, Layout, Rect},
-    style::{Color, Style},
+    style::{Color, Modifier, Style},
     widgets::{Block, Borders, Paragraph, WidgetRef},
+    Frame,
 };
 
 use crate::{
-    events::Event,
-    traits::{IEventHandler, IFocusAcceptor, IWidget},
+    traits::{IElementEventHandler, IFocusAcceptor, IWidget, IWidgetPresenter},
+    ui::activity::Activity,
 };
 
-use super::element::{StaticElement, IStandardRenderer};
+use super::element::VisualState;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct RadioGroupState<A> {
+pub struct RadioGroupElement {
+    v: VisualState,
     pub labels: Vec<String>,
     pub selected: usize,
+    pub focused: usize,
     pub title: String,
-    phantom: std::marker::PhantomData<A>,
 }
 
-pub type RadioGroupElement<A> = StaticElement<RadioGroupState<A>>;
-impl<A> IWidget for RadioGroupElement<A> {}
+impl IWidget for RadioGroupElement {}
 
-impl<A> RadioGroupElement<A> {
+impl RadioGroupElement {
     pub fn new<S: Into<String>, P: Into<String>>(labels: Vec<S>, title: P) -> Self {
-        let state = RadioGroupState {
+        Self {
+            v: Default::default(),
             labels: labels.into_iter().map(|s| s.into()).collect(),
             selected: 0,
+            focused: 0,
             title: title.into(),
-            phantom: Default::default(),
-        };
-        Self {
-            d: state,
-            v: Default::default(),
         }
+    }
+    fn create_status_update(&self) -> Activity {
+        info!("RadioGroupElement: selected: {}", self.selected);
+        Activity::ui_action(crate::ui::action::UiActions::RadioGroup {
+            selected: self.selected,
+        })
     }
 }
 
-impl<A> IStandardRenderer for RadioGroupElement<A> {
-    fn render(&self, area: &Rect, buf: &mut Buffer) {
+impl IWidgetPresenter for RadioGroupElement {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
         //trace!("rendering: RadioGroupElement {:#?}", &self);
         let style = if self.has_focus() {
             Style::default().fg(Color::Yellow)
@@ -50,47 +54,75 @@ impl<A> IStandardRenderer for RadioGroupElement<A> {
         };
 
         let block = Block::default()
-            .title(self.d.title.clone())
+            .title(self.title.clone())
             .borders(Borders::ALL)
             .border_style(style);
         let inner = block.inner(*area);
-        block.render_ref(*area, buf);
+        block.render_ref(*area, frame.buffer_mut());
         // create vertical layout for radio buttons
-        let constraints = self.d.labels.iter().map(|_| Constraint::Length(1));
+        let constraints = self.labels.iter().map(|_| Constraint::Length(1));
         let buttons_area = Layout::vertical(constraints).split(inner);
 
+        let selected_style = Modifier::REVERSED;
+        let normal_style = Style::default().fg(Color::White);
+
         // render paragraphs for each radio button
-        for (i, label) in self.d.labels.iter().enumerate() {
+        for (i, label) in self.labels.iter().enumerate() {
             // format the button label <text> (selected)
-            let label = if self.d.selected == i {
+            let mut style = normal_style;
+            let label = if self.selected == i {
                 format!("{} (*)", label)
             } else {
                 format!("{} ( )", label)
             };
 
-            let p = Paragraph::new(label);
-            p.render_ref(buttons_area[i], buf);
+            if self.focused == i {
+                style = style.add_modifier(selected_style);
+            }
+
+            let p = Paragraph::new(label).style(style);
+            p.render_ref(buttons_area[i], frame.buffer_mut());
         }
     }
 }
 
-impl<A> IEventHandler for RadioGroupElement<A> {
-    type Action = A;
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Self::Action> {
-        //trace!("handle_key_event: RadioGroupView {:#?}", &self);
-        //TODO: change to focus tracker
+impl IElementEventHandler for RadioGroupElement {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
+        trace!("handle_key_event: RadioGroupView {}", &self.title);
         match key.code {
             KeyCode::Up => {
-                self.d.selected = self.d.selected.saturating_sub(1);
-                return None; //Some(Event::redraw());
+                self.focused = self.focused.saturating_sub(1);
+                return Some(Activity::redraw());
             }
             KeyCode::Down => {
-                self.d.selected = (self.d.selected + 1).min(self.d.labels.len() - 1);
-                return None; //Some(Event::redraw());
+                self.focused = (self.focused + 1).min(self.labels.len() - 1);
+                return Some(Activity::redraw());
+            }
+            KeyCode::Enter | KeyCode::Char(' ') => {
+                self.selected = self.focused;
+                return Some(self.create_status_update());
             }
             _ => {
                 return None;
             }
         }
+    }
+}
+
+impl IFocusAcceptor for RadioGroupElement {
+    fn set_focus(&mut self, focus: bool) {
+        self.v.focused = focus;
+    }
+
+    fn clear_focus(&mut self) {
+        self.v.focused = false;
+    }
+
+    fn has_focus(&self) -> bool {
+        self.v.focused
+    }
+
+    fn can_focus(&self) -> bool {
+        true
     }
 }

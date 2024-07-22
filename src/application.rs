@@ -2,6 +2,7 @@ use crate::events::Event;
 use crate::traits::IWidgetPresenter;
 use crate::ui::homepage::HomePage;
 use crate::ui::widgets::label::{self, LabelElement};
+use crate::ui::widgets::rediogroup::RadioGroupElement;
 use core::fmt::Debug;
 
 use std::result::Result::Ok;
@@ -340,6 +341,7 @@ impl Ui {
         });
         // .on_update(|input: &String| {
         let button = ButtonElement::new("Button");
+        let rgrp = RadioGroupElement::new(vec!["Option 1", "Option 2", "Option 3"], "Radio Group");
 
         let clock = LabelElement::new("Clock").on_tick(|label| {
             let now = chrono::Local::now();
@@ -354,6 +356,7 @@ impl Ui {
             })
             .widget("3-1", Box::new(button))
             .widget("0-3", Box::new(input))
+            .widget("1-1", Box::new(rgrp))
             .widget("2-2", Box::new(clock))
             .with_layout(do_layout)
             .with_focused_view("0-3")
@@ -361,7 +364,9 @@ impl Ui {
                 debug!("on_action Action: {:?}", action);
                 match action.action {
                     UiActions::CheckBox { checked: _ } => todo!(),
-                    UiActions::RadioGroup { selected: _ } => todo!(),
+                    UiActions::RadioGroup { selected } => {
+                        info!("RadioGroup updated: {}", selected);
+                    }
                     UiActions::Input { text } => {
                         info!("Input updated: {}", &text);
                         state.ip = text;

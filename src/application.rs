@@ -196,11 +196,12 @@ impl Application {
         // send initial redraw event
         self.invalidate();
 
-        let mut do_redraw = false;
+        let mut do_redraw = true;
 
         // listen on the action channel and terminal channel
         loop {
-            // TODO: set to true by default to make live easier for now
+            // TODO: set to true by default to make life easier for now
+            // Set to false in an action handler if it occurs often and doesn't require a redraw
             do_redraw = true;
 
             tokio::select! {
@@ -210,9 +211,6 @@ impl Application {
                             let action = self.ui.handle_event(event);
                             if let Some(action) = action {
                                 trace!("Event loop got action on tick: {:?}", action);
-                                if action.action == UiActions::Redraw {
-                                    do_redraw = true;
-                                }
                             }
                         }
                         None => {
@@ -227,14 +225,10 @@ impl Application {
                             let action = self.ui.handle_event(Event::Key(key));
                             if let Some(action) = action {
                                 info!("Event loop got action: {:?}", action);
-                                if action.action == UiActions::Redraw {
-                                    do_redraw = true;
-                                }
                             }
                          }
                         Some(Event::TerminalResize(w, h)) => {
                             info!("Terminal resized: {}x{}", w, h);
-                            do_redraw = true;
                         }
                         None => {
                             warn!("Terminal event stream ended");
@@ -261,10 +255,6 @@ impl Application {
                         Some(action) => {
                             info!("Async Action: {:?}", action);
                             match action.action {
-                                UiActions::Redraw => {
-                                    // TODO: try receive all Readraw
-                                    do_redraw = true;
-                                }
                                 UiActions::Quit => {
                                     break;
                                 }

@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use crate::events::Event;
 use crate::traits::{IEventHandler, IPresenter, IWindow};
 use log2::error;
@@ -6,11 +8,25 @@ use ratatui::widgets::{Paragraph, Widget};
 use ratatui::Frame;
 use rmesg;
 
-pub struct DmesgViewer {}
+#[derive(Default, Debug)]
+pub struct DmesgViewer {
+    mode: DmsgMode,
+    buffer: VecDeque<String>,
+    current_page: usize,
+    max_pages: usize,
+    lines_per_page: usize,
+}
+
+#[derive(Default, Debug)]
+enum DmsgMode {
+    #[default]
+    Follow,
+    Page,
+}
 
 impl DmesgViewer {
     pub fn new() -> Self {
-        DmesgViewer {}
+        DmesgViewer::default()
     }
 }
 

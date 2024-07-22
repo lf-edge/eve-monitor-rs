@@ -112,8 +112,8 @@ pub struct Window<D> {
     pub v: VisualState,
     pub name: String,
     pub ft: FocusTracker,
-    pub widgets: ElementHashMap<Box<dyn IWidget>>,
-    pub layout: ElementHashMap<Rect>,
+    pub widgets: WidgetMap,
+    pub layout: LayoutMap,
     pub do_layout: Option<LayoutFn>,
     pub do_render: Option<RenderFn>,
     pub on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
@@ -371,11 +371,8 @@ impl<D> IPresenter for Window<D> {
             (custom_render)(area, frame)
         };
 
-        let focused_widget = if focused {
-            self.ft.get_focused_view().or(Some("".to_string())).unwrap()
-        } else {
-            "".to_string()
-        };
+        let focused_widget = self.ft.get_focused_view().unwrap_or_default();
+
         if let Some(layouter) = &mut self.do_layout {
             let layout = (layouter)(area).unwrap();
 

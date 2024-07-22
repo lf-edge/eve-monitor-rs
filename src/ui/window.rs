@@ -268,9 +268,9 @@ impl<D> IPresenter for Window<D> {
                     widget.render(rect, frame, w_focused && focused);
                 });
         } else {
-            self.widgets
-                .iter_mut()
-                .for_each(|(name, widget)| widget.render(area, frame, *name == focused_widget));
+            self.widgets.iter_mut().for_each(|(name, widget)| {
+                widget.render(area, frame, (*name == focused_widget) && focused)
+            });
         }
     }
 

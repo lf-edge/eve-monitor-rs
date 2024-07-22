@@ -2,7 +2,7 @@ use crate::events::Event;
 use crate::traits::IWidgetPresenter;
 use crate::ui::homepage::HomePage;
 use crate::ui::widgets::label::{self, LabelElement};
-use crate::ui::widgets::rediogroup::RadioGroupElement;
+use crate::ui::widgets::radiogroup::RadioGroupElement;
 use core::fmt::Debug;
 
 use std::result::Result::Ok;

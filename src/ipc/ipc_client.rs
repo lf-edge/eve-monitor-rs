@@ -1,11 +1,9 @@
 use anyhow::{anyhow, Result};
 use async_inotify::Watcher;
-use bytes::{Bytes, BytesMut};
-use futures::{SinkExt, StreamExt};
 use inotify::EventMask;
-use log::{debug, error, info};
+use log::{debug, info};
 use std::path::{Path, PathBuf};
-use tokio::{net::UnixStream, sync::mpsc, task::JoinHandle};
+use tokio::{net::UnixStream, task::JoinHandle};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 pub struct IpcClient {}
@@ -42,9 +40,6 @@ impl IpcClient {
             socket_task.await??;
         }
 
-        // let (sink_tx, mut sink_rx) = mpsc::unbounded_channel::<Item>();
-        // let (tx, rx) = mpsc::unbounded_channel::<Item>();
-
         let unix_stream = Self::try_connect(path, 30).await?;
 
         let stream = LengthDelimitedCodec::builder()
@@ -58,8 +53,8 @@ impl IpcClient {
     async fn wait_for_socket_file(path: &Path) -> Result<(), anyhow::Error> {
         let dir = Path::new(path).parent().unwrap();
         let mut watcher = Watcher::init();
-        let mut wd = watcher.add(dir, &async_inotify::WatchMask::CREATE);
-        if let Ok(mut wd) = wd {
+        let wd = watcher.add(dir, &async_inotify::WatchMask::CREATE);
+        if let Ok(wd) = wd {
             loop {
                 if let Some(event) = watcher.next().await {
                     debug!("{:?}: {:?}", event.mask(), event.path());

@@ -2,7 +2,6 @@ use std::net::IpAddr;
 
 use crate::ipc::eve_types::NetworkPortStatus;
 use macaddr::MacAddr;
-use serde_json::json;
 
 pub struct NetworkStatus {
     pub interfaces: Vec<NetworkInterface>,
@@ -33,16 +32,12 @@ impl From<NetworkPortStatus> for NetworkInterface {
         }
     }
 }
-
-#[derive(Debug)]
-pub enum IoError {
-    NetworkListError,
-}
-
+#[cfg(test)]
 mod tests {
     use std::{net::Ipv4Addr, str::FromStr};
 
     use serde_json::from_value;
+    use serde_json::json;
 
     use super::*;
     fn get_network_port_status() -> NetworkPortStatus {

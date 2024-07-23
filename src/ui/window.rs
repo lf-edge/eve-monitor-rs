@@ -3,10 +3,10 @@ use crate::model::Model;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use std::borrow::BorrowMut;
-use std::{cell::RefCell, fmt::Debug, rc::Rc};
+use std::{fmt::Debug, rc::Rc};
 
 use log::trace;
-use ratatui::layout::{self, Rect};
+use ratatui::layout::Rect;
 
 use crate::traits::{IEventHandler, IPresenter, IVisible, IWidget, IWindow};
 use anyhow::Result;
@@ -188,10 +188,6 @@ impl<D> Window<D> {
 
     pub fn update_layout<S: Into<String>>(&mut self, name: S, rect: Rect) {
         self.layout.add_or_update(name.into(), rect);
-    }
-
-    pub fn widgets(&mut self) -> &mut WidgetMap {
-        &mut self.widgets
     }
 
     pub fn layout<S: Into<String>>(&mut self, name: S) -> Rect {

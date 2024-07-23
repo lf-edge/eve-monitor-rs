@@ -12,10 +12,10 @@ use rmesg;
 
 #[derive(Default, Debug)]
 pub struct DmesgViewer {
-    mode: DmsgMode,
-    buffer: VecDeque<String>,
-    current_page: usize,
-    max_pages: usize,
+    _mode: DmsgMode,
+    _buffer: VecDeque<String>,
+    _current_page: usize,
+    _max_pages: usize,
     lines_per_page: u16,
 }
 

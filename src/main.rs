@@ -32,7 +32,7 @@ fn init_logging() -> log2::Handle {
         .rotate(20)
         .tee(false) // no console output
         .module(true)
-        .level(LevelFilter::Trace)
+        .level(LevelFilter::Debug)
         .start();
 
     info!("Logging initialized: {:?}", log_file);

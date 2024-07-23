@@ -1,5 +1,6 @@
+use crate::model::Model;
 use std::collections::VecDeque;
-use std::time::Duration;
+use std::rc::Rc;
 
 use crate::events::Event;
 use crate::traits::{IEventHandler, IPresenter, IWindow};
@@ -15,7 +16,7 @@ pub struct DmesgViewer {
     buffer: VecDeque<String>,
     current_page: usize,
     max_pages: usize,
-    lines_per_page: usize,
+    lines_per_page: u16,
 }
 
 #[derive(Default, Debug)]
@@ -34,12 +35,20 @@ impl DmesgViewer {
 }
 
 impl IPresenter for DmesgViewer {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _model: &Rc<Model>, _focused: bool) {
         match rmesg::log_entries(rmesg::Backend::Default, false) {
-            Err(err) => error!("{}", err.to_string()),
+            Err(err) => {
+                error!("{}", err.to_string());
+                Paragraph::new(err.to_string()).render(*area, frame.buffer_mut())
+            }
             Ok(mut entries) => {
-                let page_list =
-                    entries.split_off(entries.len().saturating_sub(self.lines_per_page));
+                self.lines_per_page = area.height;
+
+                let page_list = entries.split_off(
+                    entries
+                        .len()
+                        .saturating_sub((self.lines_per_page * 3).into()),
+                );
                 let page_contents = page_list
                     .into_iter()
                     .map(|entry| {

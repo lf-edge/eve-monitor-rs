@@ -1,3 +1,4 @@
+use base64::Engine;
 use chrono::DateTime;
 use chrono::Utc;
 use macaddr::MacAddr;
@@ -167,7 +168,9 @@ where
     D: Deserializer<'de>,
 {
     let s: String = Deserialize::deserialize(deserializer)?;
-    let bytes = base64::decode(s).map_err(de::Error::custom)?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(s)
+        .map_err(de::Error::custom)?;
 
     match bytes.len() {
         6 => {

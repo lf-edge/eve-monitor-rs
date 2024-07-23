@@ -27,3 +27,4 @@ serde_repr = "0.1.19"
 uuid = { version = "1.10.0", features = ["serde", "v4"] }
 # ipnetwork = { version = "0.20.0", features = ["serde"] }
 chrono = { version = "0.4.38", features = ["serde"] }
+rmesg = "1.0.21"

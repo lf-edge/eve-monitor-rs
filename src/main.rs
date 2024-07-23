@@ -1,5 +1,6 @@
 mod actions;
 mod application;
+mod device;
 mod events;
 mod ipc;
 mod mainwnd;

@@ -9,7 +9,7 @@ pub enum IoError {
     NetworkListError,
 }
 
-pub fn List() -> Result<Vec<NetworkInterface>, IoError> {
+pub fn list() -> Result<Vec<NetworkInterface>, IoError> {
     Ok(vec![NetworkInterface {
         name: "PlaceHolder".to_string(),
         address: "localhost".to_string(),

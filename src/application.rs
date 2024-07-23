@@ -1,3 +1,4 @@
+use crate::device::dmesg::DmesgViewer;
 use crate::events::Event;
 use crate::ipc::eve_types::{
     DeviceNetworkStatus, DevicePortConfig, DevicePortConfigList, NetworkPortConfig,
@@ -315,6 +316,7 @@ enum UiTabs {
     Home,
     Network,
     Applications,
+    Dmesg,
 }
 
 impl Debug for Ui {
@@ -474,6 +476,8 @@ impl Ui {
         self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
 
         self.views[UiTabs::Network as usize].push(Box::new(create_network_page()));
+
+        self.views[UiTabs::Dmesg as usize].push(Box::new(DmesgViewer::new()));
     }
 
     fn draw(&mut self) {

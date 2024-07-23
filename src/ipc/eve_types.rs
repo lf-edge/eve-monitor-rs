@@ -1,4 +1,7 @@
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
+use chrono::Utc;
+use macaddr::MacAddr;
+use macaddr::MacAddr6;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::net::IpAddr;
@@ -178,10 +181,9 @@ pub struct NetworkPortStatus {
     pub domain_name: String,
     pub dns_servers: Option<Vec<IpAddr>>,
     pub ntp_servers: Option<Vec<IpAddr>>,
-    #[serde(skip)]
     pub addr_info_list: Vec<AddrInfo>,
     pub up: bool,
-    pub mac_addr: String, // Alternatively use MacAddress type
+    pub mac_addr: MacAddr6,
     pub default_routers: Option<Vec<IpAddr>>,
     #[serde(rename = "MTU")]
     pub mtu: u16,
@@ -247,7 +249,21 @@ pub struct ProxyEntry {
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct AddrInfo {
-    // Define the fields
+    pub addr: IpAddr,
+    pub geo: Option<IPInfo>,
+    pub last_geo_timestamp: Option<DateTime<Utc>>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct IPInfo {
+    pub ip: String,
+    pub hostname: String,
+    pub city: String,
+    pub region: String,
+    pub country: String,
+    pub loc: String,
+    pub org: String,
+    pub postal: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]

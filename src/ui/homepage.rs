@@ -20,6 +20,7 @@ use ratatui::Frame;
 pub struct HomePage {
     state: DeviceSummary,
     layout: Option<LayoutMap>,
+    old_size: Rect,
 }
 
 impl HomePage {
@@ -27,6 +28,7 @@ impl HomePage {
         let hp = HomePage {
             layout: None,
             state: DeviceSummary::dummy_summary(),
+            old_size: Rect::ZERO,
         };
         hp
     }
@@ -47,8 +49,9 @@ impl HomePage {
     }
 
     pub fn do_render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>) {
-        if self.layout.is_none() {
+        if self.layout.is_none() || self.old_size != *area {
             self.layout = Some(self.do_layout(area, &model));
+            self.old_size = area.clone();
         }
         let layout = self.layout.as_ref().unwrap();
 

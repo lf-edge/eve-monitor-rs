@@ -341,7 +341,7 @@ impl Ui {
     }
 
     pub fn create_main_wnd(&self) -> Window<MainWndState> {
-        let do_layout = |w: &mut Window<MainWndState>, area: &Rect, _model: &Rc<Model>| {
+        let do_layout = |w: &mut Window<MainWndState>, area: &Rect, model: &Rc<Model>| {
             let cols = Layout::horizontal([Constraint::Ratio(1, 4); 4]).split(*area);
             for (i, col) in cols.iter().enumerate() {
                 let rows = Layout::vertical([Constraint::Ratio(1, 4); 4]).split(*col);
@@ -357,7 +357,6 @@ impl Ui {
             let cap_c = c.to_uppercase().next().unwrap();
             Some(cap_c)
         });
-        // .on_update(|input: &String| {
         let button = ButtonElement::new("Button");
         let radiogroup =
             RadioGroupElement::new(vec!["Option 1", "Option 2", "Option 3"], "Radio Group");
@@ -447,25 +446,6 @@ impl Ui {
     }
 
     fn init(&mut self) {
-        // let dlg = Dialog::builder()
-        //     .title("Dialog")
-        //     .button(
-        //         "Ok",
-        //         Box::new(|a| {
-        //             trace!("Ok button clicked");
-        //         }),
-        //     )
-        //     .button(
-        //         "Cancel",
-        //         Box::new(|a| {
-        //             trace!("Cancel button clicked");
-        //         }),
-        //     )
-        //     .view(Box::new(LabelView::new("Label2", "Hello, World!")))
-        //     .build();
-
-        // self.layer_stack.push(dlg);
-
         let w = self.create_main_wnd();
 
         self.views[UiTabs::Debug as usize].push(Box::new(w));

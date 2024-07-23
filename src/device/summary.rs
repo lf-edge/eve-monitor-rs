@@ -35,7 +35,6 @@ impl DeviceSummary {
 
 fn get_usb() -> Vec<String> {
     let cmd_out = Command::new("lsusb")
-        // .args(["/C", "echo hello"])
         .output()
         .expect("failed to execute process");
     if cmd_out.status.success() {
@@ -49,7 +48,6 @@ fn get_usb() -> Vec<String> {
 
 fn get_pci() -> Vec<String> {
     let cmd_out = Command::new("lspci")
-        // .args(["/C", "echo hello"])
         .output()
         .expect("failed to execute process");
     if cmd_out.status.success() {

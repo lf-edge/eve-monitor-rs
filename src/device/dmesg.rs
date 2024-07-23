@@ -28,7 +28,7 @@ enum DmsgMode {
 impl DmesgViewer {
     pub fn new() -> Self {
         let mut def = DmesgViewer::default();
-        def.lines_per_page = 120;
+        def.lines_per_page = 120; // specially chosen to fill a normal terminal size for the demo. Should be chosen based on terminal height
         def
     }
 }

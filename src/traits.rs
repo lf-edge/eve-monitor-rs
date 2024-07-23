@@ -1,11 +1,13 @@
-use crate::events::Event;
+use std::rc::Rc;
+
 use crate::ui::action::Action;
 use crate::ui::activity::Activity;
+use crate::{events::Event, model::Model};
 use ratatui::{layout::Rect, Frame};
 
 pub trait IPresenter {
     // fn do_layout(&mut self, area: &Rect) -> HashMap<String, Rect>;
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, focused: bool);
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, focused: bool);
     fn can_focus(&self) -> bool {
         true
     }

@@ -1,9 +1,18 @@
 use crate::events::Event;
+use crate::ipc::eve_types::{
+    DeviceNetworkStatus, DevicePortConfig, DevicePortConfigList, NetworkPortConfig,
+    NetworkPortStatus,
+};
+use crate::model::Model;
+use crate::raw_model::RawModel;
 use crate::ui::homepage::HomePage;
+use crate::ui::networkpage::create_network_page;
 use crate::ui::widgets::label::LabelElement;
 use crate::ui::widgets::radiogroup::RadioGroupElement;
 use core::fmt::Debug;
 
+use std::cell::RefCell;
+use std::rc::Rc;
 use std::result::Result::Ok;
 
 use anyhow::Result;
@@ -241,6 +250,7 @@ impl Application {
                         Some(msg) => {
                             // handle IPC message
                             info!("IPC message: {:?}", msg);
+                            self.ui.handle_ipc_message(msg);
                         }
                         None => {
                             warn!("IPC message stream ended");
@@ -294,7 +304,8 @@ struct Ui {
     views: Vec<LayerStack>,
     selected_tab: UiTabs,
     // this is our model :)
-    _a: u32,
+    model: Rc<Model>,
+    raw_model: Rc<RawModel>,
 }
 
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
@@ -314,27 +325,29 @@ impl Debug for Ui {
 
 impl Ui {
     fn new(action_tx: UnboundedSender<Action>, terminal: TerminalWrapper) -> Result<Self> {
+        let model = Rc::new(Model::default());
+
         Ok(Self {
             terminal,
             action_tx,
             views: vec![LayerStack::new(); UiTabs::COUNT],
             selected_tab: UiTabs::default(),
-            _a: 0,
+            model,
+            raw_model: Rc::new(RawModel::new()),
         })
     }
 
     pub fn create_main_wnd(&self) -> Window<MainWndState> {
-        let do_layout = |area: &Rect| -> Option<LayoutMap> {
+        let do_layout = |w: &mut Window<MainWndState>, area: &Rect, model: &Rc<Model>| {
             let mut layout = LayoutMap::new();
             let cols = Layout::horizontal([Constraint::Ratio(1, 4); 4]).split(*area);
             for (i, col) in cols.iter().enumerate() {
                 let rows = Layout::vertical([Constraint::Ratio(1, 4); 4]).split(*col);
                 for (j, row) in rows.iter().enumerate() {
                     let area_name = format!("{}-{}", i, j);
-                    layout.insert(area_name, *row);
+                    w.update_layout(area_name, *row);
                 }
             }
-            Some(layout)
         };
 
         let input = InputFieldElement::new("Input", Some("Type here")).on_char(|c: &char| {
@@ -459,6 +472,8 @@ impl Ui {
         self.views[UiTabs::Debug as usize].push(Box::new(d));
 
         self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
+
+        self.views[UiTabs::Network as usize].push(Box::new(create_network_page()));
     }
 
     fn draw(&mut self) {
@@ -478,7 +493,7 @@ impl Ui {
             let stack = &mut self.views[self.selected_tab as usize];
             let last_index = stack.len().saturating_sub(1);
             for (index, layer) in stack.iter_mut().enumerate() {
-                layer.render(&body, frame, index == last_index);
+                layer.render(&body, frame, &self.model, index == last_index);
             }
         });
     }
@@ -583,6 +598,22 @@ impl Ui {
         }
 
         None
+    }
+    pub fn handle_ipc_message(&mut self, msg: IpcMessage) {
+        match msg {
+            IpcMessage::DPCList(cfg) => {
+                debug!("Got DPC list");
+                self.raw_model.set_dpc_list(cfg);
+            }
+            IpcMessage::NetworkStatus(cfg) => {
+                debug!("Got Network status");
+                self.raw_model.set_network_status(cfg);
+            }
+            _ => {
+                warn!("Unhandled IPC message: {:?}", msg);
+            }
+        }
+        self.model = Rc::new(Model::from(&self.raw_model));
     }
 }
 

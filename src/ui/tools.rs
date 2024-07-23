@@ -49,16 +49,18 @@ impl<T> ElementHashMap<T> {
         }
     }
     /// Returns error if the name already exists
-    pub fn add(&mut self, name: String, elem: T) -> Result<()> {
-        if self.layout.contains_key(&name) {
-            return Err(anyhow!("Name {} already exists", name));
-        }
-        self.layout.insert(name, elem);
-        Ok(())
+    pub fn add_or_update(&mut self, name: String, elem: T) -> Option<T> {
+        self.layout.insert(name, elem)
     }
     pub fn clear(&mut self) {
         self.layout.clear();
     }
+
+    // pub fn get(&self, name: &str) -> Result<&T> {
+    //     self.layout
+    //         .get(name)
+    //         .ok_or_else(|| anyhow!("Element with name {} not found", name))
+    // }
 }
 
 impl<T> Deref for ElementHashMap<T> {

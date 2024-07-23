@@ -8,6 +8,7 @@ use serde::Serialize;
 use serde_json::Value;
 
 use super::eve_types::DeviceNetworkStatus;
+use super::eve_types::DevicePortConfig;
 use super::eve_types::DevicePortConfigList;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -34,6 +35,7 @@ pub enum IpcMessage {
     Response(Response),
     NetworkStatus(DeviceNetworkStatus),
     DPCList(DevicePortConfigList),
+    SetDPC(DevicePortConfig),
 }
 
 impl IpcMessage {

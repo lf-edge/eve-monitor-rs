@@ -2,6 +2,8 @@ use chrono::DateTime;
 use chrono::Utc;
 use macaddr::MacAddr;
 use macaddr::MacAddr6;
+use macaddr::MacAddr8;
+use serde::de;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::net::IpAddr;
@@ -160,6 +162,32 @@ where
     }
 }
 
+pub fn deserialize_mac<'de, D>(deserializer: D) -> Result<MacAddr, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    let bytes = base64::decode(s).map_err(de::Error::custom)?;
+
+    match bytes.len() {
+        6 => {
+            let array: [u8; 6] = bytes
+                .try_into()
+                .map_err(|_| de::Error::custom("invalid byte array length"))?;
+            let mac = MacAddr::from(MacAddr6::from(array));
+            Ok(mac)
+        }
+        8 => {
+            let array: [u8; 8] = bytes
+                .try_into()
+                .map_err(|_| de::Error::custom("invalid byte array length"))?;
+            let mac = MacAddr::from(MacAddr8::from(array));
+            Ok(mac)
+        }
+        _ => Err(de::Error::custom("invalid MAC address length")),
+    }
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct NetworkPortStatus {
@@ -183,7 +211,8 @@ pub struct NetworkPortStatus {
     pub ntp_servers: Option<Vec<IpAddr>>,
     pub addr_info_list: Vec<AddrInfo>,
     pub up: bool,
-    pub mac_addr: MacAddr6,
+    #[serde(deserialize_with = "deserialize_mac", skip_serializing)]
+    pub mac_addr: MacAddr,
     pub default_routers: Option<Vec<IpAddr>>,
     #[serde(rename = "MTU")]
     pub mtu: u16,

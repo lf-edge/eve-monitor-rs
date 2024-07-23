@@ -1,16 +1,22 @@
 use std::net::IpAddr;
 
 use crate::ipc::eve_types::NetworkPortStatus;
-// use macaddr::MacAddr;
+use macaddr::MacAddr;
 use serde_json::json;
+
+pub struct NetworkStatus {
+    pub interfaces: Vec<NetworkInterface>,
+    pub proxy_enable: bool,
+    pub proxy_url: url::Url,
+}
 
 #[derive(Debug)]
 pub struct NetworkInterface {
     name: String,
-    is_mngmt: bool,
+    is_mgmt: bool,
     addresses: Vec<IpAddr>,
-    default_gateway: Option<Vec<IpAddr>>,
-    // mac: MacAddr,
+    routs: Option<Vec<IpAddr>>,
+    mac: MacAddr,
 }
 
 impl From<NetworkPortStatus> for NetworkInterface {
@@ -21,9 +27,9 @@ impl From<NetworkPortStatus> for NetworkInterface {
         NetworkInterface {
             name: port.if_name,
             addresses,
-            is_mngmt: port.is_mgmt,
-            default_gateway: port.default_routers,
-            // mac: MacAddr::from(port.mac_addr),
+            is_mgmt: port.is_mgmt,
+            routs: port.default_routers,
+            mac: port.mac_addr,
         }
     }
 }
@@ -34,6 +40,8 @@ pub enum IoError {
 }
 
 mod tests {
+    use std::{net::Ipv4Addr, str::FromStr};
+
     use serde_json::from_value;
 
     use super::*;
@@ -203,7 +211,24 @@ mod tests {
     fn test_from() {
         let port = get_network_port_status();
         let network_interface = NetworkInterface::from(port);
-        println!("{:?}", network_interface);
         assert_eq!(network_interface.name, "eth1");
+        assert_eq!(network_interface.is_mgmt, true);
+        assert_eq!(network_interface.addresses.len(), 3);
+        assert_eq!(
+            network_interface.mac.as_bytes(),
+            &[0x52, 0x54, 0x00, 0x12, 0x34, 0x57]
+        );
+        assert_eq!(network_interface.routs.unwrap().len(), 2);
+        // check all the addresses
+        let addresses = network_interface.addresses;
+        assert_eq!(addresses[0], IpAddr::V4(Ipv4Addr::new(192, 168, 2, 10)));
+        assert_eq!(
+            addresses[1],
+            IpAddr::from_str("fec0::21b8:b579:8b9c:3cda").unwrap()
+        );
+        assert_eq!(
+            addresses[2],
+            IpAddr::from_str("fe80::6f27:5660:de21:d553").unwrap()
+        );
     }
 }

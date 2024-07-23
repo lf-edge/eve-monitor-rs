@@ -1,4 +1,7 @@
+use std::str::FromStr;
+
 use super::*;
+use eve_types::deserialize_mac;
 use eve_types::BondConfig;
 use eve_types::BondMode;
 use eve_types::DPCState;
@@ -13,6 +16,9 @@ use eve_types::RadioSilence;
 use eve_types::ResultData;
 use eve_types::WirelessCfg;
 use eve_types::WirelessType;
+use macaddr::MacAddr;
+use serde::de;
+use serde::Deserialize;
 use serde_json::from_value;
 use serde_json::json;
 
@@ -888,4 +894,38 @@ fn test_device_network_status_null_ports() {
     assert_eq!(result.state, DPCState::None);
     assert_eq!(result.testing, false);
     assert_eq!(result.ports.is_none(), true);
+}
+
+#[derive(Deserialize, PartialEq, Debug)]
+struct MacContainer {
+    #[serde(deserialize_with = "deserialize_mac")]
+    mac: MacAddr,
+}
+
+#[test]
+fn test_deserialize_mac_addr() {
+    let json = r#"{"mac":"UlQAEjRW"}"#;
+    let mac_addr: MacContainer = serde_json::from_str(json).unwrap();
+    assert_eq!(
+        mac_addr,
+        MacContainer {
+            mac: MacAddr::from_str("52:54:00:12:34:56").unwrap()
+        }
+    );
+}
+
+#[test]
+fn test_deserialize_mac_addr_invalid_length() {
+    // 7 bytes instead of 6
+    let json = r#"{"mac":"UlQAEjRXIg=="}"#;
+    let mac_addr: Result<MacContainer, _> = serde_json::from_str(json);
+    assert!(mac_addr.is_err());
+}
+
+#[test]
+fn test_deserialize_mac_addr_invalid_base64() {
+    // Invalid base64 sequence
+    let json = r#"{"mac":"UlQAE"}"#;
+    let mac_addr: Result<MacContainer, _> = serde_json::from_str(json);
+    assert!(mac_addr.is_err());
 }

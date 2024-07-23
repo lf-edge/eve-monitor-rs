@@ -1,4 +1,8 @@
+use std::rc::Rc;
+
 use crate::events;
+use crate::model::Model;
+use crate::raw_model::RawModel;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use log::debug;
@@ -49,9 +53,7 @@ impl<D: 'static> Dialog<D> {
         let mut widgets = WidgetMap::new();
         for button_name in buttons.iter() {
             let button = ButtonElement::new(button_name);
-            widgets
-                .add(button_name.to_string(), Box::new(button))
-                .expect("Widget name already exists");
+            widgets.add_or_update(button_name.to_string(), Box::new(button));
         }
 
         let focus = FocusTracker::new(
@@ -124,7 +126,13 @@ impl<D: 'static> IPresenter for Dialog<D> {
     //     HashMap::new()
     // }
 
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, dialog_focused: bool) {
+    fn render(
+        &mut self,
+        area: &Rect,
+        frame: &mut Frame<'_>,
+        model: &Rc<Model>,
+        dialog_focused: bool,
+    ) {
         trace!("Rendering dialog: {}", self.name);
         self.do_layout(area);
 

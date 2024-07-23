@@ -52,6 +52,7 @@ impl LabelElement {
 impl IWidgetPresenter for LabelElement {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _focused: bool) {
         let text = self.text.clone();
+        trace!("LabelElement::render: {}", text);
         let p = Paragraph::new(text)
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::White));

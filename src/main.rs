@@ -3,6 +3,8 @@ mod application;
 mod events;
 mod ipc;
 mod mainwnd;
+mod model;
+mod raw_model;
 mod terminal;
 mod traits;
 mod ui;
@@ -29,7 +31,7 @@ fn init_logging() -> log2::Handle {
         .rotate(20)
         .tee(false) // no console output
         .module(true)
-        .level(LevelFilter::Debug)
+        .level(LevelFilter::Trace)
         .start();
 
     info!("Logging initialized: {:?}", log_file);

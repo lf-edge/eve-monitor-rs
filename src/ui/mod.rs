@@ -7,6 +7,7 @@ pub mod action;
 pub mod activity;
 pub mod homepage;
 pub mod layer_stack;
+pub mod networkpage;
 pub mod tools;
 pub mod widgets;
 pub mod window;

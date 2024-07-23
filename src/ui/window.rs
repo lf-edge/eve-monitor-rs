@@ -1,10 +1,12 @@
 use crate::events;
+use crate::model::Model;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
-use std::{cell::RefCell, fmt::Debug};
+use std::borrow::BorrowMut;
+use std::{cell::RefCell, fmt::Debug, rc::Rc};
 
 use log::trace;
-use ratatui::layout::Rect;
+use ratatui::layout::{self, Rect};
 
 use crate::traits::{IEventHandler, IPresenter, IVisible, IWidget, IWindow};
 use anyhow::Result;
@@ -19,16 +21,16 @@ use super::{
 pub type WidgetMap = ElementHashMap<Box<dyn IWidget>>;
 pub type LayoutMap = ElementHashMap<Rect>;
 
-pub type LayoutFn = Box<dyn FnMut(&Rect) -> Option<LayoutMap>>;
-pub type RenderFn = Box<dyn FnMut(&Rect, &mut ratatui::Frame<'_>)>;
+pub type LayoutFn<D> = Rc<dyn Fn(&mut Window<D>, &Rect, &Rc<Model>)>;
+pub type RenderFn<D> = Rc<dyn Fn(&mut Window<D>, &Rect, &mut ratatui::Frame<'_>, &Rc<Model>)>;
 
 pub struct WindowBuilder<D> {
     name: String,
     widgets: WidgetMap,
     // callback for layout
-    do_layout: Option<LayoutFn>,
+    do_layout: Option<LayoutFn<D>>,
     // callback for rendering
-    do_render: Option<RenderFn>,
+    do_render: Option<RenderFn<D>>,
     // taborder
     tab_order: Option<Vec<String>>,
     // initial focus
@@ -41,25 +43,23 @@ pub struct WindowBuilder<D> {
 
 impl<D> WindowBuilder<D> {
     pub fn widget<S: Into<String>>(mut self, name: S, widget: Box<dyn IWidget>) -> Self {
-        self.widgets
-            .add(name.into(), widget)
-            .expect("Widget name already exists");
+        self.widgets.add_or_update(name.into(), widget);
         self
     }
 
     pub fn with_layout<F>(mut self, do_layout: F) -> Self
     where
-        F: FnMut(&Rect) -> Option<LayoutMap> + 'static,
+        F: Fn(&mut Window<D>, &Rect, &Rc<Model>) + 'static,
     {
-        self.do_layout = Some(Box::new(do_layout));
+        self.do_layout = Some(Rc::new(do_layout));
         self
     }
 
     pub fn with_render<F>(mut self, do_render: F) -> Self
     where
-        F: FnMut(&Rect, &mut ratatui::Frame<'_>) + 'static,
+        F: Fn(&mut Window<D>, &Rect, &mut ratatui::Frame<'_>, &Rc<Model>) + 'static,
     {
-        self.do_render = Some(Box::new(do_render));
+        self.do_render = Some(Rc::new(do_render));
         self
     }
 
@@ -87,7 +87,24 @@ impl<D> WindowBuilder<D> {
     }
 
     pub fn build(self) -> Result<Window<D>> {
-        //TODO: check focused view exists in widgets
+        // focused view if set must exist in widgets and taborder if provided
+        if let Some(focused_view) = &self.focused_view {
+            if !self.widgets.contains_key(focused_view) {
+                return Err(anyhow::anyhow!(
+                    "Focused view not found in widgets: {}",
+                    focused_view
+                ));
+            }
+            if let Some(order) = &self.tab_order {
+                if !order.contains(focused_view) {
+                    return Err(anyhow::anyhow!(
+                        "Focused view not found in tab order: {}",
+                        focused_view
+                    ));
+                }
+            }
+        }
+
         let ft = if let Some(order) = self.tab_order {
             let tab_order = order
                 .clone()
@@ -114,13 +131,13 @@ impl<D> WindowBuilder<D> {
 pub struct Window<D> {
     pub v: VisualState,
     pub name: String,
-    pub ft: FocusTracker,
-    pub widgets: WidgetMap,
-    pub layout: LayoutMap,
-    pub do_layout: Option<LayoutFn>,
-    pub do_render: Option<RenderFn>,
-    pub on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
-    pub state: RefCell<D>,
+    ft: FocusTracker,
+    widgets: WidgetMap,
+    layout: LayoutMap,
+    do_layout: Option<LayoutFn<D>>,
+    do_render: Option<RenderFn<D>>,
+    on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
+    pub state: D,
 }
 
 impl<S> Debug for Window<S> {
@@ -134,8 +151,8 @@ impl<D> Window<D> {
         name: S,
         ft: FocusTracker,
         widgets: WidgetMap,
-        do_layout: Option<LayoutFn>,
-        do_render: Option<RenderFn>,
+        do_layout: Option<LayoutFn<D>>,
+        do_render: Option<RenderFn<D>>,
         on_action: Option<Box<dyn FnMut(Action, &mut D) -> Option<UiActions>>>,
         state: D,
     ) -> Self {
@@ -147,7 +164,7 @@ impl<D> Window<D> {
             do_layout,
             do_render,
             on_action,
-            state: RefCell::new(state),
+            state: state,
             v: Default::default(),
         }
     }
@@ -163,6 +180,30 @@ impl<D> Window<D> {
             on_action: None,
             state: None,
         }
+    }
+
+    pub fn add_widget<S: Into<String>>(&mut self, name: S, widget: Box<dyn IWidget>) {
+        self.widgets.add_or_update(name.into(), widget);
+    }
+
+    pub fn update_layout<S: Into<String>>(&mut self, name: S, rect: Rect) {
+        self.layout.add_or_update(name.into(), rect);
+    }
+
+    pub fn widgets(&mut self) -> &mut WidgetMap {
+        &mut self.widgets
+    }
+
+    pub fn layout<S: Into<String>>(&mut self, name: S) -> Rect {
+        self.layout.get(&name.into()).unwrap().clone()
+    }
+
+    pub fn render_widget<S: Into<String>>(&mut self, name: S, frame: &mut ratatui::Frame<'_>) {
+        let name = name.into();
+        let focused = self.ft.get_focused_view().unwrap_or_default() == name;
+        let rect = self.layout.get(&name).unwrap().clone();
+        let widget = self.widgets.get_mut(&name).unwrap();
+        widget.render(&rect, frame, focused);
     }
 }
 
@@ -246,32 +287,43 @@ impl<D> IEventHandler for Window<D> {
 
 impl<D> IVisible for Window<D> {}
 impl<D> IPresenter for Window<D> {
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
-        if let Some(custom_render) = &mut self.do_render {
-            (custom_render)(area, frame)
-        };
+    fn render(
+        &mut self,
+        area: &Rect,
+        frame: &mut ratatui::Frame<'_>,
+        model: &Rc<Model>,
+        focused: bool,
+    ) {
+        // print layout map
+        trace!("Layout: {:#?}", *self.layout);
 
         let focused_widget = self.ft.get_focused_view().unwrap_or_default();
 
-        if let Some(layouter) = &mut self.do_layout {
-            let layout = (layouter)(area).unwrap();
-
-            self.widgets
-                .iter_mut()
-                .filter_map(|(name, widget)| {
-                    layout
-                        .get(name)
-                        .inspect(|f| trace!("Layout for {}: {:#?}", name, f))
-                        .map(|r| (r, widget, *name == focused_widget))
-                })
-                .for_each(|(rect, widget, w_focused)| {
-                    widget.render(rect, frame, w_focused && focused);
-                });
-        } else {
-            self.widgets.iter_mut().for_each(|(name, widget)| {
-                widget.render(area, frame, (*name == focused_widget) && focused)
-            });
+        // always do layout first. New widgets and layout entries may appear
+        if let Some(layouter) = self.do_layout.borrow_mut() {
+            let layouter = layouter.clone();
+            (layouter)(self, area, &model);
         }
+
+        // do custom rendering before we render widgets
+        if let Some(custom_render) = self.do_render.borrow_mut() {
+            let custom_render = custom_render.clone();
+            (custom_render)(self, area, frame, &model)
+        };
+
+        let layout = &self.layout;
+
+        self.widgets
+            .iter_mut()
+            .filter_map(|(name, widget)| {
+                layout
+                    .get(name)
+                    .inspect(|f| trace!("Layout for {}: {:#?}", name, f))
+                    .map(|r| (r, widget, *name == focused_widget))
+            })
+            .for_each(|(rect, widget, w_focused)| {
+                widget.render(rect, frame, w_focused && focused);
+            });
     }
 
     fn can_focus(&self) -> bool {

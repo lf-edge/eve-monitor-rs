@@ -1,81 +1,43 @@
-use std::collections::HashMap;
-
 use ratatui::{
-    buffer::Buffer,
-    layout::{Alignment, Constraint, Layout, Rect},
+    layout::{Constraint, Flex, Layout, Margin},
     style::{Color, Style},
-    widgets::{Block, BorderType, Borders, Paragraph, StatefulWidgetRef, Widget, WidgetRef},
+    widgets::{Block, BorderType, Borders, WidgetRef},
 };
 
-use crate::traits::VisualComponent;
+use super::{widgets::label::LabelElement, window::Window};
 
-use super::component::{StatefulComponent, VisualComponentState, WidgetState};
+pub struct StatusBarState {}
 
-pub struct StatusBarWidget {}
-impl StatusBarWidget {
-    fn render_widget(&self, _state: &mut StatusBarWidgetState, area: Rect, buf: &mut Buffer) {
-        let border = Block::new()
-            .border_type(BorderType::Rounded)
-            .borders(Borders::ALL)
-            .border_style(Style::default().fg(Color::White))
-            .style(Style::default().bg(Color::Black));
+pub fn create_status_bar() -> Window<StatusBarState> {
+    let clock = LabelElement::new("Clock").on_tick(|label| {
+        let now = chrono::Local::now();
+        let time = now.format("%H:%M:%S").to_string();
+        label.set_text(time);
+    });
 
-        border.render_ref(area, buf);
-        // get current time in HH:MM:SS format
-        let time_str = chrono::Local::now().format("%H:%M:%S").to_string();
-        // and reneder it on the right
-        let time = Paragraph::new(time_str.as_str())
-            .style(Style::default().fg(Color::White))
-            .alignment(Alignment::Center);
-        // split inner area of border into two parts
-        let layout = Layout::horizontal([
-            Constraint::Min(0),
-            Constraint::Length(time_str.len() as u16),
-        ])
-        .horizontal_margin(1)
-        .split(border.inner(area));
-        time.render(layout[1], buf);
-    }
-}
+    let w = Window::builder("StatusBar")
+        .with_state(StatusBarState {})
+        .widget("Clock", clock)
+        .with_layout(|w, rect, _model| {
+            let inner_rect = rect.inner(Margin {
+                horizontal: 1,
+                vertical: 1,
+            });
 
-impl WidgetState for StatusBarWidgetState {
-    fn get_layout(&self) -> std::collections::HashMap<String, Rect> {
-        todo!()
-    }
-}
+            let layout = Layout::horizontal([Constraint::Length(0), Constraint::Length(8)])
+                .flex(Flex::End)
+                .split(inner_rect);
+            w.update_layout("Clock", layout[1]);
+        })
+        .with_render(|_w, rect, frame, _model| {
+            let blk = Block::new()
+                .border_type(BorderType::Rounded)
+                .borders(Borders::ALL)
+                .style(Style::default().bg(Color::Black));
 
-pub struct StatusBarWidgetState {}
+            blk.render_ref(*rect, frame.buffer_mut());
+        })
+        .build();
 
-impl StatefulWidgetRef for &mut Box<StatusBarWidget> {
-    type State = StatusBarWidgetState;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, _state: &mut Self::State) {
-        self.render_widget(_state, area, buf);
-    }
-}
-
-impl StatefulWidgetRef for StatusBarWidget {
-    type State = VisualComponentState<StatusBarWidgetState>;
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.render_widget(&mut state.widget_state, area, buf);
-    }
-}
-
-pub type StatusBar = StatefulComponent<StatusBarWidget, StatusBarWidgetState>;
-
-impl StatusBar {
-    pub fn new() -> Self {
-        Self::create_component_state(
-            "StatusBar".to_string(),
-            Box::new(StatusBarWidget {}),
-            StatusBarWidgetState {},
-            Box::new(|_, _| HashMap::new()),
-            None,
-        )
-    }
-}
-
-impl VisualComponent for StatusBar {
-    fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, _focused: bool) {
-        frame.render_stateful_widget_ref(&mut self.widget, *area, &mut self.state.widget_state)
-    }
+    w.unwrap()
 }

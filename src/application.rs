@@ -6,8 +6,10 @@ use crate::ipc::eve_types::{
 };
 use crate::model::Model;
 use crate::raw_model::RawModel;
+use crate::traits::{IEventHandler, IPresenter};
 use crate::ui::homepage::HomePage;
 use crate::ui::networkpage::create_network_page;
+use crate::ui::statusbar::{create_status_bar, StatusBarState};
 use crate::ui::widgets::label::LabelElement;
 use crate::ui::widgets::radiogroup::RadioGroupElement;
 use core::fmt::Debug;
@@ -307,6 +309,7 @@ struct Ui {
     // this is our model :)
     model: Rc<Model>,
     raw_model: Rc<RawModel>,
+    status_bar: Window<StatusBarState>,
 }
 
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
@@ -336,6 +339,7 @@ impl Ui {
             selected_tab: UiTabs::default(),
             model,
             raw_model: Rc::new(RawModel::new()),
+            status_bar: create_status_bar(),
         })
     }
 
@@ -372,10 +376,10 @@ impl Ui {
                 a: 42,
                 ip: "10.208.13.5".to_string(),
             })
-            .widget("3-1", Box::new(button))
-            .widget("0-3", Box::new(input))
-            .widget("1-1", Box::new(rgrp))
-            .widget("2-2", Box::new(clock))
+            .widget("3-1", button)
+            .widget("0-3", input)
+            .widget("1-1", rgrp)
+            .widget("2-2", clock)
             .with_layout(do_layout)
             .with_focused_view("0-3")
             .on_action(|action, state: &mut MainWndState| {
@@ -464,7 +468,7 @@ impl Ui {
         };
 
         let d: Dialog<MonActions> = Dialog::new(
-            (50, 30),
+            (50, 20),
             "confirm".to_string(),
             vec!["Ok".to_string(), "Cancel".to_string()],
             "Cancel",
@@ -481,13 +485,13 @@ impl Ui {
     }
 
     fn draw(&mut self) {
-        let screen_layout = Layout::vertical([Length(2), Fill(0), Length(1)]);
+        let screen_layout = Layout::vertical([Length(2), Fill(0), Length(3)]);
         let tabs_widget = Ui::tabs();
 
         //TODO: handle terminal event
         let _ = self.terminal.draw(|frame| {
             let area = frame.size();
-            let [tabs, body, _statusbar] = screen_layout.areas(area);
+            let [tabs, body, statusbar_rect] = screen_layout.areas(area);
 
             tabs_widget
                 .select(self.selected_tab as usize)
@@ -499,6 +503,9 @@ impl Ui {
             for (index, layer) in stack.iter_mut().enumerate() {
                 layer.render(&body, frame, &self.model, index == last_index);
             }
+            // render status bar
+            self.status_bar
+                .render(&statusbar_rect, frame, &self.model, false);
         });
     }
 
@@ -589,12 +596,14 @@ impl Ui {
                 }
             }
             Event::Tick => {
-                // forward tick event to all layers. Callect actions
+                // forward tick event to all layers. Collect actions
                 for layer in self.views[self.selected_tab as usize].iter_mut() {
                     if let Some(action) = layer.handle_event(Event::Tick) {
                         self.action_tx.send(action).unwrap();
                     }
                 }
+                // and to the status bar
+                self.status_bar.handle_event(Event::Tick);
             }
             _ => {
                 debug!("Unhandled event: {:?}", event);

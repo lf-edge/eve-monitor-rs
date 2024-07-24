@@ -5,6 +5,7 @@ pub enum UiActions {
     Redraw,
     CheckBox { checked: bool },
     RadioGroup { selected: usize },
+    SpinBox { selected: usize },
     Input { text: String },
     ButtonClicked(String),
     DismissDialog,

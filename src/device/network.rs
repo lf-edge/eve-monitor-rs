@@ -5,8 +5,6 @@ use macaddr::MacAddr;
 
 pub struct NetworkStatus {
     pub interfaces: Vec<NetworkInterface>,
-    pub proxy_enable: bool,
-    pub proxy_url: url::Url,
 }
 
 #[derive(Debug)]

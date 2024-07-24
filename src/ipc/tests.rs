@@ -919,7 +919,12 @@ fn test_deserialize_mac_addr_invalid_length() {
     // 7 bytes instead of 6
     let json = r#"{"mac":"UlQAEjRXIg=="}"#;
     let mac_addr: Result<MacContainer, _> = serde_json::from_str(json);
-    assert!(mac_addr.is_err());
+    println!("{:?}", mac_addr);
+    assert!(mac_addr
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("invalid MAC address length"));
 }
 
 #[test]
@@ -927,5 +932,9 @@ fn test_deserialize_mac_addr_invalid_base64() {
     // Invalid base64 sequence
     let json = r#"{"mac":"UlQAE"}"#;
     let mac_addr: Result<MacContainer, _> = serde_json::from_str(json);
-    assert!(mac_addr.is_err());
+    assert!(mac_addr
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("Invalid input length:"));
 }

@@ -144,7 +144,7 @@ pub struct RadioSilence {
 pub struct GoIpNetwork {
     #[serde(rename = "IP")]
     pub ip: String,
-    pub mask: String,
+    pub mask: String, // base64 encoded prefix
 }
 
 fn deserialize_ipaddr<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
@@ -229,18 +229,24 @@ pub struct NetworkPortStatus {
     pub test_results: TestResults,
 }
 
+/// NetworkPortStatus struct
+/// Field names are confusing
+/// 1. If network_proxy_enable is true, then use network_proxy_url is used to download .wpad file
+/// 2. If network_proxy_enable is false, then one of the proxies from the proxies list is used
+/// 3. Only one entry per proxy type  is possible in the proxies list
+/// 4. If [ProxyConfig::pacfile] is used then proxy configuration is taken from the .pac file
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct ProxyConfig {
-    proxies: Option<Vec<ProxyEntry>>,
-    exceptions: String,
-    pacfile: String,
-    network_proxy_enable: bool,
+    pub proxies: Option<Vec<ProxyEntry>>,
+    pub exceptions: String,
+    pub pacfile: String,
+    pub network_proxy_enable: bool,
     #[serde(rename = "NetworkProxyURL")]
-    network_proxy_url: String,
+    pub network_proxy_url: String,
     #[serde(rename = "WpadURL")]
-    wpad_url: String,
-    proxy_cert_pem: Option<Vec<Vec<u8>>>,
+    pub wpad_url: String,
+    pub proxy_cert_pem: Option<Vec<Vec<u8>>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -438,8 +444,15 @@ pub enum LacpRate {
     LacpRateFast = 2,
 }
 
-// snippet three
-// DhcpType enum
+/// DhcpType enum
+/// The name is confusing. Possible valuse are:
+/// [NOOP, Static, None, Deprecated, Client]
+/// but only [Client and Static] are used.
+/// Corresponding values that can be used in PortConfigOverride.json
+/// [0, 1, 2, 3, 4]
+///
+/// [Client] is the real DHCP client
+/// [Static] is the static IP address
 #[repr(u8)]
 #[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
 pub enum DhcpType {
@@ -447,6 +460,7 @@ pub enum DhcpType {
     Static = 1,
     None = 2,
     Deprecated = 3,
+    /// DHCP client i.e. real DHCP client
     Client = 4,
 }
 

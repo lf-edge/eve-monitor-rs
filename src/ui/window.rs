@@ -42,8 +42,8 @@ pub struct WindowBuilder<D> {
 }
 
 impl<D> WindowBuilder<D> {
-    pub fn widget<S: Into<String>>(mut self, name: S, widget: Box<dyn IWidget>) -> Self {
-        self.widgets.add_or_update(name.into(), widget);
+    pub fn widget<S: Into<String>>(mut self, name: S, widget: impl IWidget + 'static) -> Self {
+        self.widgets.add_or_update(name.into(), Box::new(widget));
         self
     }
 

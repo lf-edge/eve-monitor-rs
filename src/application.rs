@@ -592,7 +592,7 @@ impl Ui {
                 }
             }
             Event::Tick => {
-                // forward tick event to all layers. Callect actions
+                // forward tick event to all layers. Collect actions
                 for layer in self.views[self.selected_tab as usize].iter_mut() {
                     if let Some(action) = layer.handle_event(Event::Tick) {
                         self.action_tx.send(action).unwrap();

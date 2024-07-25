@@ -48,7 +48,7 @@ use crate::ui::action::{Action, UiActions};
 use crate::ui::dialog::Dialog;
 use crate::ui::layer_stack::LayerStack;
 use crate::ui::widgets::button::ButtonElement;
-use crate::ui::widgets::input_field::InputFieldElement;
+use crate::ui::widgets::input_field::{InputFieldElement, InputModifiers};
 use crate::ui::window::Window;
 
 #[derive(Debug)]
@@ -352,11 +352,21 @@ impl Ui {
             }
         };
 
-        let input = InputFieldElement::new("Input", Some("Type here")).on_char(|c: &char| {
-            info!("Char: {:?}", c);
-            let cap_c = c.to_uppercase().next().unwrap();
-            Some(cap_c)
-        });
+        let input = InputFieldElement::new("Gateway", Some("delete me"))
+            .on_char(|c: &char| {
+                info!("Char: {:?}", c);
+
+                if c.is_digit(10) || *c == '.' {
+                    return Some(*c);
+                }
+                None
+            })
+            .with_modifiers(vec![
+                InputModifiers::DisplayMode,
+                InputModifiers::DisplayCaption,
+            ])
+            .with_size_hint((19, 3).into())
+            .with_text_hint("192.168.0.1");
         let button = ButtonElement::new("Button");
         let radiogroup =
             RadioGroupElement::new(vec!["Option 1", "Option 2", "Option 3"], "Radio Group");

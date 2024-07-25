@@ -3,7 +3,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use log::trace;
 use ratatui::{
     buffer::Buffer,
-    layout::{Alignment, Rect},
+    layout::{Alignment, Rect, Size},
     style::{Color, Style},
     widgets::{Block, BorderType, Borders, Paragraph, Widget},
 };
@@ -32,6 +32,13 @@ impl InputMode {
 pub type OnContentUpdated = dyn FnMut(&String) -> Option<String>;
 pub type OnChar = dyn FnMut(&char) -> Option<char>;
 
+#[derive(PartialEq)]
+pub enum InputModifiers {
+    DisplayMode,
+    DisplayPosition,
+    DisplayCaption,
+}
+
 pub struct InputFieldElement {
     v: VisualState,
     caption: String,
@@ -43,9 +50,21 @@ pub struct InputFieldElement {
     input_mode: InputMode,
     on_update: Option<Box<OnContentUpdated>>,
     on_char: Option<Box<OnChar>>,
+    enabled: bool,
+    modifiers: Vec<InputModifiers>,
+    size_hint: Option<Size>,
+    text_hint: Option<String>,
 }
 
-impl IWidget for InputFieldElement {}
+impl IWidget for InputFieldElement {
+    fn set_enabled(&mut self, enabled: bool) {
+        self.enabled = enabled;
+    }
+
+    fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+}
 
 impl InputFieldElement {
     pub fn new<S: Into<String>>(caption: S, value: Option<S>) -> Self {
@@ -64,7 +83,35 @@ impl InputFieldElement {
             on_char: None,
             text_area: Rect::default(),
             scroll_left: 0,
+            enabled: true,
+            modifiers: vec![
+                InputModifiers::DisplayMode,
+                InputModifiers::DisplayPosition,
+                InputModifiers::DisplayCaption,
+            ],
+            size_hint: None,
+            text_hint: None,
         }
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
+        self
+    }
+
+    pub fn with_modifiers(mut self, modifiers: Vec<InputModifiers>) -> Self {
+        self.modifiers = modifiers;
+        self
+    }
+
+    pub fn with_size_hint(mut self, size_hint: Size) -> Self {
+        self.size_hint = Some(size_hint);
+        self
+    }
+
+    pub fn with_text_hint<S: Into<String>>(mut self, text_hint: S) -> Self {
+        self.text_hint = Some(text_hint.into());
+        self
     }
 
     pub fn on_update<F>(mut self, f: F) -> Self
@@ -84,10 +131,10 @@ impl InputFieldElement {
     }
 
     fn render_input_field(&mut self, area: &Rect, buf: &mut Buffer, focused: bool) {
-        let style = if focused {
-            Style::default().fg(Color::Yellow)
-        } else {
-            Style::default().fg(Color::White)
+        let style = match (self.is_enabled(), focused) {
+            (false, _) => Style::default().fg(Color::DarkGray),
+            (true, false) => Style::default().fg(Color::White),
+            (true, true) => Style::default().fg(Color::Yellow),
         };
 
         // render INS/OVR indicator next to the caption
@@ -96,26 +143,61 @@ impl InputFieldElement {
             InputMode::Overwrite => "OVR",
         };
 
-        // render pos/total in the bottom right corner
-        let pos = format!(
-            "{}/{}",
-            self.input_position,
-            self.value.as_ref().map(|v| v.len()).unwrap_or_default()
-        );
-
-        let blk = Block::new()
+        let mut blk = Block::new()
             .border_type(BorderType::Rounded)
             .borders(Borders::ALL)
             .border_style(style)
-            .style(Style::default().bg(Color::Black))
-            .title(self.caption.clone() + ": " + mode)
-            .title_bottom(pos);
+            .style(Style::default().bg(Color::Black));
+
+        // render caption
+        if self.modifiers.contains(&InputModifiers::DisplayCaption) {
+            let caption = if self.modifiers.contains(&InputModifiers::DisplayMode) {
+                format!("{}: {}", self.caption, mode)
+            } else {
+                self.caption.clone()
+            };
+            blk = blk.title(caption);
+        }
+
+        // render pos/total in the bottom right corner
+        if self.modifiers.contains(&InputModifiers::DisplayPosition) {
+            let pos = format!(
+                "{}/{}",
+                self.input_position,
+                self.value.as_ref().map(|v| v.len()).unwrap_or_default()
+            );
+            blk = blk.title_bottom(pos);
+        }
+
+        // take size hist into account
+        let area = self.size_hint.map_or_else(
+            || *area,
+            |s| {
+                area.clamp(Rect {
+                    x: area.x,
+                    y: area.y,
+                    width: s.width,
+                    height: s.height,
+                })
+            },
+        );
 
         // get inner area
-        let inner_area = blk.inner(*area);
+        let inner_area = blk.inner(area);
         self.text_area = inner_area;
         // render the border and caption
-        blk.render(*area, buf);
+        blk.render(area, buf);
+
+        // if value is empty, render the text hint
+        if self.value.as_ref().map(|v| v.is_empty()).unwrap_or(true) {
+            if let Some(text_hint) = self.text_hint.as_deref() {
+                let hint = Paragraph::new(text_hint)
+                    .style(Style::default().fg(Color::DarkGray))
+                    .alignment(Alignment::Left);
+                hint.render(inner_area, buf);
+            }
+            return;
+        }
 
         // render the input field
         let input = Paragraph::new(self.value.as_deref().unwrap_or_default())
@@ -217,7 +299,7 @@ impl IElementEventHandler for InputFieldElement {
 impl IWidgetPresenter for InputFieldElement {
     fn render(&mut self, area: &Rect, frame: &mut ratatui::Frame<'_>, focused: bool) {
         trace!(
-            "rendering: InputFieldElement {:#?}. fucused={}",
+            "rendering: InputFieldElement {:#?}. focused={}",
             &self.caption,
             focused
         );
@@ -225,7 +307,7 @@ impl IWidgetPresenter for InputFieldElement {
 
         // set cursor position must be called every time to display the cursor
         // on the next redraw cycle
-        if focused {
+        if focused && self.is_enabled() {
             frame.set_cursor(self.text_area.x + self.cursor_position, self.text_area.y);
         }
     }

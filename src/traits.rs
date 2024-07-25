@@ -43,7 +43,12 @@ pub trait IWidgetPresenter {
 }
 
 pub trait IWindow: IPresenter + IEventHandler {}
-pub trait IWidget: IWidgetPresenter + IElementEventHandler {}
+pub trait IWidget: IWidgetPresenter + IElementEventHandler {
+    fn set_enabled(&mut self, _enabled: bool) {}
+    fn is_enabled(&self) -> bool {
+        true
+    }
+}
 
 pub trait IAction: Clone {
     type Target;

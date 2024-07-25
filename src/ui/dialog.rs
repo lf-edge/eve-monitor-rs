@@ -2,7 +2,6 @@ use std::rc::Rc;
 
 use crate::events;
 use crate::model::Model;
-use crate::raw_model::RawModel;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use log::debug;
@@ -28,10 +27,7 @@ use super::{
     window::{LayoutMap, WidgetMap},
 };
 
-pub struct Dialog<D>
-// where
-// D: IPresenter,
-{
+pub struct Dialog<D> {
     name: String,
     focus: FocusTracker,
     size: (u16, u16),
@@ -130,7 +126,7 @@ impl<D: 'static> IPresenter for Dialog<D> {
         &mut self,
         area: &Rect,
         frame: &mut Frame<'_>,
-        model: &Rc<Model>,
+        _model: &Rc<Model>,
         dialog_focused: bool,
     ) {
         trace!("Rendering dialog: {}", self.name);

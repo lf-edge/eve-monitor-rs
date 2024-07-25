@@ -1,9 +1,5 @@
 use crate::device::dmesg::DmesgViewer;
 use crate::events::Event;
-use crate::ipc::eve_types::{
-    DeviceNetworkStatus, DevicePortConfig, DevicePortConfigList, NetworkPortConfig,
-    NetworkPortStatus,
-};
 use crate::model::Model;
 use crate::raw_model::RawModel;
 use crate::traits::{IEventHandler, IPresenter};
@@ -14,7 +10,6 @@ use crate::ui::widgets::label::LabelElement;
 use crate::ui::widgets::radiogroup::RadioGroupElement;
 use core::fmt::Debug;
 
-use std::cell::RefCell;
 use std::rc::Rc;
 use std::result::Result::Ok;
 
@@ -53,7 +48,7 @@ use crate::ui::dialog::Dialog;
 use crate::ui::layer_stack::LayerStack;
 use crate::ui::widgets::button::ButtonElement;
 use crate::ui::widgets::input_field::InputFieldElement;
-use crate::ui::window::{LayoutMap, Window};
+use crate::ui::window::Window;
 
 #[derive(Debug)]
 pub struct Application {
@@ -112,7 +107,8 @@ impl Application {
         // to send IPC messages from the task back to app
         let ipc_tx_clone = ipc_tx.clone();
 
-        let ipc_task = tokio::spawn(async move {
+        //TODO: save the task handle to be able to cancel it
+        let _ipc_task = tokio::spawn(async move {
             ipc_tx_clone.send(IpcMessage::Connecting).unwrap();
 
             let socket_path = Application::get_socket_path();
@@ -344,8 +340,7 @@ impl Ui {
     }
 
     pub fn create_main_wnd(&self) -> Window<MainWndState> {
-        let do_layout = |w: &mut Window<MainWndState>, area: &Rect, model: &Rc<Model>| {
-            let mut layout = LayoutMap::new();
+        let do_layout = |w: &mut Window<MainWndState>, area: &Rect, _model: &Rc<Model>| {
             let cols = Layout::horizontal([Constraint::Ratio(1, 4); 4]).split(*area);
             for (i, col) in cols.iter().enumerate() {
                 let rows = Layout::vertical([Constraint::Ratio(1, 4); 4]).split(*col);
@@ -363,7 +358,8 @@ impl Ui {
         });
         // .on_update(|input: &String| {
         let button = ButtonElement::new("Button");
-        let rgrp = RadioGroupElement::new(vec!["Option 1", "Option 2", "Option 3"], "Radio Group");
+        let radiogroup =
+            RadioGroupElement::new(vec!["Option 1", "Option 2", "Option 3"], "Radio Group");
 
         let clock = LabelElement::new("Clock").on_tick(|label| {
             let now = chrono::Local::now();
@@ -378,7 +374,7 @@ impl Ui {
             })
             .widget("3-1", button)
             .widget("0-3", input)
-            .widget("1-1", rgrp)
+            .widget("1-1", radiogroup)
             .widget("2-2", clock)
             .with_layout(do_layout)
             .with_focused_view("0-3")

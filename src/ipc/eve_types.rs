@@ -1,7 +1,10 @@
+use base64::Engine;
 use chrono::DateTime;
 use chrono::Utc;
 use macaddr::MacAddr;
 use macaddr::MacAddr6;
+use macaddr::MacAddr8;
+use serde::de;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::net::IpAddr;
@@ -141,7 +144,7 @@ pub struct RadioSilence {
 pub struct GoIpNetwork {
     #[serde(rename = "IP")]
     pub ip: String,
-    pub mask: String,
+    pub mask: String, // base64 encoded prefix
 }
 
 fn deserialize_ipaddr<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
@@ -157,6 +160,34 @@ where
     } else {
         let ip = s.parse().map_err(serde::de::Error::custom)?;
         Ok(Some(ip))
+    }
+}
+
+pub fn deserialize_mac<'de, D>(deserializer: D) -> Result<MacAddr, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(s)
+        .map_err(de::Error::custom)?;
+
+    match bytes.len() {
+        6 => {
+            let array: [u8; 6] = bytes
+                .try_into()
+                .map_err(|_| de::Error::custom("invalid byte array length"))?;
+            let mac = MacAddr::from(MacAddr6::from(array));
+            Ok(mac)
+        }
+        8 => {
+            let array: [u8; 8] = bytes
+                .try_into()
+                .map_err(|_| de::Error::custom("invalid byte array length"))?;
+            let mac = MacAddr::from(MacAddr8::from(array));
+            Ok(mac)
+        }
+        _ => Err(de::Error::custom("invalid MAC address length")),
     }
 }
 
@@ -183,7 +214,8 @@ pub struct NetworkPortStatus {
     pub ntp_servers: Option<Vec<IpAddr>>,
     pub addr_info_list: Vec<AddrInfo>,
     pub up: bool,
-    pub mac_addr: MacAddr6,
+    #[serde(deserialize_with = "deserialize_mac", skip_serializing)]
+    pub mac_addr: MacAddr,
     pub default_routers: Option<Vec<IpAddr>>,
     #[serde(rename = "MTU")]
     pub mtu: u16,
@@ -197,18 +229,24 @@ pub struct NetworkPortStatus {
     pub test_results: TestResults,
 }
 
+/// NetworkPortStatus struct
+/// Field names are confusing
+/// 1. If network_proxy_enable is true, then use network_proxy_url is used to download .wpad file
+/// 2. If network_proxy_enable is false, then one of the proxies from the proxies list is used
+/// 3. Only one entry per proxy type  is possible in the proxies list
+/// 4. If [ProxyConfig::pacfile] is used then proxy configuration is taken from the .pac file
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]
 pub struct ProxyConfig {
-    proxies: Option<Vec<ProxyEntry>>,
-    exceptions: String,
-    pacfile: String,
-    network_proxy_enable: bool,
+    pub proxies: Option<Vec<ProxyEntry>>,
+    pub exceptions: String,
+    pub pacfile: String,
+    pub network_proxy_enable: bool,
     #[serde(rename = "NetworkProxyURL")]
-    network_proxy_url: String,
+    pub network_proxy_url: String,
     #[serde(rename = "WpadURL")]
-    wpad_url: String,
-    proxy_cert_pem: Option<Vec<Vec<u8>>>,
+    pub wpad_url: String,
+    pub proxy_cert_pem: Option<Vec<Vec<u8>>>,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
@@ -406,8 +444,15 @@ pub enum LacpRate {
     LacpRateFast = 2,
 }
 
-// snippet three
-// DhcpType enum
+/// DhcpType enum
+/// The name is confusing. Possible valuse are:
+/// [NOOP, Static, None, Deprecated, Client]
+/// but only [Client and Static] are used.
+/// Corresponding values that can be used in PortConfigOverride.json
+/// [0, 1, 2, 3, 4]
+///
+/// [Client] is the real DHCP client
+/// [Static] is the static IP address
 #[repr(u8)]
 #[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
 pub enum DhcpType {
@@ -415,6 +460,7 @@ pub enum DhcpType {
     Static = 1,
     None = 2,
     Deprecated = 3,
+    /// DHCP client i.e. real DHCP client
     Client = 4,
 }
 

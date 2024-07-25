@@ -1,4 +1,3 @@
-use anyhow::{anyhow, Result};
 use ratatui::layout::{Constraint, Layout, Rect};
 use std::{
     collections::HashMap,
@@ -55,12 +54,6 @@ impl<T> ElementHashMap<T> {
     pub fn clear(&mut self) {
         self.layout.clear();
     }
-
-    // pub fn get(&self, name: &str) -> Result<&T> {
-    //     self.layout
-    //         .get(name)
-    //         .ok_or_else(|| anyhow!("Element with name {} not found", name))
-    // }
 }
 
 impl<T> Deref for ElementHashMap<T> {

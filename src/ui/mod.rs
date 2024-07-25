@@ -6,6 +6,7 @@ pub mod activity;
 pub mod focus_tracker;
 pub mod homepage;
 pub mod layer_stack;
+pub mod netconf;
 pub mod networkpage;
 pub mod statusbar;
 pub mod tools;

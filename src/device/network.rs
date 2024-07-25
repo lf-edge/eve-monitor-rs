@@ -1,7 +1,7 @@
 use std::net::IpAddr;
 
 use crate::ipc::eve_types::NetworkPortStatus;
-use macaddr::MacAddr;
+use macaddr::{MacAddr, MacAddr8};
 
 pub struct NetworkStatus {
     pub interfaces: Vec<NetworkInterface>,
@@ -14,6 +14,16 @@ pub struct NetworkInterface {
     addresses: Vec<IpAddr>,
     routs: Option<Vec<IpAddr>>,
     mac: MacAddr,
+}
+
+pub fn list() -> Option<Vec<NetworkInterface>> {
+    Some(vec![NetworkInterface {
+        name: "eth0".to_string(),
+        is_mgmt: true,
+        addresses: vec![],
+        routs: None,
+        mac: MacAddr::V8(MacAddr8::nil()),
+    }])
 }
 
 impl From<NetworkPortStatus> for NetworkInterface {

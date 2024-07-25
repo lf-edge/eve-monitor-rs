@@ -37,7 +37,7 @@ impl HomePage {
             Layout::horizontal([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)]).areas(*area);
 
         let [usb, pci] =
-            Layout::vertical([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).areas(*right);
+            Layout::vertical([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).areas(right);
 
         let mut lm = LayoutMap::new();
         let _ = lm.add_or_update("summary".to_string(), left.clone());

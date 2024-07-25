@@ -33,13 +33,11 @@ impl HomePage {
         hp
     }
     pub fn do_layout(&self, area: &Rect, _model: &Rc<Model>) -> LayoutMap {
-        let chunks =
-            Layout::horizontal([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)]).split(*area);
-        let [left, right] = [chunks[0], chunks[1]];
+        let [left, right] =
+            Layout::horizontal([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)]).areas(*area);
 
-        let chunks =
-            Layout::vertical([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).split(right);
-        let [usb, pci] = [chunks[0], chunks[1]];
+        let [usb, pci] =
+            Layout::vertical([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).areas(*right);
 
         let mut lm = LayoutMap::new();
         let _ = lm.add_or_update("summary".to_string(), left.clone());

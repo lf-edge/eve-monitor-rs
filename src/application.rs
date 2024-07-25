@@ -8,6 +8,7 @@ use crate::ui::networkpage::create_network_page;
 use crate::ui::statusbar::{create_status_bar, StatusBarState};
 use crate::ui::widgets::label::LabelElement;
 use crate::ui::widgets::radiogroup::RadioGroupElement;
+use crate::ui::widgets::spin_box::{SpinBoxElement, SpinBoxLayout};
 use core::fmt::Debug;
 
 use std::rc::Rc;
@@ -367,6 +368,16 @@ impl Ui {
             label.set_text(time);
         });
 
+        let spinner = SpinBoxElement::new(vec!["Option 1", "Option 2", "Option 3"])
+            .selected(1)
+            .layout(SpinBoxLayout::Vertical)
+            .size_hint(16);
+
+        let spinner_2 = SpinBoxElement::new(vec!["DHCP", "Static", "Option 3"])
+            .selected(1)
+            .layout(SpinBoxLayout::Horizontal)
+            .size_hint(16);
+
         let wnd = Window::builder("MainWnd")
             .with_state(MainWndState {
                 a: 42,
@@ -376,6 +387,8 @@ impl Ui {
             .widget("0-3", input)
             .widget("1-1", radiogroup)
             .widget("2-2", clock)
+            .widget("3-3", spinner)
+            .widget("3-2", spinner_2)
             .with_layout(do_layout)
             .with_focused_view("0-3")
             .on_action(|action, state: &mut MainWndState| {

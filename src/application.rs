@@ -4,6 +4,7 @@ use crate::model::Model;
 use crate::raw_model::RawModel;
 use crate::traits::{IEventHandler, IPresenter};
 use crate::ui::homepage::HomePage;
+use crate::ui::netconf::{self, NetworkDialog};
 use crate::ui::networkpage::create_network_page;
 use crate::ui::statusbar::{create_status_bar, StatusBarState};
 use crate::ui::widgets::label::LabelElement;
@@ -597,6 +598,22 @@ impl Ui {
                     "Cancel",
                     MonActions::NetworkInterfaceUpdated(s),
                 );
+                self.views[self.selected_tab as usize].push(Box::new(d));
+            }
+
+            // show network edit dialog on ctrl+e
+            Event::Key(key)
+                if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
+            {
+                debug!("CTRL+e: show dialog");
+
+                // let s = IpDialogState {
+                //     ip: "10.208.13.10".to_string(),
+                //     mode: "DHCP".to_string(),
+                //     gw: "1.1.1.1".to_string(),
+                // };
+
+                let d: NetworkDialog = NetworkDialog::new();
                 self.views[self.selected_tab as usize].push(Box::new(d));
             }
 

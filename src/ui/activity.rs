@@ -1,6 +1,8 @@
 use crate::ui::action::UiActions;
 use crossterm::event::KeyEvent;
 
+use super::action::Action;
+
 pub enum Activity {
     Action(UiActions),
     Event(KeyEvent),

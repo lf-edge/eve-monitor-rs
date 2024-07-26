@@ -1,11 +1,18 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, intrinsics::mir::Return};
 
-use crate::ui::focus_tracker::FocusMode;
+use crate::{
+    events::Event::{self, Key},
+    traits::{IElementEventHandler, IEventHandler, IWidgetPresenter, IWindow},
+    ui::{focus_tracker::FocusMode, widgets::button::ButtonElement},
+};
+use crossterm::event::KeyCode;
+use crossterm::event::KeyEvent;
+use log::debug;
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
-    style::{Color, Modifier, Stylize},
+    style::{Color, Modifier, Style, Stylize},
     text::Line,
-    widgets::Tabs,
+    widgets::{Block, BorderType, Borders, Clear, Tabs, Widget},
     Frame,
 };
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
@@ -15,11 +22,16 @@ use crate::{
     ui::{focus_tracker::FocusTracker, window::LayoutMap},
 };
 
-use super::{tools::ElementHashMap, window::WidgetMap};
+use super::{
+    action::Action,
+    activity::Activity,
+    widgets::{input_field::InputFieldElement, spin_box::SpinBoxElement},
+    window::WidgetMap,
+};
 
 const NUM_FIELDS: usize = 5;
 
-struct NetworkDialog {
+pub struct NetworkDialog {
     focus: FocusTracker,
     current_tab: NetworkTabs,
     layout: LayoutMap,
@@ -27,6 +39,7 @@ struct NetworkDialog {
     page_widgets: WidgetMap,
     ip_fields: Vec<Box<dyn IWidget>>,
     proxy_fields: Vec<Box<dyn IWidget>>,
+    interface_name: String,
 }
 
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
@@ -38,17 +51,56 @@ enum NetworkTabs {
 
 impl NetworkDialog {
     pub fn new() -> Self {
-        let focus_order = vec!["a".to_string(), "b".to_string()];
+        let focus_order: Vec<String> = vec![
+            "tabs".to_string(),
+            "mode".to_string(),
+            "0".to_string(),
+            "1".to_string(),
+            "2".to_string(),
+            "3".to_string(),
+            "4".to_string(),
+            "ok".to_string(),
+            "cancel".to_string(),
+        ];
 
-        Self {
-            focus: FocusTracker::create_from_taborder(focus_order, None, FocusMode::Wrap),
+        let mut s = Self {
+            focus: FocusTracker::create_from_taborder(
+                focus_order,
+                Some("tabs".to_string()),
+                FocusMode::Wrap,
+            ),
             layout: HashMap::new(),
             old_rect: Rect::ZERO,
             page_widgets: HashMap::new(),
             ip_fields: Vec::new(),
             proxy_fields: Vec::new(),
             current_tab: NetworkTabs::IP,
-        }
+            interface_name: "Home".to_string(),
+        };
+
+        s.page_widgets.insert(
+            "ip_mode".to_string(),
+            Box::new(SpinBoxElement::new(vec!["static", "dynamic"])),
+        );
+
+        s.ip_fields
+            .push(Box::new(InputFieldElement::new("IP", None)));
+        s.ip_fields
+            .push(Box::new(InputFieldElement::new("Gateway", None)));
+        s.ip_fields
+            .push(Box::new(InputFieldElement::new("DNS", None)));
+        s.ip_fields
+            .push(Box::new(InputFieldElement::new("Domain", None)));
+
+        s.proxy_fields
+            .push(Box::new(InputFieldElement::new("HTTP", None)));
+        s.proxy_fields
+            .push(Box::new(InputFieldElement::new("HTTPS", None)));
+        s.proxy_fields
+            .push(Box::new(InputFieldElement::new("Socks", None)));
+        s.proxy_fields
+            .push(Box::new(InputFieldElement::new("Domain", None)));
+        s
     }
 
     fn do_layout(&mut self, area: &Rect) {
@@ -59,8 +111,9 @@ impl NetworkDialog {
             Constraint::Length(1),
             Constraint::Length(1),
             Constraint::Fill(0),
-            Constraint::Length(1),
+            Constraint::Length(3),
         ])
+        .margin(1)
         .areas(*area);
 
         let mut lm = LayoutMap::new();
@@ -89,10 +142,25 @@ impl NetworkDialog {
 
     fn render_main(&mut self, area: &Rect, frame: &mut Frame) {
         self.do_layout(area);
-        // let layout = &self.as_ref().layout.unwrap();
+        Clear.render(*area, frame.buffer_mut());
+        let focused_element = self
+            .focus
+            .get_focused_view()
+            .or(Some("".to_string()))
+            .unwrap();
+
+        debug!("focused element: {focused_element}");
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_type(BorderType::Thick)
+            .border_style(Style::default().fg(Color::White))
+            .style(Style::default().bg(Color::Black))
+            .title(self.interface_name.as_str());
+
+        block.render(*area, frame.buffer_mut());
 
         frame.render_widget(tabs(), self.layout["tabs"]);
-        // frame.render_widget(tabs(), layout["tabs"]);
 
         let (mode_selector, field_list) = match self.current_tab {
             NetworkTabs::IP => ("ip_mode", &mut self.ip_fields),
@@ -102,37 +170,25 @@ impl NetworkDialog {
         self.page_widgets.get_mut(mode_selector).unwrap().render(
             &self.layout["mode"],
             frame,
-            false,
+            focused_element == "mode",
         );
-
-        // self.render_fields(
-        //     &self.layout["fields"],
-        //     frame,
-        //     &field_list,
-        //     self.focus.get_focused_view().unwrap(),
-        // );
 
         field_list.iter_mut().enumerate().for_each(|(i, field)| {
             field.render(
-                area,
+                &self.layout[&i.to_string()],
                 frame,
                 i.to_string() == self.focus.get_focused_view().unwrap(),
             )
         });
-    }
 
-    // fn render_fields(
-    //     &self,
-    //     area: &Rect,
-    //     frame: &mut Frame,
-    //     field_list: &Vec<Box<dyn IWidget>>,
-    //     focused: String,
-    // ) {
-    //     field_list
-    //         .iter()
-    //         .enumerate()
-    //         .for_each(|(i, field)| field.render(area, frame, i.to_string() == focused))
-    // }
+        // render the buttons
+        ButtonElement::new("ok").render(&self.layout["ok"], frame, focused_element == "ok");
+        ButtonElement::new("cancel").render(
+            &self.layout["cancel"],
+            frame,
+            focused_element == "cancel",
+        );
+    }
 }
 
 impl IPresenter for NetworkDialog {
@@ -144,6 +200,31 @@ impl IPresenter for NetworkDialog {
         _focused: bool,
     ) {
         self.render_main(area, frame)
+    }
+}
+impl IWindow for NetworkDialog {}
+impl IEventHandler for NetworkDialog {
+    fn handle_event(&mut self, event: Event) -> Option<Action> {
+        match event {
+            Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
+                if let Some(redraw) = self.focus.handle_key_event(key) {
+                    return Some(Action::new("edit network", redraw));
+                }
+
+                let focus = self.focus.get_focused_view()?;
+                let widget = self.page_widgets.get_mut(&focus)?;
+                let activity = widget.handle_key_event(key)?;
+                match activity {
+                    Activity::Action(action) => Some(Action::new("edit network", action)),
+                    Activity::Event(_) => None,
+                }
+            }
+            Key(key) => {
+                debug!("key pressed {:?}", key);
+                None
+            }
+            Event::Tick | Event::TerminalResize(_, _) => None,
+        }
     }
 }
 

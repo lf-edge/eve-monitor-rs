@@ -129,7 +129,6 @@ impl<D> WindowBuilder<D> {
 }
 
 pub struct Window<D> {
-    pub v: VisualState,
     pub name: String,
     ft: FocusTracker,
     widgets: WidgetMap,
@@ -165,7 +164,6 @@ impl<D> Window<D> {
             do_render,
             on_action,
             state,
-            v: Default::default(),
         }
     }
 

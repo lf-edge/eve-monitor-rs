@@ -597,3 +597,111 @@ pub struct DhcpConfig {
     #[serde(rename = "Type")]
     pub dhcp_type: NetworkType,
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct DownloaderStatus {
+    image_sha256: String,
+    #[serde(rename = "DatastoreIDList")]
+    datastore_id_list: Vec<Uuid>,
+    target: String,
+    name: String,
+    ref_count: u32,
+    last_use: DateTime<Utc>,
+    expired: bool,
+    #[serde(rename = "NameIsURL")]
+    name_is_url: bool,
+    state: SwState,
+    reserved_space: u64,
+    size: u64,
+    total_size: i64,
+    current_size: i64,
+    progress: u32,
+    mod_time: DateTime<Utc>,
+    content_type: String,
+    #[serde(flatten)]
+    error_and_time: ErrorAndTime,
+    retry_count: i32,
+    orig_error: String,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct ErrorAndTime {
+    #[serde(flatten)]
+    error_description: ErrorDescription,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct ErrorDescription {
+    error: String,
+    error_time: DateTime<Utc>,
+    error_severity: ErrorSeverity,
+    error_retry_condition: String,
+    error_entities: Vec<ErrorEntity>,
+}
+
+#[repr(i32)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+pub enum ErrorSeverity {
+    Unspecified = 0,
+    Notice = 1,
+    Warning = 2,
+    Error = 3,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "PascalCase")]
+pub struct ErrorEntity {
+    entity_type: ErrorEntityType,
+    entity_id: String,
+}
+
+#[repr(i32)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+pub enum ErrorEntityType {
+    Unspecified = 0,
+    BaseOs = 1,
+    SystemAdapter = 2,
+    Vault = 3,
+    Attestation = 4,
+    AppInstance = 5,
+    Port = 6,
+    Network = 7,
+    NetworkInstance = 8,
+    ContentTree = 9,
+    ContentBlob = 10,
+    Volume = 11,
+}
+
+#[repr(u8)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+pub enum SwState {
+    Initial = 100,
+    ResolvingTag,
+    ResolvedTag,
+    Downloading,
+    Downloaded,
+    Verifying,
+    Verified,
+    Loading,
+    Loaded,
+    CreatingVolume,
+    CreatedVolume,
+    Installed,
+    AwaitNetworkInstance,
+    StartDelayed,
+    Booting,
+    Running,
+    Pausing,
+    Paused,
+    Halting,
+    Halted,
+    Broken,
+    Unknown,
+    Pending,
+    Scheduling,
+    Failed,
+    MaxState,
+}

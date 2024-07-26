@@ -10,6 +10,7 @@ use serde_json::Value;
 use super::eve_types::DeviceNetworkStatus;
 use super::eve_types::DevicePortConfig;
 use super::eve_types::DevicePortConfigList;
+use super::eve_types::DownloaderStatus;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum RpcCommand {
@@ -36,6 +37,7 @@ pub enum IpcMessage {
     NetworkStatus(DeviceNetworkStatus),
     DPCList(DevicePortConfigList),
     SetDPC(DevicePortConfig),
+    DownloaderStatus(DownloaderStatus),
 }
 
 impl IpcMessage {

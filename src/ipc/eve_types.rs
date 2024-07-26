@@ -601,45 +601,51 @@ pub struct DhcpConfig {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct DownloaderStatus {
-    image_sha256: String,
+    pub image_sha256: String,
     #[serde(rename = "DatastoreIDList")]
-    datastore_id_list: Vec<Uuid>,
-    target: String,
-    name: String,
-    ref_count: u32,
-    last_use: DateTime<Utc>,
-    expired: bool,
+    pub datastore_id_list: Vec<Uuid>,
+    pub target: String,
+    pub name: String,
+    pub ref_count: u32,
+    pub last_use: DateTime<Utc>,
+    pub expired: bool,
     #[serde(rename = "NameIsURL")]
-    name_is_url: bool,
-    state: SwState,
-    reserved_space: u64,
-    size: u64,
-    total_size: i64,
-    current_size: i64,
-    progress: u32,
-    mod_time: DateTime<Utc>,
-    content_type: String,
+    pub name_is_url: bool,
+    pub state: SwState,
+    pub reserved_space: u64,
+    pub size: u64,
+    pub total_size: i64,
+    pub current_size: i64,
+    pub progress: u32,
+    pub mod_time: DateTime<Utc>,
+    pub content_type: String,
     #[serde(flatten)]
-    error_and_time: ErrorAndTime,
-    retry_count: i32,
-    orig_error: String,
+    pub error_and_time: ErrorAndTime,
+    pub retry_count: i32,
+    pub orig_error: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct ErrorAndTime {
     #[serde(flatten)]
-    error_description: ErrorDescription,
+    pub error_description: ErrorDescription,
+}
+
+impl ErrorAndTime {
+    pub fn is_error(&self) -> bool {
+        !self.error_description.error.is_empty()
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct ErrorDescription {
-    error: String,
-    error_time: DateTime<Utc>,
-    error_severity: ErrorSeverity,
-    error_retry_condition: String,
-    error_entities: Vec<ErrorEntity>,
+    pub error: String,
+    pub error_time: DateTime<Utc>,
+    pub error_severity: ErrorSeverity,
+    pub error_retry_condition: String,
+    pub error_entities: Vec<ErrorEntity>,
 }
 
 #[repr(i32)]
@@ -654,8 +660,8 @@ pub enum ErrorSeverity {
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "PascalCase")]
 pub struct ErrorEntity {
-    entity_type: ErrorEntityType,
-    entity_id: String,
+    pub entity_type: ErrorEntityType,
+    pub entity_id: String,
 }
 
 #[repr(i32)]

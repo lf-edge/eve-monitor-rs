@@ -1,10 +1,10 @@
-use std::iter::Map;
-
+use crate::ui::focus_tracker::FocusMode;
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
     style::{Color, Modifier, Stylize},
     text::Line,
-    widgets::{Block, Tabs, Widget}, Frame,
+    widgets::Tabs,
+    Frame,
 };
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
@@ -13,15 +13,14 @@ use crate::{
     ui::{focus_tracker::FocusTracker, window::LayoutMap},
 };
 
-use super::window::WidgetMap;
+use super::{tools::ElementHashMap, window::WidgetMap};
 
-
-const num_fields = 5;
+const NUM_FIELDS: usize = 5;
 
 struct NetworkDialog {
-    main_focus: FocusTracker,
-    current_tab: NetworkTabs
-    layout: Option<LayoutMap>,
+    focus: FocusTracker,
+    current_tab: NetworkTabs,
+    layout: LayoutMap,
     old_rect: Rect,
     page_widgets: WidgetMap,
     ip_fields: Vec<Box<dyn IWidget>>,
@@ -36,14 +35,23 @@ enum NetworkTabs {
 }
 
 impl NetworkDialog {
-    pub fn new() -> Self{
-        Self{ focus: todo!(),
-            layout: todo!(), old_rect: todo!(), page_widgets: todo!(), ip_fields: todo!(), proxy_fields: todo!() }
+    pub fn new() -> Self {
+        let focus_order = vec!["a".to_string(), "b".to_string()];
+
+        Self {
+            focus: FocusTracker::create_from_taborder(focus_order, None, FocusMode::Wrap),
+            layout: LayoutMap::new(),
+            old_rect: Rect::ZERO,
+            page_widgets: ElementHashMap::new(),
+            ip_fields: Vec::new(),
+            proxy_fields: Vec::new(),
+            current_tab: NetworkTabs::IP,
+        }
     }
 
-    fn do_layout(&mut self, area: &Rect) -> &LayoutMap {
-        if self.layout.as_ref().is_some() && self.old_rect == *area {
-            return self.layout.as_ref().unwrap();
+    fn do_layout(&mut self, area: &Rect) {
+        if self.old_rect == *area {
+            return;
         }
         let [tabs, mode, fields, buttonbar] = Layout::vertical([
             Constraint::Length(1),
@@ -66,26 +74,51 @@ impl NetworkDialog {
         let _ = lm.add_or_update("ok".to_string(), ok);
         let _ = lm.add_or_update("cancel".to_string(), cancel);
 
-        let field_rects = Layout::vertical(vec![Constraint::Length(3); num_fields]).areas(fields);
-        field_rects.iter().enumerate().for_each(|(i,f)|{lm.add_or_update(i.to_string() , *f);()});
+        let field_rects: [Rect; NUM_FIELDS] =
+            Layout::vertical(vec![Constraint::Length(3); NUM_FIELDS]).areas(fields);
+        field_rects.iter().enumerate().for_each(|(i, f)| {
+            lm.add_or_update(i.to_string(), *f);
+            ()
+        });
 
-        self.layout = Some(lm);
-        return self.layout.as_ref().unwrap();
+        self.layout = lm;
+        // return self.layout.as_ref().unwrap();
     }
 
-    fn render_main(&mut self, area: &Rect, frame: &mut Frame){
-        let layout = self.do_layout(area);
+    fn render_main(&mut self, area: &Rect, frame: &mut Frame) {
+        self.do_layout(area);
+        // let layout = &self.as_ref().layout.unwrap();
 
-        frame.render_widget(tabs(), layout["tabs"]);
+        frame.render_widget(tabs(), self.layout["tabs"]);
+        // frame.render_widget(tabs(), layout["tabs"]);
 
-        match self.current_tab{
-            NetworkTabs::IP => self.page_widgets.get("ip_mode").unwrap().render(&layout["mode"], frame, false),
-            NetworkTabs::Proxy => ,
-        }
+        let (mode_selector, field_list) = match self.current_tab {
+            NetworkTabs::IP => ("ip_mode", &self.ip_fields),
+            NetworkTabs::Proxy => ("proxy_mode", &self.proxy_fields),
+        };
 
+        self.page_widgets[mode_selector].render(&self.layout["mode"], frame, false);
+
+        self.render_fields(
+            &self.layout["fields"],
+            frame,
+            &field_list,
+            self.focus.get_focused_view().unwrap(),
+        )
     }
 
-    fn render_fields(&self, area: &Rect, frame: &mut Frame, focused: u8){}
+    fn render_fields(
+        &self,
+        area: &Rect,
+        frame: &mut Frame,
+        field_list: &Vec<Box<dyn IWidget>>,
+        focused: String,
+    ) {
+        field_list
+            .iter()
+            .enumerate()
+            .for_each(|(i, field)| field.render(area, frame, i.to_string() == focused))
+    }
 }
 
 impl IPresenter for NetworkDialog {
@@ -93,8 +126,8 @@ impl IPresenter for NetworkDialog {
         &mut self,
         area: &Rect,
         frame: &mut Frame<'_>,
-        model: &std::rc::Rc<crate::model::Model>,
-        focused: bool,
+        _model: &std::rc::Rc<crate::model::Model>,
+        _focused: bool,
     ) {
         self.render_main(area, frame)
     }

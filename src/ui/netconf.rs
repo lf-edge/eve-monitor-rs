@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::ui::focus_tracker::FocusMode;
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
@@ -40,9 +42,9 @@ impl NetworkDialog {
 
         Self {
             focus: FocusTracker::create_from_taborder(focus_order, None, FocusMode::Wrap),
-            layout: LayoutMap::new(),
+            layout: HashMap::new(),
             old_rect: Rect::ZERO,
-            page_widgets: ElementHashMap::new(),
+            page_widgets: HashMap::new(),
             ip_fields: Vec::new(),
             proxy_fields: Vec::new(),
             current_tab: NetworkTabs::IP,
@@ -63,21 +65,21 @@ impl NetworkDialog {
 
         let mut lm = LayoutMap::new();
 
-        let _ = lm.add_or_update("tabs".to_string(), tabs.clone());
-        let _ = lm.add_or_update("mode".to_string(), mode.clone());
-        let _ = lm.add_or_update("fileds".to_string(), fields.clone());
+        let _ = lm.insert("tabs".to_string(), tabs.clone());
+        let _ = lm.insert("mode".to_string(), mode.clone());
+        let _ = lm.insert("fileds".to_string(), fields.clone());
 
         let [ok, cancel] = Layout::horizontal(vec![Constraint::Length(3); 2])
             .flex(Flex::Start)
             .areas(buttonbar);
 
-        let _ = lm.add_or_update("ok".to_string(), ok);
-        let _ = lm.add_or_update("cancel".to_string(), cancel);
+        let _ = lm.insert("ok".to_string(), ok);
+        let _ = lm.insert("cancel".to_string(), cancel);
 
         let field_rects: [Rect; NUM_FIELDS] =
             Layout::vertical(vec![Constraint::Length(3); NUM_FIELDS]).areas(fields);
         field_rects.iter().enumerate().for_each(|(i, f)| {
-            lm.add_or_update(i.to_string(), *f);
+            lm.insert(i.to_string(), *f);
             ()
         });
 
@@ -93,32 +95,44 @@ impl NetworkDialog {
         // frame.render_widget(tabs(), layout["tabs"]);
 
         let (mode_selector, field_list) = match self.current_tab {
-            NetworkTabs::IP => ("ip_mode", &self.ip_fields),
-            NetworkTabs::Proxy => ("proxy_mode", &self.proxy_fields),
+            NetworkTabs::IP => ("ip_mode", &mut self.ip_fields),
+            NetworkTabs::Proxy => ("proxy_mode", &mut self.proxy_fields),
         };
 
-        self.page_widgets[mode_selector].render(&self.layout["mode"], frame, false);
-
-        self.render_fields(
-            &self.layout["fields"],
+        self.page_widgets.get_mut(mode_selector).unwrap().render(
+            &self.layout["mode"],
             frame,
-            &field_list,
-            self.focus.get_focused_view().unwrap(),
-        )
+            false,
+        );
+
+        // self.render_fields(
+        //     &self.layout["fields"],
+        //     frame,
+        //     &field_list,
+        //     self.focus.get_focused_view().unwrap(),
+        // );
+
+        field_list.iter_mut().enumerate().for_each(|(i, field)| {
+            field.render(
+                area,
+                frame,
+                i.to_string() == self.focus.get_focused_view().unwrap(),
+            )
+        });
     }
 
-    fn render_fields(
-        &self,
-        area: &Rect,
-        frame: &mut Frame,
-        field_list: &Vec<Box<dyn IWidget>>,
-        focused: String,
-    ) {
-        field_list
-            .iter()
-            .enumerate()
-            .for_each(|(i, field)| field.render(area, frame, i.to_string() == focused))
-    }
+    // fn render_fields(
+    //     &self,
+    //     area: &Rect,
+    //     frame: &mut Frame,
+    //     field_list: &Vec<Box<dyn IWidget>>,
+    //     focused: String,
+    // ) {
+    //     field_list
+    //         .iter()
+    //         .enumerate()
+    //         .for_each(|(i, field)| field.render(area, frame, i.to_string() == focused))
+    // }
 }
 
 impl IPresenter for NetworkDialog {

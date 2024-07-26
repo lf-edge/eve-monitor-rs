@@ -3,6 +3,7 @@ use crate::model::Model;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use std::borrow::BorrowMut;
+use std::collections::HashMap;
 use std::{fmt::Debug, rc::Rc};
 
 use log::trace;
@@ -14,12 +15,11 @@ use anyhow::Result;
 use super::{
     action::{Action, UiActions},
     focus_tracker::{FocusMode, FocusTracker},
-    tools::ElementHashMap,
     widgets::element::VisualState,
 };
 
-pub type WidgetMap = ElementHashMap<Box<dyn IWidget>>;
-pub type LayoutMap = ElementHashMap<Rect>;
+pub type WidgetMap = HashMap<String, Box<dyn IWidget>>;
+pub type LayoutMap = HashMap<String, Rect>;
 
 pub type LayoutFn<D> = Rc<dyn Fn(&mut Window<D>, &Rect, &Rc<Model>)>;
 pub type RenderFn<D> = Rc<dyn Fn(&mut Window<D>, &Rect, &mut ratatui::Frame<'_>, &Rc<Model>)>;
@@ -43,7 +43,7 @@ pub struct WindowBuilder<D> {
 
 impl<D> WindowBuilder<D> {
     pub fn widget<S: Into<String>>(mut self, name: S, widget: impl IWidget + 'static) -> Self {
-        self.widgets.add_or_update(name.into(), Box::new(widget));
+        self.widgets.insert(name.into(), Box::new(widget));
         self
     }
 
@@ -160,11 +160,11 @@ impl<D> Window<D> {
             name: name.into(),
             ft,
             widgets,
-            layout: ElementHashMap::new(),
+            layout: HashMap::new(),
             do_layout,
             do_render,
             on_action,
-            state: state,
+            state,
             v: Default::default(),
         }
     }
@@ -172,7 +172,7 @@ impl<D> Window<D> {
     pub fn builder<S: Into<String>>(name: S) -> WindowBuilder<D> {
         WindowBuilder {
             name: name.into(),
-            widgets: ElementHashMap::new(),
+            widgets: HashMap::new(),
             do_layout: None,
             do_render: None,
             tab_order: None,
@@ -183,11 +183,11 @@ impl<D> Window<D> {
     }
 
     pub fn add_widget<S: Into<String>>(&mut self, name: S, widget: Box<dyn IWidget>) {
-        self.widgets.add_or_update(name.into(), widget);
+        self.widgets.insert(name.into(), widget);
     }
 
     pub fn update_layout<S: Into<String>>(&mut self, name: S, rect: Rect) {
-        self.layout.add_or_update(name.into(), rect);
+        self.layout.insert(name.into(), rect);
     }
 
     pub fn layout<S: Into<String>>(&mut self, name: S) -> Rect {
@@ -291,7 +291,7 @@ impl<D> IPresenter for Window<D> {
         focused: bool,
     ) {
         // print layout map
-        trace!("Layout: {:#?}", *self.layout);
+        trace!("Layout: {:#?}", self.layout);
 
         let focused_widget = self.ft.get_focused_view().unwrap_or_default();
 

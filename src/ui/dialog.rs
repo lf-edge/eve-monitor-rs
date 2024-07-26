@@ -49,7 +49,7 @@ impl<D: 'static> Dialog<D> {
         let mut widgets = WidgetMap::new();
         for button_name in buttons.iter() {
             let button = ButtonElement::new(button_name);
-            widgets.add_or_update(button_name.to_string(), Box::new(button));
+            widgets.insert(button_name.to_string(), Box::new(button));
         }
 
         let focus = FocusTracker::new(

@@ -1,6 +1,5 @@
 use crate::events;
 use crate::model::Model;
-use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
@@ -15,7 +14,6 @@ use anyhow::Result;
 use super::{
     action::{Action, UiActions},
     focus_tracker::{FocusMode, FocusTracker},
-    widgets::element::VisualState,
 };
 
 pub type WidgetMap = HashMap<String, Box<dyn IWidget>>;
@@ -207,42 +205,31 @@ impl<D> IEventHandler for Window<D> {
     fn handle_event(&mut self, event: events::Event) -> Option<Action> {
         match event {
             events::Event::Key(key) => {
-                if let Some(activity) = self.ft.handle_key_event(key) {
-                    match activity {
-                        Activity::Action(action) => {
-                            return Some(Action::new(self.name.clone(), action))
-                        }
-                        Activity::Event(_) => {}
-                    }
+                if let Some(action) = self.ft.handle_key_event(key) {
+                    return Some(Action::new(self.name.clone(), action));
                 }
                 // forward the event to the focused view
-                if let Some(focused_view) = self.ft.get_focused_view() {
-                    let widget = self.widgets.get_mut(&focused_view).unwrap();
-                    if let Some(activity) = widget.handle_key_event(key) {
-                        match activity {
-                            Activity::Action(action) => {
-                                if let Some(on_action) = self.on_action.as_mut() {
-                                    if let Some(new_action) = on_action(
-                                        Action {
-                                            source: focused_view,
-                                            action,
-                                            target: None,
-                                        },
-                                        &mut self.state.borrow_mut(),
-                                    ) {
-                                        return Some(Action::new(self.name.clone(), new_action));
-                                    }
-                                }
-                            }
-                            Activity::Event(event) => {
-                                return self.ft.handle_key_event(event).and_then(|act| match act {
-                                    Activity::Action(action) => {
-                                        Some(Action::new(self.name.clone(), action))
-                                    }
-                                    Activity::Event(_) => None,
-                                });
-                            }
-                        }
+                let focused_view = self.ft.get_focused_view()?;
+                let widget = self.widgets.get_mut(&focused_view).unwrap();
+                let activity = widget.handle_key_event(key)?;
+                match activity {
+                    Activity::Action(action) => {
+                        self.on_action.as_mut()?(
+                            Action {
+                                source: focused_view,
+                                action,
+                                target: None,
+                            },
+                            &mut self.state.borrow_mut(),
+                        )
+                        .and_then(|new_action| Some(Action::new(self.name.clone(), new_action)));
+                    }
+
+                    Activity::Event(event) => {
+                        return self
+                            .ft
+                            .handle_key_event(event)
+                            .and_then(|act| Some(Action::new(self.name.clone(), act)))
                     }
                 }
             }

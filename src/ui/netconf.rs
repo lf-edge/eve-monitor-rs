@@ -1,4 +1,4 @@
-use std::{collections::HashMap, intrinsics::mir::Return};
+use std::collections::HashMap;
 
 use crate::{
     events::Event::{self, Key},

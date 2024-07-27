@@ -12,7 +12,7 @@ pub struct NetworkInterface {
     name: String,
     is_mgmt: bool,
     addresses: Vec<IpAddr>,
-    routs: Option<Vec<IpAddr>>,
+    routes: Option<Vec<IpAddr>>,
     mac: MacAddr,
 }
 
@@ -21,7 +21,7 @@ pub fn list() -> Option<Vec<NetworkInterface>> {
         name: "eth0".to_string(),
         is_mgmt: true,
         addresses: vec![],
-        routs: None,
+        routes: None,
         mac: MacAddr::V8(MacAddr8::nil()),
     }])
 }
@@ -35,7 +35,7 @@ impl From<NetworkPortStatus> for NetworkInterface {
             name: port.if_name,
             addresses,
             is_mgmt: port.is_mgmt,
-            routs: port.default_routers,
+            routes: port.default_routers,
             mac: port.mac_addr,
         }
     }
@@ -221,7 +221,7 @@ mod tests {
             network_interface.mac.as_bytes(),
             &[0x52, 0x54, 0x00, 0x12, 0x34, 0x57]
         );
-        assert_eq!(network_interface.routs.unwrap().len(), 2);
+        assert_eq!(network_interface.routes.unwrap().len(), 2);
         // check all the addresses
         let addresses = network_interface.addresses;
         assert_eq!(addresses[0], IpAddr::V4(Ipv4Addr::new(192, 168, 2, 10)));

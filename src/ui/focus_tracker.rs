@@ -114,7 +114,7 @@ impl FocusTracker {
 }
 impl IElementEventHandler for FocusTracker {
     fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
-        debug!("focuse_tracker handle_event {:?}", key);
+        debug!("focus_tracker handle_event {:?}", key);
 
         match key.code {
             // handle Tab key

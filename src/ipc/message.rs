@@ -54,11 +54,39 @@ pub enum IpcMessage {
     },
 }
 
+// static mutable  variable to store the index of log file to write
+//TODO: it will go away eventually
+static mut LOG_FILE_INDEX: u64 = 0;
+
+fn dump_to_file(message: &str) {
+    use std::fs::OpenOptions;
+    use std::io::Write;
+
+    // get EVE_MONITOR_LOG_DIR from environment
+    if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {
+        let log_file_name = format!("eve_ipc_message_{}.log", unsafe { LOG_FILE_INDEX });
+        let log_file_name = std::path::Path::new(log_dir.as_str()).join(log_file_name);
+        // increment log file index
+        unsafe {
+            LOG_FILE_INDEX += 1;
+        }
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(log_file_name)
+            .unwrap();
+        file.write_all(message.as_bytes()).unwrap();
+        return;
+    }
+}
+
 impl IpcMessage {
     fn from_reader(bytes: Bytes) -> Self {
         // TODO: it is faster to call serde_json::from_reader directly
         // but I want to log the message if it fails to parse
         if let Ok(s) = String::from_utf8(bytes.to_vec()) {
+            dump_to_file(s.as_str());
             match serde_json::from_str(s.as_str()) {
                 Ok(message) => message,
                 Err(e) => {

@@ -22,10 +22,21 @@ fn init_logging() -> log2::Handle {
         // we use XDG_RUNTIME_DIR to detect the fact that we are running on desktop linux
         PathBuf::from("./")
     } else {
-        PathBuf::from("/persist")
+        // get current data and time and use it as a log file name
+        let now = chrono::Local::now();
+        // make /persist/monitor-<date>-<time>/ folder path and create he folder
+        let log_dir = PathBuf::from(format!(
+            "/persist/monitor-{}",
+            now.format("%Y-%m-%d-%H-%M-%S")
+        ));
+        std::fs::create_dir_all(&log_dir).expect("Failed to create log directory");
+        // set EVE_MONITOR_LOG_DIR to the created folder
+        std::env::set_var("EVE_MONITOR_LOG_DIR", log_dir.to_string_lossy().to_string());
+
+        log_dir
     };
 
-    let log_file = log_dir.join("./monitor.log").to_string_lossy().to_string();
+    let log_file = log_dir.join("monitor.log").to_string_lossy().to_string();
 
     let handle = log2::open(&log_file)
         .size(10 * 1024 * 1024)

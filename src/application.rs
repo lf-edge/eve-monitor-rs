@@ -60,6 +60,9 @@ pub struct Application {
     ipc_tx: Option<UnboundedSender<IpcMessage>>,
     ui: Ui,
     task: tokio::task::JoinHandle<()>,
+    // this is our model :)
+    model: Rc<Model>,
+    raw_model: RawModel,
 }
 
 impl Application {
@@ -68,6 +71,8 @@ impl Application {
         let (terminal_tx, terminal_rx) = mpsc::unbounded_channel::<Event>();
         let terminal = TerminalWrapper::new()?;
         let mut ui = Ui::new(action_tx.clone(), terminal)?;
+        let model = Rc::new(Model::default());
+
         ui.init();
 
         Ok(Self {
@@ -78,6 +83,8 @@ impl Application {
             ui,
             task: tokio::task::spawn(async {}),
             ipc_tx: None,
+            model,
+            raw_model: RawModel::new(),
         })
     }
 
@@ -95,6 +102,24 @@ impl Application {
             // EVE path
             return "/run/monitor.sock".to_string();
         }
+    }
+
+    pub fn handle_ipc_message(&mut self, msg: IpcMessage) {
+        match msg {
+            IpcMessage::DPCList(cfg) => {
+                debug!("Got DPC list");
+                self.raw_model.set_dpc_list(cfg);
+            }
+            IpcMessage::NetworkStatus(cfg) => {
+                debug!("Got Network status");
+                self.raw_model.set_network_status(cfg);
+            }
+
+            _ => {
+                warn!("Unhandled IPC message: {:?}", msg);
+            }
+        }
+        self.model = Rc::new((&self.raw_model).into());
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -192,7 +217,7 @@ impl Application {
             }
         });
 
-        // send initial redraw event
+        // spawn a timer to send tick events
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
@@ -250,7 +275,7 @@ impl Application {
                         Some(msg) => {
                             // handle IPC message
                             info!("IPC message: {:?}", msg);
-                            self.ui.handle_ipc_message(msg);
+                            self.handle_ipc_message(msg);
                         }
                         None => {
                             warn!("IPC message stream ended");
@@ -279,7 +304,7 @@ impl Application {
             }
             if do_redraw {
                 trace!("Redraw requested");
-                self.draw_ui()?;
+                self.draw_ui(self.model.clone())?;
             }
         }
 
@@ -292,8 +317,8 @@ impl Application {
             .unwrap();
     }
 
-    fn draw_ui(&mut self) -> Result<()> {
-        self.ui.draw();
+    fn draw_ui(&mut self, model: Rc<Model>) -> Result<()> {
+        self.ui.draw(model);
         Ok(())
     }
 }
@@ -303,9 +328,6 @@ struct Ui {
     action_tx: UnboundedSender<Action>,
     views: Vec<LayerStack>,
     selected_tab: UiTabs,
-    // this is our model :)
-    model: Rc<Model>,
-    raw_model: Rc<RawModel>,
     status_bar: Window<StatusBarState>,
 }
 
@@ -327,15 +349,11 @@ impl Debug for Ui {
 
 impl Ui {
     fn new(action_tx: UnboundedSender<Action>, terminal: TerminalWrapper) -> Result<Self> {
-        let model = Rc::new(Model::default());
-
         Ok(Self {
             terminal,
             action_tx,
             views: vec![LayerStack::new(); UiTabs::COUNT],
             selected_tab: UiTabs::default(),
-            model,
-            raw_model: Rc::new(RawModel::new()),
             status_bar: create_status_bar(),
         })
     }
@@ -483,7 +501,7 @@ impl Ui {
         self.views[UiTabs::Dmesg as usize].push(Box::new(DmesgViewer::new()));
     }
 
-    fn draw(&mut self) {
+    fn draw(&mut self, model: Rc<Model>) {
         let screen_layout = Layout::vertical([Length(2), Fill(0), Length(3)]);
         let tabs_widget = Ui::tabs();
 
@@ -500,11 +518,11 @@ impl Ui {
             let stack = &mut self.views[self.selected_tab as usize];
             let last_index = stack.len().saturating_sub(1);
             for (index, layer) in stack.iter_mut().enumerate() {
-                layer.render(&body, frame, &self.model, index == last_index);
+                layer.render(&body, frame, &model, index == last_index);
             }
             // render status bar
             self.status_bar
-                .render(&statusbar_rect, frame, &self.model, false);
+                .render(&statusbar_rect, frame, &model, false);
         });
     }
 
@@ -610,22 +628,6 @@ impl Ui {
         }
 
         None
-    }
-    pub fn handle_ipc_message(&mut self, msg: IpcMessage) {
-        match msg {
-            IpcMessage::DPCList(cfg) => {
-                debug!("Got DPC list");
-                self.raw_model.set_dpc_list(cfg);
-            }
-            IpcMessage::NetworkStatus(cfg) => {
-                debug!("Got Network status");
-                self.raw_model.set_network_status(cfg);
-            }
-            _ => {
-                warn!("Unhandled IPC message: {:?}", msg);
-            }
-        }
-        self.model = Rc::new(Model::from(&self.raw_model));
     }
 }
 

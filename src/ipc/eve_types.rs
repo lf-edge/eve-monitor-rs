@@ -552,6 +552,14 @@ pub struct DevicePortConfigList {
     pub port_config_list: Option<Vec<DevicePortConfig>>,
 }
 
+impl DevicePortConfigList {
+    pub fn get_dpc_by_key(&self, key: &str) -> Option<&DevicePortConfig> {
+        self.port_config_list
+            .as_ref()
+            .and_then(|list| list.iter().find(|dpc| dpc.key == key))
+    }
+}
+
 // NetworkPortConfig struct
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "PascalCase")]

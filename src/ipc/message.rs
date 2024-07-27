@@ -13,16 +13,13 @@ use super::eve_types::DevicePortConfigList;
 use super::eve_types::DownloaderStatus;
 
 #[derive(Debug, Serialize, Deserialize)]
-pub enum RpcCommand {
-    Ping,
-    GetData,
-}
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Request {
-    pub command: RpcCommand,
+#[serde(tag = "RequestType", content = "RequestData")]
+pub enum Request {
+    SetDPC(DevicePortConfig),
 }
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Response {
+    id: u64,
     result: Option<Value>,
     error: Option<String>,
 }
@@ -32,12 +29,16 @@ pub struct Response {
 pub enum IpcMessage {
     Connecting,
     Ready,
-    Request(Request),
-    Response(Response),
     NetworkStatus(DeviceNetworkStatus),
     DPCList(DevicePortConfigList),
-    SetDPC(DevicePortConfig),
     DownloaderStatus(DownloaderStatus),
+    #[serde(untagged)]
+    Request {
+        request: Request,
+        id: u64,
+    },
+    #[serde(untagged)]
+    Response(Response),
 }
 
 impl IpcMessage {
@@ -51,6 +52,7 @@ impl IpcMessage {
                     error!("Failed to parse message: {}", e);
                     error!("MESSAGE: {}", s);
                     Self::Response(Response {
+                        id: 0,
                         result: None,
                         error: Some("Failed to parse message".to_string()),
                     })
@@ -58,6 +60,7 @@ impl IpcMessage {
             }
         } else {
             Self::Response(Response {
+                id: 0,
                 result: None,
                 error: Some("Failed to parse message to utf8".to_string()),
             })

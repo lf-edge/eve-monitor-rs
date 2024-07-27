@@ -1,3 +1,6 @@
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
+
 // TODO: uncomment to use with serde_json::from_reader
 // use bytes::Buf;
 use bytes::Bytes;
@@ -5,23 +8,29 @@ use bytes::BytesMut;
 use log::error;
 use serde::Deserialize;
 use serde::Serialize;
-use serde_json::Value;
 
 use super::eve_types::DeviceNetworkStatus;
 use super::eve_types::DevicePortConfig;
 use super::eve_types::DevicePortConfigList;
 use super::eve_types::DownloaderStatus;
 
+/// WindowId is a unique identifier for a window that is incremented sequentially.
+pub type RequestId = u64;
+
+struct RequestIdGenerator(AtomicU64);
+impl RequestIdGenerator {
+    fn next(&self) -> RequestId {
+        self.0.fetch_add(1, Ordering::SeqCst)
+    }
+}
+
+// statically initialize the window id counter
+static REQ_ID: RequestIdGenerator = RequestIdGenerator(AtomicU64::new(1));
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "RequestType", content = "RequestData")]
 pub enum Request {
     SetDPC(DevicePortConfig),
-}
-#[derive(Debug, Deserialize, Serialize)]
-pub struct Response {
-    id: u64,
-    result: Option<Value>,
-    error: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,13 +41,17 @@ pub enum IpcMessage {
     NetworkStatus(DeviceNetworkStatus),
     DPCList(DevicePortConfigList),
     DownloaderStatus(DownloaderStatus),
-    #[serde(untagged)]
-    Request {
-        request: Request,
+    Response {
+        #[serde(flatten)]
+        result: core::result::Result<String, String>,
         id: u64,
     },
     #[serde(untagged)]
-    Response(Response),
+    Request {
+        #[serde(flatten)]
+        request: Request,
+        id: u64,
+    },
 }
 
 impl IpcMessage {
@@ -51,20 +64,23 @@ impl IpcMessage {
                 Err(e) => {
                     error!("Failed to parse message: {}", e);
                     error!("MESSAGE: {}", s);
-                    Self::Response(Response {
+                    Self::Response {
                         id: 0,
-                        result: None,
-                        error: Some("Failed to parse message".to_string()),
-                    })
+                        result: Err("Failed to parse message".to_string()),
+                    }
                 }
             }
         } else {
-            Self::Response(Response {
+            Self::Response {
                 id: 0,
-                result: None,
-                error: Some("Failed to parse message to utf8".to_string()),
-            })
+                result: Err("Failed to parse message to utf8".to_string()),
+            }
         }
+    }
+
+    pub fn new_request(request: Request) -> Self {
+        let id = REQ_ID.next();
+        Self::Request { request, id }
     }
 }
 

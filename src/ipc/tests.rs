@@ -17,6 +17,7 @@ use eve_types::ResultData;
 use eve_types::WirelessCfg;
 use eve_types::WirelessType;
 use macaddr::MacAddr;
+use message::IpcMessage;
 use serde::de;
 use serde::Deserialize;
 use serde_json::from_value;
@@ -937,4 +938,32 @@ fn test_deserialize_mac_addr_invalid_base64() {
         .unwrap()
         .to_string()
         .contains("Invalid input length:"));
+}
+
+#[test]
+fn test_response_ok_deserialization() {
+    let json = r#"{"type":"Response","message":{"Ok":"ok","id":12}}"#;
+    let response: IpcMessage = serde_json::from_str(json).unwrap();
+
+    match response {
+        IpcMessage::Response { result, id } => {
+            assert_eq!(result, Ok("ok".to_string()));
+            assert_eq!(id, 12);
+        }
+        _ => panic!("Unexpected message type"),
+    }
+}
+
+#[test]
+fn test_response_err_deserialization() {
+    let json = r#"{"type":"Response","message":{"Err":"error","id":12}}"#;
+    let response: IpcMessage = serde_json::from_str(json).unwrap();
+
+    match response {
+        IpcMessage::Response { result, id } => {
+            assert_eq!(result, Err("error".to_string()));
+            assert_eq!(id, 12);
+        }
+        _ => panic!("Unexpected message type"),
+    }
 }

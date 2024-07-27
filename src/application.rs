@@ -11,6 +11,7 @@ use crate::ui::widgets::radiogroup::RadioGroupElement;
 use crate::ui::widgets::spin_box::{SpinBoxElement, SpinBoxLayout};
 use core::fmt::Debug;
 
+use std::ops::Deref;
 use std::rc::Rc;
 use std::result::Result::Ok;
 
@@ -42,7 +43,7 @@ use crossterm::event::KeyModifiers;
 
 use crate::actions::{IpDialogState, MainWndState, MonActions};
 use crate::ipc::ipc_client::IpcClient;
-use crate::ipc::message::IpcMessage;
+use crate::ipc::message::{IpcMessage, Request};
 use crate::terminal::TerminalWrapper;
 use crate::ui::action::{Action, UiActions};
 use crate::ui::dialog::Dialog;
@@ -120,6 +121,17 @@ impl Application {
             }
         }
         self.model = Rc::new((&self.raw_model).into());
+    }
+
+    pub fn send_dpc(&self) {
+        if let Some(current_dpc) = self.raw_model.get_current_dpc() {
+            let mut dpc = current_dpc.clone();
+
+            dpc.key = "manual".to_string();
+            dpc.time_priority = chrono::Utc::now();
+
+            self.send_ipc_message(IpcMessage::new_request(Request::SetDPC(dpc)));
+        }
     }
 
     pub async fn run(&mut self) -> Result<()> {
@@ -254,6 +266,12 @@ impl Application {
                 event = self.terminal_rx.recv() => {
                     match event {
                         Some(Event::Key(key)) => {
+                            if (key.code == KeyCode::Char('s')) && (key.modifiers == KeyModifiers::CONTROL)
+                            {
+                                debug!("CTRL+s: sending IPC message");
+                                self.send_dpc();
+                            }
+
                             let action = self.ui.handle_event(Event::Key(key));
                             if let Some(action) = action {
                                 info!("Event loop got action: {:?}", action);

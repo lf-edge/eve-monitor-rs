@@ -3,10 +3,10 @@ use std::collections::HashMap;
 use crate::{
     events::Event::{self, Key},
     traits::{IElementEventHandler, IEventHandler, IWidgetPresenter, IWindow},
-    ui::{focus_tracker::FocusMode, widgets::button::ButtonElement},
+    ui::{action::UiActions, focus_tracker::FocusMode, widgets::button::ButtonElement},
 };
-use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
+use crossterm::event::{KeyCode, KeyModifiers};
 use log::debug;
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
@@ -33,7 +33,7 @@ const NUM_FIELDS: usize = 5;
 
 pub struct NetworkDialog {
     focus: FocusTracker,
-    current_tab: NetworkTabs,
+    selected_tab: NetworkTabs,
     layout: LayoutMap,
     old_rect: Rect,
     page_widgets: WidgetMap,
@@ -52,7 +52,6 @@ enum NetworkTabs {
 impl NetworkDialog {
     pub fn new() -> Self {
         let focus_order: Vec<String> = vec![
-            "tabs".to_string(),
             "mode".to_string(),
             "0".to_string(),
             "1".to_string(),
@@ -66,7 +65,7 @@ impl NetworkDialog {
         let mut s = Self {
             focus: FocusTracker::create_from_taborder(
                 focus_order,
-                Some("tabs".to_string()),
+                Some("mode".to_string()),
                 FocusMode::Wrap,
             ),
             layout: HashMap::new(),
@@ -74,13 +73,17 @@ impl NetworkDialog {
             page_widgets: HashMap::new(),
             ip_fields: Vec::new(),
             proxy_fields: Vec::new(),
-            current_tab: NetworkTabs::IP,
+            selected_tab: NetworkTabs::IP,
             interface_name: "Home".to_string(),
         };
 
         s.page_widgets.insert(
             "ip_mode".to_string(),
             Box::new(SpinBoxElement::new(vec!["static", "dynamic"])),
+        );
+        s.page_widgets.insert(
+            "proxy_mode".to_string(),
+            Box::new(SpinBoxElement::new(vec!["automatic", "manual"])),
         );
 
         s.ip_fields
@@ -160,9 +163,12 @@ impl NetworkDialog {
 
         block.render(*area, frame.buffer_mut());
 
-        frame.render_widget(tabs(), self.layout["tabs"]);
+        frame.render_widget(
+            tabs().select(self.selected_tab as usize),
+            self.layout["tabs"],
+        );
 
-        let (mode_selector, field_list) = match self.current_tab {
+        let (mode_selector, field_list) = match self.selected_tab {
             NetworkTabs::IP => ("ip_mode", &mut self.ip_fields),
             NetworkTabs::Proxy => ("proxy_mode", &mut self.proxy_fields),
         };
@@ -206,22 +212,34 @@ impl IWindow for NetworkDialog {}
 impl IEventHandler for NetworkDialog {
     fn handle_event(&mut self, event: Event) -> Option<Action> {
         match event {
-            Key(key) if (key.code == KeyCode::Tab || key.code == KeyCode::BackTab) => {
+            Key(key) => {
+                debug!("netconf edit dialog handling {:?}", key);
                 if let Some(redraw) = self.focus.handle_key_event(key) {
                     return Some(Action::new("edit network", redraw));
                 }
 
+                if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Left {
+                    debug!("CTRL+Left: switching tab view");
+                    self.selected_tab = self.selected_tab.previous();
+                    return Some(Action::new("edit network", UiActions::Redraw));
+                }
+
+                if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right {
+                    debug!("CTRL+Right: switching tab view");
+                    self.selected_tab = self.selected_tab.next();
+                    return Some(Action::new("edit network", UiActions::Redraw));
+                }
+
+                debug!("key pressed {:?}", key);
                 let focus = self.focus.get_focused_view()?;
+                debug!("focused view {}", focus);
                 let widget = self.page_widgets.get_mut(&focus)?;
+                debug!("widget found");
                 let activity = widget.handle_key_event(key)?;
                 match activity {
                     Activity::Action(action) => Some(Action::new("edit network", action)),
-                    Activity::Event(_) => None,
+                    Activity::Event(_) => None, //todo input validation
                 }
-            }
-            Key(key) => {
-                debug!("key pressed {:?}", key);
-                None
             }
             Event::Tick | Event::TerminalResize(_, _) => None,
         }
@@ -242,5 +260,19 @@ impl NetworkTabs {
     fn to_tab_title(self) -> Line<'static> {
         let text = self.to_string();
         format!(" {text} ").bg(Color::Black).into()
+    }
+
+    /// Get the previous tab, if there is no previous tab return the current tab.
+    fn previous(self) -> Self {
+        let current_index: usize = self as usize;
+        let previous_index = current_index.saturating_sub(1);
+        Self::from_repr(previous_index).unwrap_or(self)
+    }
+
+    /// Get the next tab, if there is no next tab return the current tab.
+    fn next(self) -> Self {
+        let current_index = self as usize;
+        let next_index = current_index.saturating_add(1);
+        Self::from_repr(next_index).unwrap_or(self)
     }
 }

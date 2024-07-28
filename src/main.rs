@@ -50,9 +50,25 @@ fn init_logging() -> log2::Handle {
 
     handle
 }
+
+fn log_system_info() {
+    // get current user UID and GID
+    use std::os::unix::fs::MetadataExt;
+    std::fs::metadata("/proc/self")
+        .and_then(|m| {
+            info!("Current process UID: {}, GID: {}", m.uid(), m.gid());
+            Ok(())
+        })
+        .unwrap_or_else(|e| {
+            info!("Failed to get current process UID and GID: {}", e);
+        });
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let _log2 = init_logging();
+
+    log_system_info();
 
     let mut app = Application::new()?;
     app.run().await?;

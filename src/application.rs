@@ -70,7 +70,7 @@ impl Application {
     pub fn new() -> Result<Self> {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
         let (terminal_tx, terminal_rx) = mpsc::unbounded_channel::<Event>();
-        let terminal = TerminalWrapper::new()?;
+        let terminal = TerminalWrapper::open_terminal()?;
         let mut ui = Ui::new(action_tx.clone(), terminal)?;
         let model = Rc::new(Model::default());
 

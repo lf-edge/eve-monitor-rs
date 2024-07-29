@@ -144,7 +144,7 @@ pub struct RadioSilence {
 pub struct GoIpNetwork {
     #[serde(rename = "IP")]
     pub ip: String,
-    pub mask: String, // base64 encoded prefix
+    pub mask: Option<String>, // base64 encoded prefix
 }
 
 fn deserialize_ipaddr<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
@@ -212,7 +212,7 @@ pub struct NetworkPortStatus {
     pub domain_name: String,
     pub dns_servers: Option<Vec<IpAddr>>,
     pub ntp_servers: Option<Vec<IpAddr>>,
-    pub addr_info_list: Vec<AddrInfo>,
+    pub addr_info_list: Option<Vec<AddrInfo>>,
     pub up: bool,
     #[serde(deserialize_with = "deserialize_mac", skip_serializing)]
     pub mac_addr: MacAddr,
@@ -235,7 +235,7 @@ pub struct NetworkPortStatus {
 /// 2. If network_proxy_enable is false, then one of the proxies from the proxies list is used
 /// 3. Only one entry per proxy type  is possible in the proxies list
 /// 4. If [ProxyConfig::pacfile] is used then proxy configuration is taken from the .pac file
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct ProxyConfig {
     pub proxies: Option<Vec<ProxyEntry>>,
@@ -249,7 +249,7 @@ pub struct ProxyConfig {
     pub proxy_cert_pem: Option<Vec<Vec<u8>>>,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct L2LinkConfig {
     l2_type: L2LinkType,
@@ -257,7 +257,7 @@ pub struct L2LinkConfig {
     bond: Option<BondConfig>,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct TestResults {
     // #[serde(with = "ts_seconds")]
@@ -272,10 +272,10 @@ pub struct TestResults {
 pub struct WirelessStatus {
     w_type: WirelessType,
     #[serde(skip)]
-    cellular: WwanNetworkStatus,
+    _cellular: WwanNetworkStatus,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct ProxyEntry {
     #[serde(rename = "Type")]
@@ -304,13 +304,13 @@ pub struct IPInfo {
     pub postal: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WifiConfig {
     // Define the fields
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct DeprecatedCellConfig {
     // Define the fields
@@ -322,7 +322,7 @@ pub struct WwanNetworkStatus {
     // Define the fields
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct CellNetPortConfig {
     #[serde(skip)]
@@ -331,7 +331,7 @@ pub struct CellNetPortConfig {
     location_tracking: bool,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WwanProbe {
     disable: bool,
@@ -339,7 +339,7 @@ pub struct WwanProbe {
     address: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct CellularAccessPoint {
     // pub key: String, // SIM card slot to which this configuration applies.
@@ -368,7 +368,7 @@ pub struct CellularAccessPoint {
 }
 
 #[repr(u8)]
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 pub enum L2LinkType {
     // L2LinkTypeNone : not an L2 link (used for physical network adapters).
     L2LinkTypeNone = 0,
@@ -378,7 +378,7 @@ pub enum L2LinkType {
     L2LinkTypeBond = 2,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct VLANConfig {
     parent_port: String,
@@ -387,7 +387,7 @@ pub struct VLANConfig {
 }
 
 #[repr(u8)]
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 pub enum BondMode {
     // BondModeUnspecified : default is Round-Robin
     BondModeUnspecified = 0,
@@ -407,7 +407,7 @@ pub enum BondMode {
     BondModeBalanceALB = 7,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct BondConfig {
     pub aggregated_ports: Option<Vec<String>>,
@@ -419,7 +419,7 @@ pub struct BondConfig {
     pub arp_monitor: BondArpMonitor,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct BondMIIMonitor {
     pub down_delay: u32,
@@ -428,7 +428,7 @@ pub struct BondMIIMonitor {
     pub up_delay: u32,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct BondArpMonitor {
     pub enabled: bool,
@@ -437,7 +437,7 @@ pub struct BondArpMonitor {
 }
 
 #[repr(u8)]
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 pub enum LacpRate {
     LacpRateUnspecified = 0,
     LacpRateSlow = 1,
@@ -445,7 +445,7 @@ pub enum LacpRate {
 }
 
 /// DhcpType enum
-/// The name is confusing. Possible valuse are:
+/// The name is confusing. Possible values are:
 /// [NOOP, Static, None, Deprecated, Client]
 /// but only [Client and Static] are used.
 /// Corresponding values that can be used in PortConfigOverride.json
@@ -454,7 +454,7 @@ pub enum LacpRate {
 /// [Client] is the real DHCP client
 /// [Static] is the static IP address
 #[repr(u8)]
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 pub enum DhcpType {
     NOOP = 0,
     Static = 1,
@@ -466,7 +466,7 @@ pub enum DhcpType {
 
 // DPCState enum
 #[repr(u8)]
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 pub enum DPCState {
     None = 0,
     Fail = 1,
@@ -481,7 +481,7 @@ pub enum DPCState {
 
 // NetworkType enum
 #[repr(u8)]
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 pub enum NetworkType {
     NOOP = 0,
     IPv4 = 4,
@@ -493,7 +493,7 @@ pub enum NetworkType {
 
 // NetworkProxyType enum
 #[repr(u8)]
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 pub enum NetworkProxyType {
     HTTP = 0,
     HTTPS = 1,
@@ -505,7 +505,7 @@ pub enum NetworkProxyType {
 
 // WirelessType enum
 #[repr(u8)]
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 pub enum WirelessType {
     None = 0,
     Cellular = 1,
@@ -513,7 +513,7 @@ pub enum WirelessType {
 }
 
 // WirelessConfig struct
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WirelessConfig {
     pub w_type: WirelessType,
@@ -528,7 +528,7 @@ pub struct WirelessConfig {
 pub type DevicePortConfigVersion = u32;
 
 // DevicePortConfig struct
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct DevicePortConfig {
     pub version: DevicePortConfigVersion,
@@ -552,8 +552,16 @@ pub struct DevicePortConfigList {
     pub port_config_list: Option<Vec<DevicePortConfig>>,
 }
 
+impl DevicePortConfigList {
+    pub fn get_dpc_by_key(&self, key: &str) -> Option<&DevicePortConfig> {
+        self.port_config_list
+            .as_ref()
+            .and_then(|list| list.iter().find(|dpc| dpc.key == key))
+    }
+}
+
 // NetworkPortConfig struct
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct NetworkPortConfig {
     pub if_name: String,
@@ -583,7 +591,7 @@ pub struct NetworkPortConfig {
 }
 
 // DhcpConfig struct
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct DhcpConfig {
     pub addr_subnet: String,
@@ -645,7 +653,7 @@ pub struct ErrorDescription {
     pub error_time: DateTime<Utc>,
     pub error_severity: ErrorSeverity,
     pub error_retry_condition: String,
-    pub error_entities: Vec<ErrorEntity>,
+    pub error_entities: Option<Vec<ErrorEntity>>,
 }
 
 #[repr(i32)]

@@ -7,38 +7,55 @@ use crossterm::{
     },
 };
 use std::{
+    fs::{self, File},
     io::stdout,
     ops::{Deref, DerefMut},
+    os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
 };
 
 use ratatui::{backend::CrosstermBackend, Terminal};
 
-pub type IO = std::io::Stdout;
-
 #[derive(Debug)]
 pub struct TerminalWrapper {
-    terminal: Terminal<CrosstermBackend<IO>>,
+    terminal: Terminal<CrosstermBackend<File>>,
+    fd: RawFd,
 }
 
 impl TerminalWrapper {
-    pub fn new() -> Result<Self> {
-        let terminal = Self::init_terminal()?;
-        Ok(Self { terminal })
+    fn tty_fd() -> Result<File> {
+        Ok(fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/tty")?)
     }
 
-    fn init_terminal() -> Result<Terminal<CrosstermBackend<IO>>> {
+    fn init_terminal(file: File) -> Result<Terminal<CrosstermBackend<File>>> {
         println!("Initializing terminal");
         // No stdout after this point
-        execute!(stdout(), EnterAlternateScreen, cursor::Hide)?;
+        execute!(&file, EnterAlternateScreen, cursor::Hide)?;
         enable_raw_mode()?;
-        let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+        let mut terminal = Terminal::new(CrosstermBackend::new(file))?;
         terminal.clear()?;
         Ok(terminal)
     }
 
+    pub fn open_terminal() -> Result<Self> {
+        let file = Self::tty_fd()?;
+        let raw_fd = file.as_raw_fd();
+
+        let terminal = Self::init_terminal(file)?;
+        Ok(Self {
+            terminal,
+            fd: raw_fd,
+        })
+    }
+
     fn close_terminal(&mut self) -> Result<()> {
+        self.terminal.clear()?;
         if is_raw_mode_enabled()? {
-            execute!(stdout(), LeaveAlternateScreen, cursor::Show)?;
+            // get file from raw fd
+            let mut file = unsafe { File::from_raw_fd(self.fd) };
+            execute!(file, LeaveAlternateScreen, cursor::Show)?;
             disable_raw_mode()?;
         }
         // No stdout before this point
@@ -59,7 +76,7 @@ impl Drop for TerminalWrapper {
 }
 
 impl Deref for TerminalWrapper {
-    type Target = Terminal<CrosstermBackend<IO>>;
+    type Target = Terminal<CrosstermBackend<File>>;
 
     fn deref(&self) -> &Self::Target {
         &self.terminal

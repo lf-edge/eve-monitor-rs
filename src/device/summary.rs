@@ -26,7 +26,7 @@ impl DeviceSummary {
             name: get_name(),
             status: "online".to_string(),
             last_checkin: Utc::now(),
-            network_interfaces: network::list().expect("REASON"),
+            network_interfaces: Vec::new(),
             usb_devices: get_usb(),
             pci_devices: get_pci(),
         }

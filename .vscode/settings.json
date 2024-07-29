@@ -1,6 +1,34 @@
 {
     "cSpell.words": [
+        "chrono",
         "crossterm",
-        "ratatui"
+        "Deque",
+        "Dmsg",
+        "getlantern",
+        "iface",
+        "inotify",
+        "Intf",
+        "ipaddr",
+        "IPDNS",
+        "ipnetwork",
+        "lacp",
+        "layouter",
+        "Logicallabel",
+        "macaddr",
+        "mgmt",
+        "networkpage",
+        "NOPROXY",
+        "pacfile",
+        "Phylabel",
+        "PLMN",
+        "plmns",
+        "radiogroup",
+        "ratatui",
+        "Relayout",
+        "repr",
+        "rmesg",
+        "serde",
+        "taborder",
+        "wpad"
     ]
 }

@@ -2,12 +2,10 @@ use std::{cell::LazyCell, collections::HashMap};
 
 use crate::{
     events::Event::{self, Key},
-    traits::{IElementEventHandler, IEventHandler, IWidgetPresenter, IWindow},
+    traits::{IEventHandler, IWindow},
     ui::{action::UiActions, focus_tracker::FocusMode, widgets::button::ButtonElement},
 };
-use crossterm::event::KeyEvent;
 use crossterm::event::{KeyCode, KeyModifiers};
-use futures::stream::Collect;
 use log::debug;
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},

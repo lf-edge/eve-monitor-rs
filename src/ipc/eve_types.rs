@@ -144,7 +144,7 @@ pub struct RadioSilence {
 pub struct GoIpNetwork {
     #[serde(rename = "IP")]
     pub ip: String,
-    pub mask: String, // base64 encoded prefix
+    pub mask: Option<String>, // base64 encoded prefix
 }
 
 fn deserialize_ipaddr<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
@@ -212,7 +212,7 @@ pub struct NetworkPortStatus {
     pub domain_name: String,
     pub dns_servers: Option<Vec<IpAddr>>,
     pub ntp_servers: Option<Vec<IpAddr>>,
-    pub addr_info_list: Vec<AddrInfo>,
+    pub addr_info_list: Option<Vec<AddrInfo>>,
     pub up: bool,
     #[serde(deserialize_with = "deserialize_mac", skip_serializing)]
     pub mac_addr: MacAddr,

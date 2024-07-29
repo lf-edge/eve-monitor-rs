@@ -11,7 +11,7 @@ pub struct NetworkStatus {
 pub struct NetworkInterface {
     name: String,
     is_mgmt: bool,
-    addresses: Vec<IpAddr>,
+    addresses: Option<Vec<IpAddr>>,
     routes: Option<Vec<IpAddr>>,
     mac: MacAddr,
 }
@@ -20,7 +20,7 @@ pub fn list() -> Option<Vec<NetworkInterface>> {
     Some(vec![NetworkInterface {
         name: "eth0".to_string(),
         is_mgmt: true,
-        addresses: vec![],
+        addresses: None,
         routes: None,
         mac: MacAddr::V8(MacAddr8::nil()),
     }])
@@ -29,7 +29,12 @@ pub fn list() -> Option<Vec<NetworkInterface>> {
 impl From<NetworkPortStatus> for NetworkInterface {
     fn from(port: NetworkPortStatus) -> Self {
         // parse address list
-        let addresses = port.addr_info_list.iter().map(|addr| addr.addr).collect();
+        let addresses = port.addr_info_list.map(|addr_info_list| {
+            addr_info_list
+                .iter()
+                .map(|addr_info| addr_info.addr)
+                .collect()
+        });
 
         NetworkInterface {
             name: port.if_name,
@@ -214,16 +219,17 @@ mod tests {
     fn test_from() {
         let port = get_network_port_status();
         let network_interface = NetworkInterface::from(port);
+        let addresses = network_interface.addresses.unwrap();
+
         assert_eq!(network_interface.name, "eth1");
         assert_eq!(network_interface.is_mgmt, true);
-        assert_eq!(network_interface.addresses.len(), 3);
+        assert_eq!(addresses.len(), 3);
         assert_eq!(
             network_interface.mac.as_bytes(),
             &[0x52, 0x54, 0x00, 0x12, 0x34, 0x57]
         );
         assert_eq!(network_interface.routes.unwrap().len(), 2);
         // check all the addresses
-        let addresses = network_interface.addresses;
         assert_eq!(addresses[0], IpAddr::V4(Ipv4Addr::new(192, 168, 2, 10)));
         assert_eq!(
             addresses[1],

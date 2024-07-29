@@ -80,7 +80,7 @@ impl InputFieldElement {
             input_mode: InputMode::Insert,
             v: Default::default(),
             on_update: None,
-            on_char: None,
+            on_char: Some(Box::new(|c| Some(*c))),
             text_area: Rect::default(),
             scroll_left: 0,
             enabled: true,
@@ -213,6 +213,7 @@ impl InputFieldElement {
 
 impl IElementEventHandler for InputFieldElement {
     fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
+        trace!("input element {} handling key {:?}", self.caption, key.code);
         let old_value = self.value.clone();
         if let Some(value) = self.value.as_mut() {
             match key.code {

@@ -130,4 +130,12 @@ impl FocusTracker {
             _ => return None,
         }
     }
+
+    pub fn set_tab_order(&mut self, order: Vec<String>) {
+        self.tab_order = order;
+        debug!("new tab order {:?}", self.tab_order);
+        if self.focused_view > self.tab_order.len() {
+            self.focused_view = 0;
+        }
+    }
 }

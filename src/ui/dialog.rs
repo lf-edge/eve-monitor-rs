@@ -49,7 +49,7 @@ impl<D: 'static> Dialog<D> {
         let mut widgets = WidgetMap::new();
         for button_name in buttons.iter() {
             let button = ButtonElement::new(button_name);
-            widgets.add_or_update(button_name.to_string(), Box::new(button));
+            widgets.insert(button_name.to_string(), Box::new(button));
         }
 
         let focus = FocusTracker::new(
@@ -205,30 +205,18 @@ impl<D> IElementEventHandler for Dialog<D> {
             return Some(Activity::Action(UiActions::DismissDialog));
         }
 
-        if let Some(act) = self.focus.handle_key_event(key) {
-            match act {
-                Activity::Action(action) => {
-                    if let UiActions::ButtonClicked(ref name) = action {
-                        if name == "Cancel" {
-                            return Some(Activity::Action(UiActions::DismissDialog));
-                        }
-                    }
-
-                    return Some(Activity::Action(action));
-                }
-                Activity::Event(key) => {
-                    if let Some(elem_name) = self.focus.get_focused_view() {
-                        self.widgets
-                            .get_mut(&elem_name)
-                            .unwrap()
-                            .handle_key_event(key)
-                    } else {
-                        None
-                    }
+        if let Some(action) = self.focus.handle_key_event(key) {
+            if let UiActions::ButtonClicked(ref name) = action {
+                if name == "Cancel" {
+                    return Some(Activity::Action(UiActions::DismissDialog));
                 }
             }
-        } else {
-            return None;
+            return Some(Activity::Action(action));
         }
+
+        self.widgets
+            .get_mut(&self.focus.get_focused_view()?)
+            .unwrap()
+            .handle_key_event(key)
     }
 }

@@ -1,10 +1,11 @@
 use crate::events;
 use crate::model::Model;
-use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use std::borrow::BorrowMut;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::{fmt::Debug, rc::Rc};
 
+use indexmap::IndexMap;
 use log::trace;
 use ratatui::layout::Rect;
 
@@ -14,12 +15,10 @@ use anyhow::Result;
 use super::{
     action::{Action, UiActions},
     focus_tracker::{FocusMode, FocusTracker},
-    tools::ElementHashMap,
-    widgets::element::VisualState,
 };
 
-pub type WidgetMap = ElementHashMap<Box<dyn IWidget>>;
-pub type LayoutMap = ElementHashMap<Rect>;
+pub type WidgetMap = IndexMap<String, Box<dyn IWidget>>;
+pub type LayoutMap = HashMap<String, Rect>;
 
 pub type LayoutFn<D> = Rc<dyn Fn(&mut Window<D>, &Rect, &Rc<Model>)>;
 pub type RenderFn<D> = Rc<dyn Fn(&mut Window<D>, &Rect, &mut ratatui::Frame<'_>, &Rc<Model>)>;
@@ -43,7 +42,7 @@ pub struct WindowBuilder<D> {
 
 impl<D> WindowBuilder<D> {
     pub fn widget<S: Into<String>>(mut self, name: S, widget: impl IWidget + 'static) -> Self {
-        self.widgets.add_or_update(name.into(), Box::new(widget));
+        self.widgets.insert(name.into(), Box::new(widget));
         self
     }
 
@@ -129,7 +128,6 @@ impl<D> WindowBuilder<D> {
 }
 
 pub struct Window<D> {
-    pub v: VisualState,
     pub name: String,
     ft: FocusTracker,
     widgets: WidgetMap,
@@ -160,19 +158,18 @@ impl<D> Window<D> {
             name: name.into(),
             ft,
             widgets,
-            layout: ElementHashMap::new(),
+            layout: HashMap::new(),
             do_layout,
             do_render,
             on_action,
-            state: state,
-            v: Default::default(),
+            state,
         }
     }
 
     pub fn builder<S: Into<String>>(name: S) -> WindowBuilder<D> {
         WindowBuilder {
             name: name.into(),
-            widgets: ElementHashMap::new(),
+            widgets: WidgetMap::new(),
             do_layout: None,
             do_render: None,
             tab_order: None,
@@ -183,11 +180,11 @@ impl<D> Window<D> {
     }
 
     pub fn add_widget<S: Into<String>>(&mut self, name: S, widget: Box<dyn IWidget>) {
-        self.widgets.add_or_update(name.into(), widget);
+        self.widgets.insert(name.into(), widget);
     }
 
     pub fn update_layout<S: Into<String>>(&mut self, name: S, rect: Rect) {
-        self.layout.add_or_update(name.into(), rect);
+        self.layout.insert(name.into(), rect);
     }
 
     pub fn layout<S: Into<String>>(&mut self, name: S) -> Rect {
@@ -209,42 +206,31 @@ impl<D> IEventHandler for Window<D> {
     fn handle_event(&mut self, event: events::Event) -> Option<Action> {
         match event {
             events::Event::Key(key) => {
-                if let Some(activity) = self.ft.handle_key_event(key) {
-                    match activity {
-                        Activity::Action(action) => {
-                            return Some(Action::new(self.name.clone(), action))
-                        }
-                        Activity::Event(_) => {}
-                    }
+                if let Some(action) = self.ft.handle_key_event(key) {
+                    return Some(Action::new(self.name.clone(), action));
                 }
                 // forward the event to the focused view
-                if let Some(focused_view) = self.ft.get_focused_view() {
-                    let widget = self.widgets.get_mut(&focused_view).unwrap();
-                    if let Some(activity) = widget.handle_key_event(key) {
-                        match activity {
-                            Activity::Action(action) => {
-                                if let Some(on_action) = self.on_action.as_mut() {
-                                    if let Some(new_action) = on_action(
-                                        Action {
-                                            source: focused_view,
-                                            action,
-                                            target: None,
-                                        },
-                                        &mut self.state.borrow_mut(),
-                                    ) {
-                                        return Some(Action::new(self.name.clone(), new_action));
-                                    }
-                                }
-                            }
-                            Activity::Event(event) => {
-                                return self.ft.handle_key_event(event).and_then(|act| match act {
-                                    Activity::Action(action) => {
-                                        Some(Action::new(self.name.clone(), action))
-                                    }
-                                    Activity::Event(_) => None,
-                                });
-                            }
-                        }
+                let focused_view = self.ft.get_focused_view()?;
+                let widget = self.widgets.get_mut(&focused_view).unwrap();
+                let activity = widget.handle_key_event(key)?;
+                match activity {
+                    Activity::Action(action) => {
+                        self.on_action.as_mut()?(
+                            Action {
+                                source: focused_view,
+                                action,
+                                target: None,
+                            },
+                            &mut self.state.borrow_mut(),
+                        )
+                        .and_then(|new_action| Some(Action::new(self.name.clone(), new_action)));
+                    }
+
+                    Activity::Event(event) => {
+                        return self
+                            .ft
+                            .handle_key_event(event)
+                            .and_then(|act| Some(Action::new(self.name.clone(), act)))
                     }
                 }
             }
@@ -291,7 +277,7 @@ impl<D> IPresenter for Window<D> {
         focused: bool,
     ) {
         // print layout map
-        trace!("Layout: {:#?}", *self.layout);
+        trace!("Layout: {:#?}", self.layout);
 
         let focused_widget = self.ft.get_focused_view().unwrap_or_default();
 

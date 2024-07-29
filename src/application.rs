@@ -4,6 +4,7 @@ use crate::model::Model;
 use crate::raw_model::RawModel;
 use crate::traits::{IEventHandler, IPresenter};
 use crate::ui::homepage::HomePage;
+use crate::ui::netconf::{self, NetworkDialog};
 use crate::ui::networkpage::create_network_page;
 use crate::ui::statusbar::{create_status_bar, StatusBarState};
 use crate::ui::widgets::label::LabelElement;
@@ -600,34 +601,61 @@ impl Ui {
                 self.views[self.selected_tab as usize].push(Box::new(d));
             }
 
+            // show network edit dialog on ctrl+e
+            Event::Key(key)
+                if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
+            {
+                debug!("CTRL+e: show dialog");
+
+                // let s = IpDialogState {
+                //     ip: "10.208.13.10".to_string(),
+                //     mode: "DHCP".to_string(),
+                //     gw: "1.1.1.1".to_string(),
+                // };
+
+                let d: NetworkDialog = NetworkDialog::new();
+                self.views[self.selected_tab as usize].push(Box::new(d));
+            }
+
             // handle Tab switching
-            Event::Key(key)
-                if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Left) =>
-            {
-                debug!("CTRL+Left: switching tab view");
-                self.selected_tab = self.selected_tab.previous();
-            }
-            Event::Key(key)
-                if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right) =>
-            {
-                debug!("CTRL+Right: switching tab view");
-                self.selected_tab = self.selected_tab.next();
-            }
+            // Event::Key(key)
+            //     if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Left) =>
+            // {
+            //     debug!("CTRL+Left: switching tab view");
+            //     self.selected_tab = self.selected_tab.previous();
+            // }
+            // Event::Key(key)
+            //     if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right) =>
+            // {
+            //     debug!("CTRL+Right: switching tab view");
+            //     self.selected_tab = self.selected_tab.next();
+            // }
 
             // forward all other key events to the top layer
             Event::Key(key) => {
-                if let Some(layer) = self.views[self.selected_tab as usize].last_mut() {
-                    if let Some(action) = layer.handle_event(Event::Key(key)) {
-                        match action.action {
-                            UiActions::DismissDialog => {
-                                self.views[self.selected_tab as usize].pop();
-                                // self.invalidate();
-                            }
-                            _ => {
-                                return Some(action);
-                            }
+                if let Some(action) = self.views[self.selected_tab as usize]
+                    .last_mut()?
+                    .handle_event(Event::Key(key))
+                {
+                    match action.action {
+                        UiActions::DismissDialog => {
+                            self.views[self.selected_tab as usize].pop();
+                            // self.invalidate();
+                        }
+                        _ => {
+                            return Some(action);
                         }
                     }
+                }
+
+                if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Left {
+                    debug!("CTRL+Left: switching tab view");
+                    self.selected_tab = self.selected_tab.previous();
+                }
+
+                if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right {
+                    debug!("CTRL+Right: switching tab view");
+                    self.selected_tab = self.selected_tab.next();
                 }
             }
             Event::Tick => {

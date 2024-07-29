@@ -1,9 +1,11 @@
 use crate::traits::IElementEventHandler;
+use crate::ui::action::UiActions;
 use crate::ui::activity::Activity;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use log::debug;
 
+use super::action::Action;
 use super::window::WidgetMap;
 
 // use crate::traits::ViewComposer;
@@ -111,22 +113,29 @@ impl FocusTracker {
     pub fn clear_focus(&mut self) {
         self.focused_view = 0;
     }
-}
-impl IElementEventHandler for FocusTracker {
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
-        debug!("focus_tracker handle_event {:?}", key);
+
+    pub fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
+        debug!("focuse_tracker handle_event {:?}", key);
 
         match key.code {
             // handle Tab key
             KeyCode::Tab | KeyCode::BackTab => {
                 if key.code == KeyCode::Tab {
-                    self.focus_prev();
-                } else {
                     self.focus_next();
+                } else {
+                    self.focus_prev();
                 }
-                return Some(Activity::Action(crate::ui::action::UiActions::Redraw));
+                return Some(UiActions::Redraw);
             }
-            _ => return Some(Activity::Event(key)),
+            _ => return None,
+        }
+    }
+
+    pub fn set_tab_order(&mut self, order: Vec<String>) {
+        self.tab_order = order;
+        debug!("new tab order {:?}", self.tab_order);
+        if self.focused_view > self.tab_order.len() {
+            self.focused_view = 0;
         }
     }
 }

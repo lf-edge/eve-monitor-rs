@@ -40,9 +40,9 @@ impl HomePage {
             Layout::vertical([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).areas(right);
 
         let mut lm = LayoutMap::new();
-        let _ = lm.add_or_update("summary".to_string(), left.clone());
-        let _ = lm.add_or_update("usb".to_string(), usb.clone());
-        let _ = lm.add_or_update("pci".to_string(), pci.clone());
+        let _ = lm.insert("summary".to_string(), left.clone());
+        let _ = lm.insert("usb".to_string(), usb.clone());
+        let _ = lm.insert("pci".to_string(), pci.clone());
         lm
     }
 

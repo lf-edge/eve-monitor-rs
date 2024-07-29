@@ -138,7 +138,9 @@ impl<D: 'static> IPresenter for Dialog<D> {
 
         let block = Block::default()
             .borders(Borders::ALL)
-            .border_type(BorderType::Thick)
+            //FIXME: need new Font
+            //.border_type(BorderType::Thick)
+            .border_type(BorderType::Double)
             .border_style(Style::default().fg(Color::White))
             .style(Style::default().bg(Color::Black))
             .title(self.name.as_str());

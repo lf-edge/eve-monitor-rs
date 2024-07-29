@@ -31,7 +31,9 @@ pub fn create_status_bar() -> Window<StatusBarState> {
         })
         .with_render(|_w, rect, frame, _model| {
             let blk = Block::new()
-                .border_type(BorderType::Rounded)
+                //.border_type(BorderType::Rounded)
+                //FIXME: need new Font
+                .border_type(BorderType::Plain)
                 .borders(Borders::ALL)
                 .style(Style::default().bg(Color::Black));
 

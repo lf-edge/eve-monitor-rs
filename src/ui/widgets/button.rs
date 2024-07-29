@@ -49,9 +49,13 @@ impl IWidgetPresenter for ButtonElement {
 
         // set border type based on push state
         let border_type = if focused {
-            BorderType::Thick
+            //FIXME: need new Font
+            //BorderType::Thick
+            BorderType::Double
         } else {
-            BorderType::Rounded
+            //FIXME: need new Font
+            //BorderType::Rounded
+            BorderType::Plain
         };
 
         let block = Block::default()

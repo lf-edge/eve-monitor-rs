@@ -48,7 +48,9 @@ fn network_page_render(
     let rect = w.layout("CustomFrame");
 
     let blk = Block::new()
-        .border_type(BorderType::Rounded)
+        //.border_type(BorderType::Rounded)
+        //FIXME: need new Font
+        .border_type(BorderType::Plain)
         .borders(Borders::ALL)
         .style(Style::default().bg(Color::Black))
         .title(format!("Num Relayout: {}", w.state.num_relayout));

@@ -653,7 +653,7 @@ pub struct ErrorDescription {
     pub error_time: DateTime<Utc>,
     pub error_severity: ErrorSeverity,
     pub error_retry_condition: String,
-    pub error_entities: Vec<ErrorEntity>,
+    pub error_entities: Option<Vec<ErrorEntity>>,
 }
 
 #[repr(i32)]

@@ -1679,3 +1679,40 @@ fn test_response_err_deserialization() {
         _ => panic!("Unexpected message type"),
     }
 }
+
+#[test]
+fn test_downloader_1() {
+    let json_data = r#"
+    {
+        "type": "DownloaderStatus",
+        "message": {
+            "ImageSha256": "a72860cb95fd59e9c696c66441c64f18e66915fa26b249911e83c3854477ed9a",
+            "DatastoreIDList": [
+                "c1b0cb8a-9b39-4b9a-82ff-b5409757ecc2"
+            ],
+            "Target": "/persist/vault/downloader/pending/95ac1bd0a96cbd6099fd9e8521bffec5902b6e5c31542f564598392aa53233de.a72860cb95fd59e9c696c66441c64f18e66915fa26b249911e83c3854477ed9a",
+            "Name": "nginx@sha256:a72860cb95fd59e9c696c66441c64f18e66915fa26b249911e83c3854477ed9a",
+            "RefCount": 1,
+            "LastUse": "2024-07-29T07:09:41.887178121Z",
+            "Expired": false,
+            "NameIsURL": false,
+            "State": 104,
+            "ReservedSpace": 0,
+            "Size": 7296,
+            "TotalSize": 7296,
+            "CurrentSize": 7296,
+            "Progress": 100,
+            "ModTime": "2024-07-29T07:09:44.044481071Z",
+            "ContentType": "",
+            "Error": "",
+            "ErrorTime": "0001-01-01T00:00:00Z",
+            "ErrorSeverity": 0,
+            "ErrorRetryCondition": "",
+            "ErrorEntities": null,
+            "RetryCount": 0,
+            "OrigError": ""
+        }
+    }
+    "#;
+    let response: IpcMessage = serde_json::from_str(&json_data).unwrap();
+}

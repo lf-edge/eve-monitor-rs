@@ -2,9 +2,10 @@ use crate::events;
 use crate::model::Model;
 use crate::ui::activity::Activity;
 use std::borrow::BorrowMut;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::{fmt::Debug, rc::Rc};
 
+use indexmap::IndexMap;
 use log::trace;
 use ratatui::layout::Rect;
 
@@ -16,7 +17,7 @@ use super::{
     focus_tracker::{FocusMode, FocusTracker},
 };
 
-pub type WidgetMap = HashMap<String, Box<dyn IWidget>>;
+pub type WidgetMap = IndexMap<String, Box<dyn IWidget>>;
 pub type LayoutMap = HashMap<String, Rect>;
 
 pub type LayoutFn<D> = Rc<dyn Fn(&mut Window<D>, &Rect, &Rc<Model>)>;
@@ -168,7 +169,7 @@ impl<D> Window<D> {
     pub fn builder<S: Into<String>>(name: S) -> WindowBuilder<D> {
         WindowBuilder {
             name: name.into(),
-            widgets: HashMap::new(),
+            widgets: WidgetMap::new(),
             do_layout: None,
             do_render: None,
             tab_order: None,

@@ -31,3 +31,4 @@ macaddr = { version = "1.0.1", features = ["serde"] }
 rmesg = "1.0.21"
 base64 = "0.22.1"
 url = "2.5.2"
+indexmap = "2.2.6"

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::LazyCell, collections::HashMap};
 
 use crate::{
     events::Event::{self, Key},
@@ -7,6 +7,7 @@ use crate::{
 };
 use crossterm::event::KeyEvent;
 use crossterm::event::{KeyCode, KeyModifiers};
+use futures::stream::Collect;
 use log::debug;
 use ratatui::{
     layout::{Constraint, Flex, Layout, Rect},
@@ -18,7 +19,7 @@ use ratatui::{
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 
 use crate::{
-    traits::{IPresenter, IWidget},
+    traits::IPresenter,
     ui::{focus_tracker::FocusTracker, window::LayoutMap},
 };
 
@@ -37,8 +38,8 @@ pub struct NetworkDialog {
     layout: LayoutMap,
     old_rect: Rect,
     page_widgets: WidgetMap,
-    ip_fields: Vec<Box<dyn IWidget>>,
-    proxy_fields: Vec<Box<dyn IWidget>>,
+    ip_fields: WidgetMap,
+    proxy_fields: WidgetMap,
     interface_name: String,
 }
 
@@ -49,61 +50,78 @@ enum NetworkTabs {
     Proxy,
 }
 
+const window_focus_order: LazyCell<Vec<String>> =
+    LazyCell::new(|| vec!["ok".to_string(), "cancel".to_string(), "mode".to_string()]);
+
 impl NetworkDialog {
     pub fn new() -> Self {
-        let focus_order: Vec<String> = vec![
-            "mode".to_string(),
-            "0".to_string(),
-            "1".to_string(),
-            "2".to_string(),
-            "3".to_string(),
-            "4".to_string(),
-            "ok".to_string(),
-            "cancel".to_string(),
-        ];
-
-        let mut s = Self {
-            focus: FocusTracker::create_from_taborder(
-                focus_order,
-                Some("mode".to_string()),
-                FocusMode::Wrap,
-            ),
-            layout: HashMap::new(),
-            old_rect: Rect::ZERO,
-            page_widgets: HashMap::new(),
-            ip_fields: Vec::new(),
-            proxy_fields: Vec::new(),
-            selected_tab: NetworkTabs::IP,
-            interface_name: "Home".to_string(),
-        };
-
-        s.page_widgets.insert(
+        let mut page_widgets = WidgetMap::new();
+        page_widgets.insert(
             "ip_mode".to_string(),
             Box::new(SpinBoxElement::new(vec!["static", "dynamic"])),
         );
-        s.page_widgets.insert(
+        page_widgets.insert(
             "proxy_mode".to_string(),
             Box::new(SpinBoxElement::new(vec!["automatic", "manual"])),
         );
 
-        s.ip_fields
-            .push(Box::new(InputFieldElement::new("IP", None)));
-        s.ip_fields
-            .push(Box::new(InputFieldElement::new("Gateway", None)));
-        s.ip_fields
-            .push(Box::new(InputFieldElement::new("DNS", None)));
-        s.ip_fields
-            .push(Box::new(InputFieldElement::new("Domain", None)));
+        let mut ip_fields = WidgetMap::new();
+        ip_fields.insert(
+            "ip".to_string(),
+            Box::new(InputFieldElement::new("IP", None)),
+        );
+        ip_fields.insert(
+            "gateway".to_string(),
+            Box::new(InputFieldElement::new("Gateway", None)),
+        );
+        ip_fields.insert(
+            "dns".to_string(),
+            Box::new(InputFieldElement::new("DNS", None)),
+        );
+        ip_fields.insert(
+            "ip-domain".to_string(),
+            Box::new(InputFieldElement::new("Domain", None)),
+        );
 
-        s.proxy_fields
-            .push(Box::new(InputFieldElement::new("HTTP", None)));
-        s.proxy_fields
-            .push(Box::new(InputFieldElement::new("HTTPS", None)));
-        s.proxy_fields
-            .push(Box::new(InputFieldElement::new("Socks", None)));
-        s.proxy_fields
-            .push(Box::new(InputFieldElement::new("Domain", None)));
-        s
+        let mut proxy_fields = WidgetMap::new();
+        proxy_fields.insert(
+            "proxy-http".to_string(),
+            Box::new(InputFieldElement::new("HTTP", None)),
+        );
+        proxy_fields.insert(
+            "proxy-https".to_string(),
+            Box::new(InputFieldElement::new("HTTPS", None)),
+        );
+        proxy_fields.insert(
+            "socks".to_string(),
+            Box::new(InputFieldElement::new("Socks", None)),
+        );
+        proxy_fields.insert(
+            "proxy-domain".to_string(),
+            Box::new(InputFieldElement::new("Domain", None)),
+        );
+
+        let mut focus_order: Vec<String> = window_focus_order.clone();
+        let mut ip_focus_order: Vec<String> =
+            ip_fields.keys().into_iter().map(|s| (*s).clone()).collect();
+        focus_order.append(&mut ip_focus_order);
+
+        let focus = FocusTracker::create_from_taborder(
+            focus_order,
+            Some("mode".to_string()),
+            FocusMode::Wrap,
+        );
+
+        Self {
+            focus,
+            layout: HashMap::new(),
+            old_rect: Rect::ZERO,
+            page_widgets,
+            ip_fields,
+            proxy_fields,
+            selected_tab: NetworkTabs::IP,
+            interface_name: "Home".to_string(),
+        }
     }
 
     fn do_layout(&mut self, area: &Rect) {
@@ -179,7 +197,7 @@ impl NetworkDialog {
             focused_element == "mode",
         );
 
-        field_list.iter_mut().enumerate().for_each(|(i, field)| {
+        field_list.values_mut().enumerate().for_each(|(i, field)| {
             field.render(
                 &self.layout[&i.to_string()],
                 frame,
@@ -235,11 +253,29 @@ impl IEventHandler for NetworkDialog {
                 debug!("focused view {}", focus);
                 let widget = self.page_widgets.get_mut(&focus)?;
                 debug!("widget found");
-                let activity = widget.handle_key_event(key)?;
-                match activity {
-                    Activity::Action(action) => Some(Action::new("edit network", action)),
-                    Activity::Event(_) => None, //todo input validation
+                if let Some(activity) = widget.handle_key_event(key) {
+                    return match activity {
+                        Activity::Action(action) => Some(Action::new("edit network", action)),
+                        Activity::Event(_) => None, //todo input validation
+                    };
                 }
+
+                let tab_widgets = match self.selected_tab {
+                    NetworkTabs::IP => &mut self.ip_fields,
+
+                    NetworkTabs::Proxy => &mut self.proxy_fields,
+                };
+
+                let widget = tab_widgets.get_mut(&focus)?;
+                debug!("widget found");
+                if let Some(activity) = widget.handle_key_event(key) {
+                    return match activity {
+                        Activity::Action(action) => Some(Action::new("edit network", action)),
+                        Activity::Event(_) => None, //todo input validation
+                    };
+                }
+
+                None
             }
             Event::Tick | Event::TerminalResize(_, _) => None,
         }

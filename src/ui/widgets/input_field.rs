@@ -144,7 +144,9 @@ impl InputFieldElement {
         };
 
         let mut blk = Block::new()
-            .border_type(BorderType::Rounded)
+            //.border_type(BorderType::Rounded)
+            //FIXME: need new Font
+            .border_type(BorderType::Plain)
             .borders(Borders::ALL)
             .border_style(style)
             .style(Style::default().bg(Color::Black));

@@ -160,7 +160,7 @@ impl NetworkDialog {
         let _ = lm.insert("mode".to_string(), mode);
         let _ = lm.insert("fileds".to_string(), fields);
 
-        let [ok, cancel] = Layout::horizontal(vec![Constraint::Length(3); 2])
+        let [ok, cancel] = Layout::horizontal(vec![Constraint::Length(10); 2])
             .flex(Flex::Start)
             .areas(buttonbar);
 

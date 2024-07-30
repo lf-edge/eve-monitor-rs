@@ -1,6 +1,6 @@
-use crate::device::dmesg::DmesgViewer;
+use crate::device::dmesg::{self, DmesgViewer};
 use crate::events::Event;
-use crate::model::Model;
+use crate::model::{Model, MonitorModel};
 use crate::raw_model::RawModel;
 use crate::traits::{IEventHandler, IPresenter};
 use crate::ui::homepage::HomePage;
@@ -12,7 +12,7 @@ use crate::ui::widgets::radiogroup::RadioGroupElement;
 use crate::ui::widgets::spin_box::{SpinBoxElement, SpinBoxLayout};
 use core::fmt::Debug;
 
-use std::ops::Deref;
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::result::Result::Ok;
 
@@ -41,6 +41,8 @@ use futures::{FutureExt, SinkExt, StreamExt};
 
 use crossterm::event::KeyCode;
 use crossterm::event::KeyModifiers;
+use tokio::task::JoinHandle;
+use tokio_util::sync::CancellationToken;
 
 use crate::actions::{IpDialogState, MainWndState, MonActions};
 use crate::ipc::ipc_client::IpcClient;
@@ -61,7 +63,6 @@ pub struct Application {
     action_tx: UnboundedSender<Action>,
     ipc_tx: Option<UnboundedSender<IpcMessage>>,
     ui: Ui,
-    task: tokio::task::JoinHandle<()>,
     // this is our model :)
     model: Rc<Model>,
     raw_model: RawModel,
@@ -73,7 +74,7 @@ impl Application {
         let (terminal_tx, terminal_rx) = mpsc::unbounded_channel::<Event>();
         let terminal = TerminalWrapper::open_terminal()?;
         let mut ui = Ui::new(action_tx.clone(), terminal)?;
-        let model = Rc::new(Model::default());
+        let model = Rc::new(RefCell::new(MonitorModel::default()));
 
         ui.init();
 
@@ -83,7 +84,6 @@ impl Application {
             action_rx,
             action_tx,
             ui,
-            task: tokio::task::spawn(async {}),
             ipc_tx: None,
             model,
             raw_model: RawModel::new(),
@@ -106,6 +106,10 @@ impl Application {
         }
     }
 
+    fn is_desktop() -> bool {
+        std::env::var("XDG_RUNTIME_DIR").is_ok()
+    }
+
     pub fn handle_ipc_message(&mut self, msg: IpcMessage) {
         match msg {
             IpcMessage::DPCList(cfg) => {
@@ -121,7 +125,9 @@ impl Application {
                 warn!("Unhandled IPC message: {:?}", msg);
             }
         }
-        self.model = Rc::new((&self.raw_model).into());
+        self.model
+            .borrow_mut()
+            .update_from_raw_model(&self.raw_model);
     }
 
     pub fn send_dpc(&self) {
@@ -135,20 +141,112 @@ impl Application {
         }
     }
 
-    pub async fn run(&mut self) -> Result<()> {
-        println!("Running application");
-        // we never exit the application
-        // TODO: handle suspend/resume for the case when we give away /dev/tty
-        let (ipc_tx, mut ipc_rx) = mpsc::unbounded_channel::<IpcMessage>();
+    fn create_kmsg_task(
+        &mut self,
+    ) -> (
+        JoinHandle<Result<()>>,
+        CancellationToken,
+        UnboundedReceiver<rmesg::entry::Entry>,
+    ) {
+        let cancel_token = CancellationToken::new();
+        let cancel_token_child = cancel_token.clone();
+        let (dmesg_tx, dmesg_rx) = mpsc::unbounded_channel::<rmesg::entry::Entry>();
+        let is_desktop = Application::is_desktop();
+
+        let kmsg_task: JoinHandle<Result<()>> = tokio::spawn(async move {
+            if is_desktop {
+                let mut index = 0;
+                while !cancel_token_child.is_cancelled() {
+                    let dummy_entry = rmesg::entry::Entry {
+                        level: Some(rmesg::entry::LogLevel::Info),
+                        message: format!("[INFO] {} Desktop mode: no kmsg", index),
+                        facility: None,
+                        sequence_num: None,
+                        timestamp_from_system_start: None,
+                    };
+
+                    index += 1;
+
+                    tokio::select! {
+                        _ = cancel_token_child.cancelled() => {
+                            info!("Kmsg task was cancelled");
+                            return Ok(());
+                        }
+                        _ = tokio::time::timeout(tokio::time::Duration::from_millis(200), cancel_token_child.cancelled() ) => {
+                            dmesg_tx.send(dummy_entry.clone()).unwrap();
+                        }
+                    }
+                }
+            } else {
+                //FIXME: this stream is buggy!!! it leaves a thread behind and tokio cannot gracefully shutdown
+                let mut st = rmesg::logs_stream(rmesg::Backend::Default, true, false).await?;
+
+                while !cancel_token_child.is_cancelled() {
+                    tokio::select! {
+                        _ = cancel_token_child.cancelled() => {
+                            info!("Kmsg task was cancelled");
+                            return Ok(());
+                        }
+                        log = st.next() => {
+                            info!("Got log entry");
+                            match log {
+                                Some(Ok(log)) => {
+                                    dmesg_tx.send(log).unwrap();
+                                }
+                                Some(Err(e)) => {
+                                    warn!("Error reading kmsg: {:?}", e);
+                                }
+                                None => {
+                                    warn!("Kmsg stream ended");
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            info!("Kmsg stream ended");
+            Ok(())
+        });
+
+        (kmsg_task, cancel_token, dmesg_rx)
+    }
+
+    fn create_timer_task(
+        &self,
+        period: u64,
+    ) -> (JoinHandle<()>, CancellationToken, UnboundedReceiver<Event>) {
+        let (timer_tx, timer_rx) = mpsc::unbounded_channel::<Event>();
+        let cancellation_token = CancellationToken::new();
+        let cancellation_token_child = cancellation_token.clone();
+        let timer_task = tokio::spawn(async move {
+            while !cancellation_token_child.is_cancelled() {
+                tokio::select! {
+                    _ = tokio::time::timeout(tokio::time::Duration::from_millis(period), cancellation_token_child.cancelled() ) => {
+                        timer_tx.send(Event::Tick).unwrap();
+                    }
+                }
+            }
+        });
+
+        (timer_task, cancellation_token, timer_rx)
+    }
+
+    fn create_ipc_task(
+        &mut self,
+    ) -> (
+        JoinHandle<()>,
+        CancellationToken,
+        UnboundedReceiver<IpcMessage>,
+    ) {
+        let (ipc_tx, ipc_rx) = mpsc::unbounded_channel::<IpcMessage>();
         let (ipc_cmd_tx, mut ipc_cmd_rx) = mpsc::unbounded_channel::<IpcMessage>();
-        let (timer_tx, mut timer_rx) = mpsc::unbounded_channel::<Event>();
+        let ipc_cancel_token = CancellationToken::new();
+        let ipc_cancel_token_clone = ipc_cancel_token.clone();
+        self.ipc_tx = Some(ipc_cmd_tx);
 
-        // to send IPC messages from the task back to app
-        let ipc_tx_clone = ipc_tx.clone();
-
-        //TODO: save the task handle to be able to cancel it
-        let _ipc_task = tokio::spawn(async move {
-            ipc_tx_clone.send(IpcMessage::Connecting).unwrap();
+        let ipc_task = tokio::spawn(async move {
+            ipc_tx.send(IpcMessage::Connecting).unwrap();
 
             let socket_path = Application::get_socket_path();
 
@@ -156,12 +254,16 @@ impl Application {
             let stream = IpcClient::connect(&socket_path).await.unwrap();
             let (mut sink, mut stream) = stream.split();
 
-            ipc_tx_clone.send(IpcMessage::Ready).unwrap();
+            ipc_tx.send(IpcMessage::Ready).unwrap();
 
             loop {
-                //let ipc_event = stream.next().fuse();
+                let ipc_event = stream.next().fuse();
 
                 tokio::select! {
+                    _ = ipc_cancel_token_clone.cancelled() => {
+                        info!("IPC task was cancelled");
+                        return;
+                    }
                     msg = ipc_cmd_rx.recv() => {
                         match msg {
                             Some(msg) => {
@@ -173,10 +275,10 @@ impl Application {
                             }
                         }
                     },
-                    msg = stream.next() => {
+                    msg = ipc_event => {
                         match msg {
                             Some(Ok(msg)) => {
-                                ipc_tx_clone.send(IpcMessage::from(msg)).unwrap();
+                                ipc_tx.send(IpcMessage::from(msg)).unwrap();
                             }
                             Some(Err(e)) => {
                                 warn!("Error reading IPC message: {:?}", e);
@@ -190,24 +292,24 @@ impl Application {
                 }
             }
         });
-        self.ipc_tx = Some(ipc_cmd_tx);
 
-        // request data over IPC
-        // self.send_ipc_message(IpcMessage::Request(Request {
-        //     command: RpcCommand::Ping,
-        // }));
+        (ipc_task, ipc_cancel_token, ipc_rx)
+    }
 
-        // we never exit the application
-        // TODO: handle suspend/resume for the case when we give away /dev/tty
-        // because we passed through the GPU to a guest VM
+    fn create_terminal_task(&mut self) -> (JoinHandle<()>, CancellationToken) {
         let mut terminal_event_stream = self.ui.terminal.get_stream();
-
         let terminal_tx_clone = self.terminal_tx.clone();
-        self.task = tokio::spawn(async move {
+        let terminal_cancel_token = CancellationToken::new();
+        let terminal_cancel_token_child = terminal_cancel_token.clone();
+        let terminal_task = tokio::spawn(async move {
             loop {
                 let terminal_event = terminal_event_stream.next().fuse();
 
                 tokio::select! {
+                    _ = terminal_cancel_token_child.cancelled() => {
+                        info!("Terminal task was cancelled");
+                        return;
+                    }
                     event = terminal_event => {
                         match event {
                             Some(Ok(crossterm::event::Event::Key(key))) => {
@@ -229,27 +331,41 @@ impl Application {
                 }
             }
         });
+        (terminal_task, terminal_cancel_token)
+    }
+
+    pub async fn run(&mut self) -> Result<()> {
+        println!("Running application");
+
+        let (ipc_task, ipc_cancellation_token, mut ipc_rx) = self.create_ipc_task();
+
+        // TODO: handle suspend/resume for the case when we give away /dev/tty
+        // because we passed through the GPU to a guest VM
+        let (terminal_task, terminal_cancel_token) = self.create_terminal_task();
 
         // spawn a timer to send tick events
-        tokio::spawn(async move {
-            loop {
-                tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                timer_tx.send(Event::Tick).unwrap();
-            }
-        });
+        let (timer_task, timer_cancellation_token, mut timer_rx) = self.create_timer_task(500);
+
+        // start a task to fetch kernel messages using rmesg
+        let (kmsg_task, kmsg_cancellation_token, mut dmesg_rx) = self.create_kmsg_task();
 
         // send initial redraw event
         self.invalidate();
 
         let mut do_redraw = true;
+        let app_cancel_token = CancellationToken::new();
 
         // listen on the action channel and terminal channel
-        loop {
+        while !app_cancel_token.is_cancelled() {
             // TODO: set to true by default to make life easier for now
             // Set to false in an action handler if it occurs often and doesn't require a redraw
             do_redraw = true;
 
             tokio::select! {
+                _ = app_cancel_token.cancelled() => {
+                    info!("Application cancelled");
+                    break;
+                }
                 tick = timer_rx.recv() => {
                     match tick {
                         Some(event) => {
@@ -308,9 +424,8 @@ impl Application {
                             info!("Async Action: {:?}", action);
                             match action.action {
                                 UiActions::Quit => {
-                                    break;
+                                    app_cancel_token.cancel();
                                 }
-                                // UiActions::UserAction(MonActions::MainWndStateUpdated(state)) => {
                                 _ => {}
                             }
                         }
@@ -320,12 +435,45 @@ impl Application {
                         }
                     }
                 }
+                dmesg = dmesg_rx.recv() => {
+                    match dmesg {
+                        Some(entry) => {
+                            // fetch all entries from the stream
+                            self.model.borrow_mut().dmesg.push(entry);
+                            while let Ok(entry) = dmesg_rx.try_recv() {
+                                self.model.borrow_mut().dmesg.push(entry);
+                            }
+                        }
+                        None => {
+                            warn!("Dmesg stream ended");
+                            break;
+                        }
+                    }
+                }
+
             }
             if do_redraw {
                 trace!("Redraw requested");
                 self.draw_ui(self.model.clone())?;
             }
         }
+        info!("Cancelling tasks");
+        timer_cancellation_token.cancel();
+        kmsg_cancellation_token.cancel();
+        terminal_cancel_token.cancel();
+        ipc_cancellation_token.cancel();
+        info!("Waiting for tasks to finish");
+        let _ = kmsg_task.await;
+        info!("Kmsg task ended");
+        terminal_task.await?;
+        info!("Terminal task ended");
+        //TODO: rewrite the task so we can cancel it
+        ipc_task.abort();
+        _ = ipc_task.await;
+        info!("IPC task ended");
+        timer_task.await?;
+        info!("Timer task ended");
+        info!("run() ended");
 
         Ok(())
     }
@@ -378,7 +526,7 @@ impl Ui {
     }
 
     pub fn create_main_wnd(&self) -> Window<MainWndState> {
-        let do_layout = |w: &mut Window<MainWndState>, area: &Rect, model: &Rc<Model>| {
+        let do_layout = |w: &mut Window<MainWndState>, area: &Rect, _model: &Rc<Model>| {
             let cols = Layout::horizontal([Constraint::Ratio(1, 4); 4]).split(*area);
             for (i, col) in cols.iter().enumerate() {
                 let rows = Layout::vertical([Constraint::Ratio(1, 4); 4]).split(*col);

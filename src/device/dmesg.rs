@@ -4,11 +4,10 @@ use std::rc::Rc;
 
 use crate::events::Event;
 use crate::traits::{IEventHandler, IPresenter, IWindow};
-use log2::error;
+use log::trace;
 use ratatui::prelude::Rect;
 use ratatui::widgets::{Paragraph, Widget};
 use ratatui::Frame;
-use rmesg;
 
 #[derive(Default, Debug)]
 pub struct DmesgViewer {
@@ -16,7 +15,6 @@ pub struct DmesgViewer {
     _buffer: VecDeque<String>,
     _current_page: usize,
     _max_pages: usize,
-    lines_per_page: u16,
 }
 
 #[derive(Default, Debug)]
@@ -28,41 +26,39 @@ enum DmsgMode {
 
 impl DmesgViewer {
     pub fn new() -> Self {
-        let mut def = DmesgViewer::default();
-        def.lines_per_page = 120; // specially chosen to fill a normal terminal size for the demo. Should be chosen based on terminal height
-        def
+        DmesgViewer::default()
     }
 }
 
 impl IPresenter for DmesgViewer {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _model: &Rc<Model>, _focused: bool) {
-        match rmesg::log_entries(rmesg::Backend::Default, false) {
-            Err(err) => {
-                error!("{}", err.to_string());
-                Paragraph::new(err.to_string()).render(*area, frame.buffer_mut())
-            }
-            Ok(mut entries) => {
-                self.lines_per_page = area.height;
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
+        let page_size = area.height as usize;
+        let area_size = area.area() as usize;
+        trace!(
+            "Rendering dmesg: {:?}, page={} log_size={}",
+            area,
+            page_size,
+            model.borrow_mut().dmesg.len()
+        );
+        // get last page_size entries from or the whole buffer if it's smaller
+        let content = model
+            .borrow_mut()
+            .dmesg
+            .iter()
+            .rev()
+            .take(page_size)
+            .rev()
+            .map(|entry| {
+                if let Some(ts) = entry.timestamp_from_system_start {
+                    format!("[{:.6}] {}\n", ts.as_secs_f32(), entry.message)
+                } else {
+                    // we've got a 'continuation' string in a format key=value
+                    format!("\t{}\n", entry.message)
+                }
+            })
+            .fold(String::with_capacity(area_size), |acc, e| acc + &e);
 
-                let page_list = entries.split_off(
-                    entries
-                        .len()
-                        .saturating_sub((self.lines_per_page * 3).into()),
-                );
-                let page_contents = page_list
-                    .into_iter()
-                    .map(|entry| {
-                        if let Some(ts) = entry.timestamp_from_system_start {
-                            format!("[{:.6}] {}\n", ts.as_secs_f32(), entry.message)
-                        } else {
-                            "".to_string()
-                        }
-                    })
-                    .reduce(|page, e| page + &e)
-                    .unwrap();
-                Paragraph::new(page_contents).render(*area, frame.buffer_mut())
-            }
-        };
+        Paragraph::new(content).render(*area, frame.buffer_mut())
     }
 }
 

@@ -11,7 +11,7 @@ use crossterm::event::{KeyCode, KeyEvent};
 use log::trace;
 use log2::error;
 use ratatui::prelude::Rect;
-use ratatui::widgets::{Paragraph, Widget};
+use ratatui::widgets::{Clear, Paragraph, Widget};
 use ratatui::Frame;
 use rmesg::entry::Entry;
 
@@ -129,7 +129,7 @@ impl IPresenter for DmesgViewer {
                         format!("[{:.6}] {}\n", ts.as_secs_f32(), entry.message)
                     } else {
                         // we've got a 'continuation' string in a format key=value
-                        format!("\t{}\n", entry.message)
+                        format!("  {}\n", entry.message)
                     }
                 })
                 .fold(String::with_capacity(area_size), |acc, e| acc + &e),

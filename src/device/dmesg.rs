@@ -88,7 +88,7 @@ impl DmesgViewer {
             KeyCode::Char(' ') => {
                 self._mode = DmsgMode::Follow;
             }
-            _ => (),
+            _ => return None,
         }
         Some(Activity::redraw())
     }

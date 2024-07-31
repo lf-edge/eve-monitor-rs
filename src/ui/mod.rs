@@ -10,5 +10,6 @@ pub mod netconf;
 pub mod networkpage;
 pub mod statusbar;
 pub mod tools;
+pub mod ui;
 pub mod widgets;
 pub mod window;

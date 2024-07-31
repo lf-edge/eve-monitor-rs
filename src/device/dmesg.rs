@@ -99,6 +99,7 @@ impl IPresenter for DmesgViewer {
         let page_size = area.height as usize;
         let area_size = area.area() as usize;
         self.buffer_len = model.borrow().dmesg.len();
+        self.lines_per_page = area.height;
         trace!(
             "Rendering dmesg: {:?}, page={} log_size={}",
             area,
@@ -106,15 +107,14 @@ impl IPresenter for DmesgViewer {
             model.borrow().dmesg.len()
         );
 
-        let model = model.borrow();
+        let dmesg = &model.borrow().dmesg;
         // get last page_size entries from or the whole buffer if it's smaller
         let content: Vec<&Entry> = match self._mode {
             DmsgMode::Follow => {
                 self.buffer_index = self.buffer_len.saturating_sub(page_size);
-                model.dmesg.iter().rev().take(page_size).rev().collect()
+                dmesg.iter().rev().take(page_size).rev().collect()
             }
-            DmsgMode::Scroll => model
-                .dmesg
+            DmsgMode::Scroll => dmesg
                 .iter()
                 .skip(self.buffer_index)
                 .take(page_size)

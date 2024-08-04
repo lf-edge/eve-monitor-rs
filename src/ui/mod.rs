@@ -1,8 +1,7 @@
 // pub mod component;
-pub mod dialog;
-//pub mod label;
 pub mod action;
 pub mod activity;
+pub mod dialog;
 pub mod focus_tracker;
 pub mod homepage;
 pub mod layer_stack;
@@ -10,6 +9,7 @@ pub mod netconf;
 pub mod networkpage;
 pub mod statusbar;
 pub mod tools;
+pub mod traits;
 pub mod ui;
 pub mod widgets;
 pub mod window;

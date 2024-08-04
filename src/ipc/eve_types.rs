@@ -5,7 +5,7 @@ use macaddr::MacAddr;
 use macaddr::MacAddr6;
 use macaddr::MacAddr8;
 use serde::de;
-use serde::{Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::net::IpAddr;
 use uuid::Uuid;
@@ -369,7 +369,7 @@ pub struct WwanNetworkStatus {
     pub location_tracking: bool,
 }
 
-fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
+fn ip_empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
 where
     D: Deserializer<'de>,
 {
@@ -385,7 +385,7 @@ where
 #[serde(rename_all = "PascalCase")]
 pub struct WwanIPSettings {
     pub address: Option<GoIpNetwork>,
-    #[serde(deserialize_with = "empty_string_as_none")]
+    #[serde(deserialize_with = "ip_empty_string_as_none")]
     pub gateway: Option<IpAddr>,
     #[serde(rename = "DNSServers")]
     pub dns_servers: Option<Vec<IpAddr>>,
@@ -430,10 +430,9 @@ pub enum WwanRAT {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct CellNetPortConfig {
-    #[serde(skip)]
-    access_points: Vec<CellularAccessPoint>,
-    probe: WwanProbe,
-    location_tracking: bool,
+    pub access_points: Vec<CellularAccessPoint>,
+    pub probe: WwanProbe,
+    pub location_tracking: bool,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
@@ -444,32 +443,74 @@ pub struct WwanProbe {
     address: String,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+enum WwanAuthProtocol {
+    None,
+    Pap,
+    Chap,
+    PapChap,
+}
+
+fn deserialize_auth_protocol<'de, D>(deserializer: D) -> Result<WwanAuthProtocol, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    match s.as_str() {
+        "" => Ok(WwanAuthProtocol::None),
+        "pap" => Ok(WwanAuthProtocol::Pap),
+        "chap" => Ok(WwanAuthProtocol::Chap),
+        "pap-and-chap" => Ok(WwanAuthProtocol::PapChap),
+        _ => Err(serde::de::Error::custom(format!(
+            "Unknown auth protocol: {}",
+            s
+        ))),
+    }
+}
+
+fn serialize_auth_protocol<S>(value: &WwanAuthProtocol, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let s = match value {
+        WwanAuthProtocol::None => "".to_string(),
+        WwanAuthProtocol::Pap => "pap".to_string(),
+        WwanAuthProtocol::Chap => "chap".to_string(),
+        WwanAuthProtocol::PapChap => "pap-and-chap".to_string(),
+    };
+    serializer.serialize_str(&s)
+}
+
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct CellularAccessPoint {
-    // pub key: String, // SIM card slot to which this configuration applies.
-    // // 0 - unspecified (apply to currently activated or the only available)
-    // // 1 - config for SIM card in the first slot
-    // // 2 - config for SIM card in the second slot
-    // // etc.
-    // pub sim_slot: u8,
-    // // If true, then this configuration is currently activated.
-    // pub activated: bool,
-    // // Access Point Network
-    // pub apn: String,
-    // // Authentication protocol used by the network.
-    // pub auth_protocol: WwanAuthProtocol,
-    // // EncryptedCredentials : encrypted username and password.
-    // pub encrypted_credentials: CipherBlockStatus,
-    // // The set of cellular network operators that modem should preferably try to register
-    // // and connect into.
-    // // Network operator should be referenced by PLMN (Public Land Mobile Network) code.
-    // pub preferred_plmns: Vec<String>,
-    // // The list of preferred Radio Access Technologies (RATs) to use for connecting
-    // // to the network.
-    // pub preferred_rats: Vec<WwanRAT>,
-    // // If true, then modem will avoid connecting to networks with roaming.
-    // pub forbid_roaming: bool,
+    pub key: String, // SIM card slot to which this configuration applies.
+    // 0 - unspecified (apply to currently activated or the only available)
+    // 1 - config for SIM card in the first slot
+    // 2 - config for SIM card in the second slot
+    // etc.
+    pub sim_slot: u8,
+    // If true, then this configuration is currently activated.
+    pub activated: bool,
+    // Access Point Network
+    pub apn: String,
+    // Authentication protocol used by the network.
+    #[serde(
+        deserialize_with = "deserialize_auth_protocol",
+        serialize_with = "serialize_auth_protocol"
+    )]
+    pub auth_protocol: WwanAuthProtocol,
+    // EncryptedCredentials : encrypted username and password.
+    pub encrypted_credentials: CipherBlockStatus,
+    // The set of cellular network operators that modem should preferably try to register
+    // and connect into.
+    // Network operator should be referenced by PLMN (Public Land Mobile Network) code.
+    pub preferred_plmns: Vec<String>,
+    // The list of preferred Radio Access Technologies (RATs) to use for connecting
+    // to the network.
+    pub preferred_rats: Vec<WwanRAT>,
+    // If true, then modem will avoid connecting to networks with roaming.
+    pub forbid_roaming: bool,
 }
 
 #[repr(u8)]
@@ -618,14 +659,58 @@ pub enum WirelessType {
 }
 
 // WirelessConfig struct
-#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WirelessConfig {
     pub w_type: WirelessType,
     pub cellular_v2: Option<CellNetPortConfig>,
     pub wifi: Option<Vec<WifiConfig>>,
-    #[serde(skip)]
     pub cellular: Option<Vec<DeprecatedCellConfig>>,
+}
+// If EVE would be written in Rust, WirelessConfig would be an enum
+// to avoid endless Option<T> in the nested structs e.g in CellNetPortConfig
+// we deserialize based on the WirelessType
+// TODO: Q: deserialize this and other EVE types directly into our structures to avoid
+// nested Option<T>? and make a clean interface?
+impl<'de> Deserialize<'de> for WirelessConfig {
+    fn deserialize<D>(deserializer: D) -> Result<WirelessConfig, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let value = serde_json::Value::deserialize(deserializer)?;
+        let mut cellular_v2 = None;
+        let mut wifi = None;
+        let cellular = None;
+
+        let obj = value.as_object().unwrap();
+        let w_type = serde_json::from_value(obj.get("WType").unwrap().clone())
+            .map_err(serde::de::Error::custom)?;
+
+        // match on the WirelessType
+        match w_type {
+            //TODO: we can receive old Cellular and new CellularV2 but let's solve this later
+            // WirelessType::Cellular => {
+            //     cellular = serde_json::from_value(obj.get("Cellular").unwrap().clone())
+            //         .map_err(serde::de::Error::custom)?;
+            // }
+            WirelessType::Wifi => {
+                wifi = serde_json::from_value(obj.get("Wifi").unwrap().clone())
+                    .map_err(serde::de::Error::custom)?;
+            }
+            WirelessType::Cellular => {
+                cellular_v2 = serde_json::from_value(obj.get("CellularV2").unwrap().clone())
+                    .map_err(serde::de::Error::custom)?;
+            }
+            _ => {}
+        }
+
+        Ok(WirelessConfig {
+            w_type,
+            cellular_v2,
+            wifi,
+            cellular,
+        })
+    }
 }
 
 // DevicePortConfigVersion type

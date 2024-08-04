@@ -1,21 +1,20 @@
 use crate::model::Model;
 use crate::ui::action::Action;
 use crate::ui::activity::Activity;
+use crate::ui::traits::IntoRatatuiStyle;
 use std::cmp;
-use std::collections::VecDeque;
 use std::rc::Rc;
 
 use crate::events::Event;
 use crate::traits::{IEventHandler, IPresenter, IWindow};
 use crossterm::event::{KeyCode, KeyEvent};
 use log::trace;
-use log2::error;
 use ratatui::prelude::Rect;
-use ratatui::widgets::{Clear, Paragraph, Widget};
+use ratatui::style::Style;
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState};
 use ratatui::Frame;
-use rmesg::entry::Entry;
-
-const MAX_LINES: usize = 1000;
+use rmesg::entry::{Entry, LogLevel};
 
 #[derive(Debug, Default)]
 pub struct DmesgViewer {
@@ -94,10 +93,25 @@ impl DmesgViewer {
     }
 }
 
+impl IntoRatatuiStyle for Option<LogLevel> {
+    fn style(&self) -> Style {
+        match self {
+            Some(LogLevel::Emergency) => Style::default().fg(ratatui::style::Color::Red),
+            Some(LogLevel::Alert) => Style::default().fg(ratatui::style::Color::Red),
+            Some(LogLevel::Critical) => Style::default().fg(ratatui::style::Color::Red),
+            Some(LogLevel::Error) => Style::default().fg(ratatui::style::Color::Red),
+            Some(LogLevel::Warning) => Style::default().fg(ratatui::style::Color::Yellow),
+            Some(LogLevel::Notice) => Style::default().fg(ratatui::style::Color::Yellow),
+            Some(LogLevel::Info) => Style::default(),
+            Some(LogLevel::Debug) => Style::default().fg(ratatui::style::Color::Blue),
+            None => Style::default(),
+        }
+    }
+}
+
 impl IPresenter for DmesgViewer {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
         let page_size = area.height as usize;
-        let area_size = area.area() as usize;
         self.buffer_len = model.borrow().dmesg.len();
         self.lines_per_page = area.height;
         trace!(
@@ -121,51 +135,31 @@ impl IPresenter for DmesgViewer {
                 .collect(),
         };
 
-        Paragraph::new(
-            content
-                .iter()
-                .map(|entry| {
-                    if let Some(ts) = entry.timestamp_from_system_start {
-                        format!("[{:.6}] {}\n", ts.as_secs_f32(), entry.message)
-                    } else {
-                        // we've got a 'continuation' string in a format key=value
-                        format!("  {}\n", entry.message)
-                    }
-                })
-                .fold(String::with_capacity(area_size), |acc, e| acc + &e),
-        )
-        .render(*area, frame.buffer_mut());
-    }
-    //
-    // fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, _model: &Rc<Model>, _focused: bool) {
-    //     self.lines_per_page = area.height;
+        let lines: Vec<Line> = content
+            .iter()
+            .map(|entry| {
+                Line::from(entry.timestamp_from_system_start.map_or_else(
+                    || Span::styled(format!("{:4}{}\n", "", entry.message), entry.level.style()),
+                    |ts| {
+                        Span::styled(
+                            format!("[{:.6}] {}\n", ts.as_secs_f32(), entry.message),
+                            entry.level.style(),
+                        )
+                    },
+                ))
+            })
+            .collect();
 
-    //     match rmesg::log_entries(rmesg::Backend::Default, false) {
-    //         Err(err) => {
-    //             error!("{}", err.to_string());
-    //             Paragraph::new(err.to_string()).render(*area, frame.buffer_mut())
-    //         }
-    //         Ok(mut entries) => {
-    //             let page_list = entries.split_off(
-    //                 entries
-    //                     .len()
-    //                     .saturating_sub((self.lines_per_page * 3).into()),
-    //             );
-    //             let page_contents = page_list
-    //                 .into_iter()
-    //                 .map(|entry| {
-    //                     if let Some(ts) = entry.timestamp_from_system_start {
-    //                         format!("[{:.6}] {}\n", ts.as_secs_f32(), entry.message)
-    //                     } else {
-    //                         "".to_string()
-    //                     }
-    //                 })
-    //                 .reduce(|page, e| page + &e)
-    //                 .unwrap();
-    //             Paragraph::new(page_contents).render(*area, frame.buffer_mut())
-    //         }
-    //     };
-    // }
+        // render vertical scrollbar on the right
+        let mut scrollbar_state = ScrollbarState::new(self.buffer_len).position(self.buffer_index);
+        let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight)
+            .begin_symbol(Some("↑"))
+            .end_symbol(Some("↓"));
+
+        frame.render_widget(Paragraph::new(lines), *area);
+
+        frame.render_stateful_widget(scrollbar, *area, &mut scrollbar_state);
+    }
 }
 
 impl IWindow for DmesgViewer {}
@@ -176,7 +170,7 @@ impl IEventHandler for DmesgViewer {
             Event::Key(key) => match self._mode {
                 DmsgMode::Follow => self.handle_keys_following(key),
                 DmsgMode::Scroll => self.handle_keys_scroll(key),
-            }, // todo, but don't want crashing for the demo
+            },
         }?;
         match activity {
             Activity::Action(action) => Some(Action::new("something".to_string(), action)),

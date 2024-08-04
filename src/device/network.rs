@@ -1,4 +1,4 @@
-use std::net::IpAddr;
+use std::{clone, net::IpAddr};
 
 use crate::ipc::eve_types::NetworkPortStatus;
 use macaddr::{MacAddr, MacAddr8};
@@ -7,41 +7,90 @@ pub struct NetworkStatus {
     pub interfaces: Vec<NetworkInterface>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NetworkInterface {
-    name: String,
-    is_mgmt: bool,
-    addresses: Option<Vec<IpAddr>>,
-    routes: Option<Vec<IpAddr>>,
-    mac: MacAddr,
+    pub name: String,
+    pub is_mgmt: bool,
+    pub ipv4: Option<Vec<IpAddr>>,
+    pub ipv6: Option<Vec<IpAddr>>,
+    pub routes: Option<Vec<IpAddr>>,
+    pub mac: MacAddr,
+    pub ntp_server: Option<IpAddr>,
+    pub up: bool,
 }
 
 pub fn list() -> Option<Vec<NetworkInterface>> {
     Some(vec![NetworkInterface {
         name: "eth0".to_string(),
         is_mgmt: true,
-        addresses: None,
+        ipv4: None,
+        ipv6: None,
         routes: None,
         mac: MacAddr::V8(MacAddr8::nil()),
+        ntp_server: None,
+        up: true,
     }])
 }
 
 impl From<NetworkPortStatus> for NetworkInterface {
     fn from(port: NetworkPortStatus) -> Self {
         // parse address list
-        let addresses = port.addr_info_list.map(|addr_info_list| {
+        let ipv4 = port.addr_info_list.as_ref().map(|addr_info_list| {
             addr_info_list
                 .iter()
+                .filter(|addr_info| addr_info.addr.is_ipv4())
+                .map(|addr_info| addr_info.addr)
+                .collect()
+        });
+
+        let ipv6 = port.addr_info_list.as_ref().map(|addr_info_list| {
+            addr_info_list
+                .iter()
+                .filter(|addr_info| addr_info.addr.is_ipv6())
                 .map(|addr_info| addr_info.addr)
                 .collect()
         });
 
         NetworkInterface {
             name: port.if_name,
-            addresses,
+            ipv4,
+            ipv6,
             is_mgmt: port.is_mgmt,
             routes: port.default_routers,
             mac: port.mac_addr,
+            ntp_server: port.ntp_server,
+            up: port.up,
+        }
+    }
+}
+impl From<&NetworkPortStatus> for NetworkInterface {
+    fn from(port: &NetworkPortStatus) -> Self {
+        // parse address list
+        let ipv4 = port.addr_info_list.as_ref().map(|addr_info_list| {
+            addr_info_list
+                .iter()
+                .filter(|addr_info| addr_info.addr.is_ipv4())
+                .map(|addr_info| addr_info.addr)
+                .collect()
+        });
+
+        let ipv6 = port.addr_info_list.as_ref().map(|addr_info_list| {
+            addr_info_list
+                .iter()
+                .filter(|addr_info| addr_info.addr.is_ipv6())
+                .map(|addr_info| addr_info.addr)
+                .collect()
+        });
+
+        NetworkInterface {
+            name: port.if_name.clone(),
+            ipv4: ipv4,
+            ipv6: ipv6,
+            is_mgmt: port.is_mgmt,
+            routes: port.default_routers.clone(),
+            mac: port.mac_addr,
+            ntp_server: port.ntp_server,
+            up: port.up,
         }
     }
 }
@@ -219,7 +268,7 @@ mod tests {
     fn test_from() {
         let port = get_network_port_status();
         let network_interface = NetworkInterface::from(port);
-        let addresses = network_interface.addresses.unwrap();
+        let addresses = network_interface.ipv4.unwrap();
 
         assert_eq!(network_interface.name, "eth1");
         assert_eq!(network_interface.is_mgmt, true);

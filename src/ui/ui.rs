@@ -225,7 +225,7 @@ impl Ui {
     }
 
     pub fn draw(&mut self, model: Rc<Model>) {
-        let screen_layout = Layout::vertical([Length(2), Fill(0), Length(3)]);
+        let screen_layout = Layout::vertical([Length(3), Fill(0), Length(3)]);
         let tabs_widget = Ui::tabs();
 
         //TODO: handle terminal event

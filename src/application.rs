@@ -228,7 +228,7 @@ impl Application {
 
             ipc_tx.send(IpcMessage::Ready).unwrap();
 
-            loop {
+            while !ipc_cancel_token_clone.is_cancelled() {
                 let ipc_event = stream.next().fuse();
 
                 tokio::select! {

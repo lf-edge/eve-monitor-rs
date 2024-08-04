@@ -23,6 +23,11 @@ use crate::{
 
 use super::action::Action;
 
+const MAC_LENGTH: u16 = 17;
+const LINK_STATE_LENGTH: u16 = 4;
+const IPV6_AVARAGE_LENGTH: u16 = 25;
+const IFACE_LABEL_LENGTH: u16 = 10;
+
 #[derive(Default)]
 struct NetworkPage {
     list: InterfaceList,
@@ -112,8 +117,11 @@ impl From<&NetworkInterface> for Row<'_> {
 
 impl IPresenter for NetworkPage {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
+        let estimated_width =
+            IFACE_LABEL_LENGTH + LINK_STATE_LENGTH + IPV6_AVARAGE_LENGTH + MAC_LENGTH;
         let [list_rect, _details_rect] =
-            Layout::horizontal([Constraint::Length(70), Constraint::Fill(1)]).areas(*area);
+            Layout::horizontal([Constraint::Length(estimated_width), Constraint::Fill(1)])
+                .areas(*area);
 
         // create header for the table
         let header = Row::new(vec![
@@ -155,10 +163,10 @@ impl IPresenter for NetworkPage {
         let list = Table::new(
             rows,
             [
-                Constraint::Max(10),
-                Constraint::Max(4),
+                Constraint::Max(IFACE_LABEL_LENGTH),
+                Constraint::Max(LINK_STATE_LENGTH),
                 Constraint::Fill(1),
-                Constraint::Max(16),
+                Constraint::Max(MAC_LENGTH),
             ],
         )
         .block(block)

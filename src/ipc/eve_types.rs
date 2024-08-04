@@ -139,7 +139,7 @@ pub struct RadioSilence {
 //     "Mask": "////AA=="
 // },
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct GoIpNetwork {
     #[serde(rename = "IP")]
@@ -271,8 +271,7 @@ pub struct TestResults {
 #[serde(rename_all = "PascalCase")]
 pub struct WirelessStatus {
     w_type: WirelessType,
-    #[serde(skip)]
-    _cellular: WwanNetworkStatus,
+    cellular: WwanNetworkStatus,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
@@ -307,7 +306,43 @@ pub struct IPInfo {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WifiConfig {
-    // Define the fields
+    #[serde(rename = "SSID")]
+    pub ssid: String,
+    pub key_scheme: WifiKeySchemeType,
+    pub identity: String, // to be deprecated, use CipherBlockStatus instead
+    pub password: String, // to be deprecated, use CipherBlockStatus instead
+    pub priority: i32,
+    #[serde(flatten)]
+    pub cipher_block_status: CipherBlockStatus,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct CipherBlockStatus {
+    pub cipher_block_id: String,
+    pub cipher_context_id: String,
+    pub initial_value: Vec<u8>,
+    #[serde(rename = "pubsub-large-CipherData")]
+    pub cipher_data: Vec<u8>,
+    pub clear_text_hash: Vec<u8>,
+    pub is_cipher: bool,
+    pub cipher_context: Option<CipherContext>,
+    #[serde(flatten)]
+    pub error_and_time: ErrorAndTime,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+pub struct CipherContext {
+    // Define fields here
+}
+
+#[repr(u8)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+enum WifiKeySchemeType {
+    KeySchemeNone = 0,
+    KeySchemeWpaPsk = 1,
+    KeySchemeWpaEap = 2,
+    KeySchemeOther = 3,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
@@ -316,10 +351,80 @@ pub struct DeprecatedCellConfig {
     // Define the fields
 }
 
-#[derive(Debug, Deserialize, Serialize, Default)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WwanNetworkStatus {
-    // Define the fields
+    pub logical_label: String,
+    pub phys_addrs: WwanPhysAddrs,
+    pub module: WwanCellModule,
+    pub sim_cards: Option<Vec<WwanSimCard>>,
+    pub config_error: String,
+    pub probe_error: String,
+    pub current_provider: WwanProvider,
+    pub visible_providers: Option<Vec<WwanProvider>>,
+    pub current_rats: Option<Vec<WwanRAT>>,
+    pub connected_at: u64,
+    #[serde(rename = "IPSettings")]
+    pub ip_settings: WwanIPSettings,
+    pub location_tracking: bool,
+}
+
+fn empty_string_as_none<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let s: String = Deserialize::deserialize(deserializer)?;
+    if s.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(s.parse().map_err(serde::de::Error::custom)?))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct WwanIPSettings {
+    pub address: Option<GoIpNetwork>,
+    #[serde(deserialize_with = "empty_string_as_none")]
+    pub gateway: Option<IpAddr>,
+    #[serde(rename = "DNSServers")]
+    pub dns_servers: Option<Vec<IpAddr>>,
+    #[serde(rename = "MTU")]
+    pub mtu: u16,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct WwanPhysAddrs {
+    // Define fields here
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct WwanCellModule {
+    // Define fields here
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct WwanSimCard {
+    // Define fields here
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct WwanProvider {
+    // Define fields here
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub enum WwanRAT {
+    WwanRATUnspecified,
+    WwanRATGSM,
+    WwanRATUMTS,
+    WwanRATLTE,
+    WwanRAT5GNR,
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
@@ -517,8 +622,7 @@ pub enum WirelessType {
 #[serde(rename_all = "PascalCase")]
 pub struct WirelessConfig {
     pub w_type: WirelessType,
-    pub cellular_v2: CellNetPortConfig,
-    #[serde(skip)]
+    pub cellular_v2: Option<CellNetPortConfig>,
     pub wifi: Option<Vec<WifiConfig>>,
     #[serde(skip)]
     pub cellular: Option<Vec<DeprecatedCellConfig>>,
@@ -633,7 +737,7 @@ pub struct DownloaderStatus {
     pub orig_error: String,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct ErrorAndTime {
     #[serde(flatten)]
@@ -646,7 +750,7 @@ impl ErrorAndTime {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct ErrorDescription {
     pub error: String,
@@ -657,7 +761,7 @@ pub struct ErrorDescription {
 }
 
 #[repr(i32)]
-#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Clone)]
 pub enum ErrorSeverity {
     Unspecified = 0,
     Notice = 1,
@@ -665,7 +769,7 @@ pub enum ErrorSeverity {
     Error = 3,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct ErrorEntity {
     pub entity_type: ErrorEntityType,
@@ -673,7 +777,7 @@ pub struct ErrorEntity {
 }
 
 #[repr(i32)]
-#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Clone)]
 pub enum ErrorEntityType {
     Unspecified = 0,
     BaseOs = 1,

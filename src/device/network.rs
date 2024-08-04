@@ -268,24 +268,29 @@ mod tests {
     fn test_from() {
         let port = get_network_port_status();
         let network_interface = NetworkInterface::from(port);
-        let addresses = network_interface.ipv4.unwrap();
+        let ipv4_addresses = network_interface.ipv4.unwrap();
+        let ipv6_addresses = network_interface.ipv6.unwrap();
 
         assert_eq!(network_interface.name, "eth1");
         assert_eq!(network_interface.is_mgmt, true);
-        assert_eq!(addresses.len(), 3);
+        assert_eq!(ipv4_addresses.len(), 1);
+        assert_eq!(ipv6_addresses.len(), 2);
         assert_eq!(
             network_interface.mac.as_bytes(),
             &[0x52, 0x54, 0x00, 0x12, 0x34, 0x57]
         );
         assert_eq!(network_interface.routes.unwrap().len(), 2);
         // check all the addresses
-        assert_eq!(addresses[0], IpAddr::V4(Ipv4Addr::new(192, 168, 2, 10)));
         assert_eq!(
-            addresses[1],
+            ipv4_addresses[0],
+            IpAddr::V4(Ipv4Addr::new(192, 168, 2, 10))
+        );
+        assert_eq!(
+            ipv6_addresses[0],
             IpAddr::from_str("fec0::21b8:b579:8b9c:3cda").unwrap()
         );
         assert_eq!(
-            addresses[2],
+            ipv6_addresses[1],
             IpAddr::from_str("fe80::6f27:5660:de21:d553").unwrap()
         );
     }

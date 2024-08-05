@@ -1,6 +1,8 @@
 use crate::ui::action::UiActions;
 use crossterm::event::KeyEvent;
 
+use super::action::Action;
+
 pub enum Activity {
     Action(UiActions),
     Event(KeyEvent),
@@ -19,9 +21,19 @@ impl Activity {
         Activity::Action(UiActions::Redraw)
     }
 
-    pub fn try_into_action(self) -> Option<UiActions> {
+    pub fn try_into_uiaction(self) -> Option<UiActions> {
         match self {
             Activity::Action(action) => Some(action),
+            Activity::Event(_) => None,
+        }
+    }
+
+    pub fn try_into_action<T>(self, source: T) -> Option<Action>
+    where
+        T: Into<String>,
+    {
+        match self {
+            Activity::Action(uiaction) => Some(Action::new(source.into(), uiaction)),
             Activity::Event(_) => None,
         }
     }

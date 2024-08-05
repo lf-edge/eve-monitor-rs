@@ -266,7 +266,6 @@ impl IEventHandler for NetworkDialog {
                     debug!("CTRL+Right: switching tab view");
                     self.selected_tab = self.selected_tab.next();
                     self.update_focus_order();
-                    // self.focus.set_focus("mode");
                     return Some(Action::new("edit network", UiActions::Redraw));
                 }
 
@@ -275,29 +274,23 @@ impl IEventHandler for NetworkDialog {
                 debug!("focused view {}", focus);
                 if let Some(widget) = self.page_widgets.get_mut(&focus) {
                     if let Some(activity) = widget.handle_key_event(key) {
-                        return match activity {
-                            Activity::Action(action) => Some(Action::new("edit network", action)),
-                            Activity::Event(_) => None, //todo input validation
-                        };
+                        return activity.try_into_action("edit network");
                     }
                 }
 
                 let tab_widgets = &mut self.tab_widgets.get_mut(&self.selected_tab)?;
 
                 let widget = tab_widgets.get_mut(&focus)?;
-                if let Some(activity) = widget.handle_key_event(key) {
-                    debug!("action returned");
-                    return match activity.try_into_action()? {
-                        UiActions::SpinBox { selected } => {
-                            self.spinbox_state.insert(self.selected_tab, selected);
-                            debug!("updated spinbox_state {selected}");
-                            None
-                        }
-                        other => Some(Action::new("edit network", other)),
-                    };
+                let activity = widget.handle_key_event(key)?;
+                debug!("action returned");
+                match activity.try_into_uiaction()? {
+                    UiActions::SpinBox { selected } => {
+                        self.spinbox_state.insert(self.selected_tab, selected);
+                        debug!("updated spinbox_state {selected}");
+                        None
+                    }
+                    other => Some(Action::new("edit network", other)),
                 }
-
-                None
             }
             Event::Tick | Event::TerminalResize(_, _) => None,
         }

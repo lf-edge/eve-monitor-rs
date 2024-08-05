@@ -906,3 +906,94 @@ pub enum SwState {
     Failed,
     MaxState,
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct PhysicalIOAdapterList {
+    pub initialized: bool,
+    pub adapter_list: Vec<PhysicalIOAdapter>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct PhysicalIOAdapter {
+    pub ptype: PhyIoType,
+    pub phylabel: String,
+    pub phyaddr: PhysicalAddress,
+    pub logicallabel: String,
+    pub assigngrp: String,
+    pub parentassigngrp: String,
+    pub usage: PhyIoMemberUsage,
+    pub usage_policy: PhyIOUsagePolicy,
+    pub vfs: VFList,
+    pub cbattr: std::collections::HashMap<String, String>,
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum PhyIoType {
+    PhyIoTypeNoop = 0,
+    PhyIoTypeNetEth = 1,
+    PhyIoTypeUSB = 2,
+    PhyIoTypeCOM = 3,
+    PhyIoTypeAudio = 4,
+    PhyIoTypeNetWLAN = 5,
+    PhyIoTypeNetWWAN = 6,
+    PhyIoTypeHDMI = 7,
+    PhyIoTypeNVMEStorage = 9,
+    PhyIoTypeSATAStorage = 10,
+    PhyIoTypeNetEthPF = 11,
+    PhyIoTypeNetEthVF = 12,
+    PhyIoTypeUSBController = 13,
+    PhyIoTypeUSBDevice = 14,
+    PhyIoTypeCAN = 15,
+    PhyIoTypeVCAN = 16,
+    PhyIoTypeLCAN = 17,
+    PhyIoTypeOther = 255,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct PhysicalAddress {
+    pub pci_long: String,
+    pub ifname: String,
+    pub serial: String,
+    pub irq: String,
+    pub ioports: String,
+    pub usb_addr: String,
+    pub usb_product: String,
+    pub unknown_type: String,
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum PhyIoMemberUsage {
+    PhyIoUsageNone = 0,
+    PhyIoUsageMgmtAndApps = 1,
+    PhyIoUsageShared = 2,
+    PhyIoUsageDedicated = 3,
+    PhyIoUsageDisabled = 4,
+    PhyIoUsageMgmtOnly = 5,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct PhyIOUsagePolicy {
+    pub free_uplink: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct VFList {
+    pub count: u8,
+    pub data: Vec<EthVF>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct EthVF {
+    pub index: u8,
+    pub pci_long: String,
+    pub mac: String,
+    pub vlan_id: u16,
+}

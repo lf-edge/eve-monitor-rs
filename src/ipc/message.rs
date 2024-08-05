@@ -13,6 +13,7 @@ use super::eve_types::DeviceNetworkStatus;
 use super::eve_types::DevicePortConfig;
 use super::eve_types::DevicePortConfigList;
 use super::eve_types::DownloaderStatus;
+use super::eve_types::PhysicalIOAdapterList;
 
 /// WindowId is a unique identifier for a window that is incremented sequentially.
 pub type RequestId = u64;
@@ -41,6 +42,7 @@ pub enum IpcMessage {
     NetworkStatus(DeviceNetworkStatus),
     DPCList(DevicePortConfigList),
     DownloaderStatus(DownloaderStatus),
+    IOAdapters(PhysicalIOAdapterList),
     Response {
         #[serde(flatten)]
         result: core::result::Result<String, String>,

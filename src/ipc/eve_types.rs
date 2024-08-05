@@ -317,12 +317,14 @@ pub struct WifiConfig {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct CipherBlockStatus {
+    #[serde(rename = "CipherBlockID")]
     pub cipher_block_id: String,
+    #[serde(rename = "CipherContextID")]
     pub cipher_context_id: String,
-    pub initial_value: Vec<u8>,
+    pub initial_value: Option<String>, //Vec<u8>,
     #[serde(rename = "pubsub-large-CipherData")]
-    pub cipher_data: Vec<u8>,
-    pub clear_text_hash: Vec<u8>,
+    pub cipher_data: Option<String>, //Vec<u8>,
+    pub clear_text_hash: Option<String>, //Vec<u8>,
     pub is_cipher: bool,
     pub cipher_context: Option<CipherContext>,
     #[serde(flatten)]

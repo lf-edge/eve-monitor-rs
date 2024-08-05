@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{fmt::Display, net::IpAddr, rc::Rc};
+use std::{cell::RefCell, fmt::Display, net::IpAddr, rc::Rc};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use log::debug;
@@ -15,9 +15,9 @@ use ratatui::{
 };
 
 use crate::{
-    device::network::NetworkInterface,
+    device::network::NetworkInterfaceStatus,
     events::Event,
-    model::Model,
+    model::{Model, MonitorModel},
     traits::{IEventHandler, IPresenter, IWindow},
 };
 
@@ -42,7 +42,7 @@ struct InterfaceList {
 impl Default for InterfaceList {
     fn default() -> Self {
         Self {
-            state: TableState::default().with_selected(0),
+            state: TableState::default(),
             size: 0,
         }
     }
@@ -50,85 +50,154 @@ impl Default for InterfaceList {
 
 impl IWindow for NetworkPage {}
 
-impl From<&NetworkInterface> for ListItem<'_> {
-    fn from(iface: &NetworkInterface) -> Self {
-        let mut spans = vec![
-            Span::raw(format!("{:<10}", iface.name)),
-            if iface.up {
-                Span::styled(format!("{:5}", "UP"), Style::new().green())
-            } else {
-                Span::styled(format!("{:5}", "DOWN"), Style::new().red())
-            },
-        ];
+fn info_row_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Row<'b> {
+    // cells #1,2 IFace name and Link status
+    let mut cells = vec![
+        Cell::from(iface.name.clone()),
+        if iface.up {
+            Cell::from("UP").style(Style::new().green())
+        } else {
+            Cell::from("DOWN").style(Style::new().red())
+        },
+    ];
 
-        // collect IP addresses and add as multiline
-        if let Some(ips) = &iface.ipv4 {
-            for ip in ips {
-                spans.push(Span::styled(ip.to_string(), Style::new().blue()));
-            }
-        }
+    // collect IP addresses and add as multiline
+    let ipv4_len = iface.ipv4.as_ref().map_or(0, |v| v.len());
+    let ipv6_len = iface.ipv6.as_ref().map_or(0, |v| v.len());
 
-        let line = Line::from(spans);
-        ListItem::new(line)
+    let height = (ipv4_len + ipv6_len).max(1);
+
+    // join both ipv4 and ipv6 addresses and separate by newline
+    let combined_ip_list_iter = iface
+        .ipv4
+        .iter()
+        .chain(iface.ipv6.iter())
+        .flat_map(|v| v.iter().cloned())
+        .map(|ip| ip.to_string())
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // cell #3 IP address list
+    if height > 1 {
+        cells.push(Cell::from(combined_ip_list_iter).style(Style::new().white()));
+    } else {
+        cells.push(Cell::from("N/A").style(Style::new().red()));
     }
+
+    // cell #4 MAC
+    cells.push(Cell::from(iface.mac.to_string()).style(Style::new().yellow()));
+
+    Row::new(cells).height(height as u16)
 }
 
-impl From<&NetworkInterface> for Row<'_> {
-    fn from(iface: &NetworkInterface) -> Self {
-        // cells #1,2 IFace name and Link status
-        let mut cells = vec![
-            Cell::from(iface.name.clone()),
-            if iface.up {
-                Cell::from("UP").style(Style::new().green())
-            } else {
-                Cell::from("DOWN").style(Style::new().red())
-            },
-        ];
+fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Row<'b>> {
+    // Row 0: Interface type
+    // //FIXME: doesn't work reliably
+    let iface_type = iface.media.to_string();
+    let iface_type_row = Row::new(vec![
+        Cell::from("Type").style(Style::new().yellow()),
+        Cell::from(iface_type).style(Style::new().white()),
+    ]);
 
-        // collect IP addresses and add as multiline
-        let ipv4_len = iface.ipv4.as_ref().map_or(0, |v| v.len());
-        let ipv6_len = iface.ipv6.as_ref().map_or(0, |v| v.len());
+    // Row 1: DNS
+    let dns = iface.dns.as_ref().map_or_else(
+        || "N/A".to_string(),
+        |list| {
+            list.iter()
+                .map(|ip| ip.to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
+    );
+    let dns_row_height = iface.dns.as_ref().map_or(1, |v| v.len());
+    let dns_row = Row::new(vec![
+        Cell::from("DNS").style(Style::new().yellow()),
+        Cell::from(dns).style(Style::new().white()),
+    ])
+    .height(dns_row_height as u16);
+    // Row 2: Gateway
+    let gateway = iface
+        .gw
+        .as_ref()
+        .map_or("N/A".to_string(), |v| v.to_string());
+    let gateway_row = Row::new(vec![
+        Cell::from("Gateway").style(Style::new().yellow()),
+        Cell::from(gateway).style(Style::new().white()),
+    ]);
 
-        let height = (ipv4_len + ipv6_len).max(1);
+    // Row 3: NTP
+    let ntp = iface.ntp_servers.as_ref().map_or_else(
+        || "N/A".to_string(),
+        |list| {
+            list.iter()
+                .map(|ip| ip.to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
+    );
+    let ntp_row_height = iface.ntp_servers.as_ref().map_or(1, |v| v.len());
+    let ntp_row = Row::new(vec![
+        Cell::from("NTP").style(Style::new().yellow()),
+        Cell::from(ntp).style(Style::new().white()),
+    ])
+    .height(ntp_row_height as u16);
 
-        // join both ipv4 and ipv6 addresses and separate by newline
-        let combined_ip_list_iter = iface
-            .ipv4
-            .iter()
-            .chain(iface.ipv6.iter())
-            .flat_map(|v| v.iter().cloned())
-            .map(|ip| ip.to_string())
-            .collect::<Vec<_>>()
-            .join("\n");
-
-        // cell #3 IP address list
-        if height > 1 {
-            cells.push(Cell::from(combined_ip_list_iter).style(Style::new().white()));
-        } else {
-            cells.push(Cell::from("N/A").style(Style::new().red()));
-        }
-
-        // cell #4 MAC
-        cells.push(Cell::from(iface.mac.to_string()).style(Style::new().yellow()));
-
-        Row::new(cells).height(height as u16)
-    }
+    vec![iface_type_row, dns_row, gateway_row, ntp_row]
 }
 
 impl IPresenter for NetworkPage {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
         let estimated_width =
-            IFACE_LABEL_LENGTH + LINK_STATE_LENGTH + IPV6_AVARAGE_LENGTH + MAC_LENGTH;
-        let [list_rect, _details_rect] =
+            IFACE_LABEL_LENGTH + LINK_STATE_LENGTH + IPV6_AVARAGE_LENGTH + MAC_LENGTH + 3 + 2 + 2; // for spacers and borders and selector
+        let [top_rect, details_rect] =
+            Layout::vertical([Constraint::Percentage(40), Constraint::Fill(1)]).areas(*area);
+        let [list_rect, _unused_rect] =
             Layout::horizontal([Constraint::Length(estimated_width), Constraint::Fill(1)])
-                .areas(*area);
+                .areas(top_rect);
 
+        self.render_interface_list(model, list_rect, frame);
+        self.render_interface_details(model, details_rect, frame);
+    }
+}
+
+impl NetworkPage {
+    fn get_selected_interface(
+        &self,
+        model: &Rc<RefCell<MonitorModel>>,
+    ) -> Option<NetworkInterfaceStatus> {
+        let selected = self.selected()?;
+        let model_ref = model.borrow();
+        let ifaces = &model_ref.network;
+        ifaces.iter().find(|iface| iface.name == selected).cloned()
+    }
+
+    fn render_interface_details(&mut self, model: &Rc<Model>, rect: Rect, frame: &mut Frame) {
+        let iface = self.get_selected_interface(model);
+        if iface.is_none() {
+            return;
+        }
+        let iface = iface.unwrap();
+        // create a table with the interface details. First column is the label, second column is the value
+        // create header for the table
+        let rows = details_table_from_iface(&iface);
+        let table = Table::new(rows, [Constraint::Length(10), Constraint::Percentage(90)])
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(format!("{} Details", iface.name)),
+            )
+            .style(Style::default().fg(Color::White))
+            .column_spacing(1);
+
+        frame.render_widget(table, rect);
+    }
+    fn render_interface_list(&mut self, model: &Rc<Model>, list_rect: Rect, frame: &mut Frame) {
         // create header for the table
         let header = Row::new(vec![
-            Cell::from("Name").style(Style::new().bold()),
-            Cell::from("Link").style(Style::new().bold()),
-            Cell::from("IPv4/Ipv6").style(Style::new().bold()),
-            Cell::from("MAC").style(Style::new().bold()),
+            Cell::from("Name").style(Style::default()),
+            Cell::from("Link").style(Style::default()),
+            Cell::from("IPv4/IPv6").style(Style::default()),
+            Cell::from("MAC").style(Style::default()),
         ]);
 
         // create list items from the interface
@@ -136,7 +205,7 @@ impl IPresenter for NetworkPage {
             .borrow()
             .network
             .iter()
-            .map(|iface| Row::from(iface))
+            .map(|iface| info_row_from_iface(iface))
             .collect::<Vec<_>>();
 
         self.list.size = rows.len();
@@ -155,7 +224,7 @@ impl IPresenter for NetworkPage {
             .border_type(BorderType::Plain)
             // .border_style(Style::default().fg(Color::White).bg(Color::Black))
             // .style(Style::default().bg(Color::Black));
-            .padding(Padding::new(1, 0, 1, 0));
+            .padding(Padding::new(1, 1, 1, 1));
 
         let bar = " █ ";
 

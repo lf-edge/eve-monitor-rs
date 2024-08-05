@@ -1,8 +1,6 @@
 use crate::ui::action::UiActions;
 use crossterm::event::KeyEvent;
 
-use super::action::Action;
-
 pub enum Activity {
     Action(UiActions),
     Event(KeyEvent),
@@ -19,5 +17,12 @@ impl Activity {
 
     pub fn redraw() -> Self {
         Activity::Action(UiActions::Redraw)
+    }
+
+    pub fn try_into_action(self) -> Option<UiActions> {
+        match self {
+            Activity::Action(action) => Some(action),
+            Activity::Event(_) => None,
+        }
     }
 }

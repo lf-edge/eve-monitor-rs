@@ -8,7 +8,7 @@ use crate::{
 use crossterm::event::{KeyCode, KeyModifiers};
 use log::debug;
 use ratatui::{
-    layout::{Constraint, Flex, Layout, Rect},
+    layout::{Constraint, Flex, Layout, Margin, Rect},
     style::{Color, Modifier, Style, Stylize},
     text::Line,
     widgets::{Block, BorderType, Borders, Clear, Tabs, Widget},
@@ -37,6 +37,7 @@ pub struct NetworkDialog {
     old_rect: Rect,
     page_widgets: WidgetMap,
     tab_widgets: HashMap<NetworkTabs, WidgetMap>,
+    spinbox_state: HashMap<NetworkTabs, usize>,
     // ip_fields: WidgetMap,
     // proxy_fields: WidgetMap,
     interface_name: String,
@@ -85,7 +86,7 @@ impl NetworkDialog {
         let mut proxy_fields = WidgetMap::new();
         proxy_fields.insert(
             "mode".to_string(),
-            Box::new(SpinBoxElement::new(vec!["automatic", "manual"])),
+            Box::new(SpinBoxElement::new(vec!["manual", "automatic"])),
         );
         proxy_fields.insert(
             "proxy-http".to_string(),
@@ -119,6 +120,12 @@ impl NetworkDialog {
         tab_widgets.insert(NetworkTabs::IP, ip_fields);
         tab_widgets.insert(NetworkTabs::Proxy, proxy_fields);
 
+        let mut spinbox_state = HashMap::new();
+        NetworkTabs::iter().for_each(|i| {
+            spinbox_state.insert(i, 0);
+            ()
+        });
+
         Self {
             focus,
             layout: HashMap::new(),
@@ -127,6 +134,7 @@ impl NetworkDialog {
             tab_widgets,
             selected_tab: NetworkTabs::IP,
             interface_name: "Home".to_string(),
+            spinbox_state,
         }
     }
 
@@ -139,8 +147,8 @@ impl NetworkDialog {
         self.focus.set_tab_order(tab_order);
     }
 
-    fn do_layout(&mut self, area: &Rect) {
-        if self.old_rect == *area {
+    fn do_layout(&mut self, area: Rect) {
+        if self.old_rect == area {
             return;
         }
         let [tabs, mode, fields, buttonbar] = Layout::vertical([
@@ -150,7 +158,7 @@ impl NetworkDialog {
             Constraint::Length(3),
         ])
         .margin(1)
-        .areas(*area);
+        .areas(area);
 
         let mut lm = LayoutMap::new();
 
@@ -186,15 +194,16 @@ impl NetworkDialog {
     }
 
     fn render_main(&mut self, area: &Rect, frame: &mut Frame) {
+        let area = area.inner(Margin::new(8, 5));
         self.do_layout(area);
-        Clear.render(*area, frame.buffer_mut());
-        let focused_element = self
-            .focus
-            .get_focused_view()
-            .or(Some("".to_string()))
-            .unwrap();
+        Clear.render(area, frame.buffer_mut());
+        // let focused_element = self
+        //     .focus
+        //     .get_focused_view()
+        //     .or(Some("".to_string()))
+        //     .unwrap();
 
-        debug!("focused element: {focused_element}");
+        // debug!("focused element: {focused_element}");
 
         let block = Block::default()
             .borders(Borders::ALL)
@@ -203,7 +212,7 @@ impl NetworkDialog {
             .style(Style::default().bg(Color::Black))
             .title(self.interface_name.as_str());
 
-        block.render(*area, frame.buffer_mut());
+        block.render(area, frame.buffer_mut());
 
         frame.render_widget(
             tabs().select(self.selected_tab as usize),
@@ -218,17 +227,21 @@ impl NetworkDialog {
             )
         });
 
-        self.tab_widgets
+        for (name, field) in self
+            .tab_widgets
             .get_mut(&self.selected_tab)
             .unwrap()
             .iter_mut()
-            .for_each(|(name, field)| {
-                field.render(
-                    &self.layout[name],
-                    frame,
-                    name.eq(&self.focus.get_focused_view().unwrap()),
-                )
-            });
+        {
+            field.render(
+                &self.layout[name],
+                frame,
+                name.eq(&self.focus.get_focused_view().unwrap()),
+            );
+            if *name == "mode" && self.spinbox_state[&self.selected_tab] == 1 {
+                return;
+            }
+        }
     }
 }
 
@@ -272,7 +285,6 @@ impl IEventHandler for NetworkDialog {
                 let focus = self.focus.get_focused_view()?;
                 debug!("focused view {}", focus);
                 if let Some(widget) = self.page_widgets.get_mut(&focus) {
-                    debug!("widget found");
                     if let Some(activity) = widget.handle_key_event(key) {
                         return match activity {
                             Activity::Action(action) => Some(Action::new("edit network", action)),
@@ -284,11 +296,15 @@ impl IEventHandler for NetworkDialog {
                 let tab_widgets = &mut self.tab_widgets.get_mut(&self.selected_tab)?;
 
                 let widget = tab_widgets.get_mut(&focus)?;
-                debug!("widget found {}", focus);
                 if let Some(activity) = widget.handle_key_event(key) {
-                    return match activity {
-                        Activity::Action(action) => Some(Action::new("edit network", action)),
-                        Activity::Event(_) => None, //todo input validation
+                    debug!("action returned");
+                    return match activity.try_into_action()? {
+                        UiActions::SpinBox { selected } => {
+                            self.spinbox_state.insert(self.selected_tab, selected);
+                            debug!("updated spinbox_state {selected}");
+                            None
+                        }
+                        other => Some(Action::new("edit network", other)),
                     };
                 }
 

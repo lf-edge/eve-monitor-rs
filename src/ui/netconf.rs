@@ -38,8 +38,6 @@ pub struct NetworkDialog {
     page_widgets: WidgetMap,
     tab_widgets: HashMap<NetworkTabs, WidgetMap>,
     spinbox_state: HashMap<NetworkTabs, usize>,
-    // ip_fields: WidgetMap,
-    // proxy_fields: WidgetMap,
     interface_name: String,
 }
 
@@ -190,21 +188,12 @@ impl NetworkDialog {
         lm.insert("proxy-domain".to_string(), field_rects[3]);
 
         self.layout = lm;
-        // return self.layout.as_ref().unwrap();
     }
 
     fn render_main(&mut self, area: &Rect, frame: &mut Frame) {
         let area = area.inner(Margin::new(8, 5));
         self.do_layout(area);
         Clear.render(area, frame.buffer_mut());
-        // let focused_element = self
-        //     .focus
-        //     .get_focused_view()
-        //     .or(Some("".to_string()))
-        //     .unwrap();
-
-        // debug!("focused element: {focused_element}");
-
         let block = Block::default()
             .borders(Borders::ALL)
             .border_type(BorderType::Thick)
@@ -317,9 +306,7 @@ impl IEventHandler for NetworkDialog {
 
 fn tabs() -> Tabs<'static> {
     let tab_titles = NetworkTabs::iter().map(NetworkTabs::to_tab_title);
-    // let block = Block::new();
     Tabs::new(tab_titles)
-        // .block(block)
         .highlight_style(Modifier::REVERSED)
         .divider(" ")
         .padding("", "")

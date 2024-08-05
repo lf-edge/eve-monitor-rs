@@ -1,16 +1,18 @@
 use std::cell::RefCell;
 
-use crate::{device::network::NetworkInterface, ipc::message::IpcMessage, raw_model::RawModel};
+use crate::{
+    device::network::NetworkInterfaceStatus, ipc::message::IpcMessage, raw_model::RawModel,
+};
 
 pub type Model = RefCell<MonitorModel>;
 #[derive(Debug)]
 pub struct MonitorModel {
     pub dmesg: Vec<rmesg::entry::Entry>,
-    pub network: Vec<NetworkInterface>,
+    pub network: Vec<NetworkInterfaceStatus>,
 }
 
 impl MonitorModel {
-    fn get_network_settings(&self, raw_model: &RawModel) -> Option<Vec<NetworkInterface>> {
+    fn get_network_settings(&self, raw_model: &RawModel) -> Option<Vec<NetworkInterfaceStatus>> {
         let network_status = raw_model.get_network_status()?;
         let ports = network_status.ports.as_ref()?;
         Some(ports.iter().map(|p| p.into()).collect())

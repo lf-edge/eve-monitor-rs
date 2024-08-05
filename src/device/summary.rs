@@ -4,7 +4,7 @@ use chrono::Utc;
 use crate::device::network;
 use std::process::Command;
 
-use super::network::NetworkInterface;
+use super::network::NetworkInterfaceStatus;
 
 pub fn get_name() -> String {
     "hello world".to_string() // to be replaced with fetch of hostname
@@ -15,7 +15,7 @@ pub struct DeviceSummary {
     pub name: String,
     pub status: String,
     pub last_checkin: DateTime<Utc>,
-    pub network_interfaces: Vec<NetworkInterface>,
+    pub network_interfaces: Vec<NetworkInterfaceStatus>,
     pub usb_devices: Vec<String>,
     pub pci_devices: Vec<String>,
 }

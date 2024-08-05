@@ -260,9 +260,7 @@ pub struct L2LinkConfig {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct TestResults {
-    // #[serde(with = "ts_seconds")]
     last_failed: DateTime<Utc>,
-    // #[serde(with = "ts_seconds")]
     last_succeeded: DateTime<Utc>,
     last_error: String,
 }

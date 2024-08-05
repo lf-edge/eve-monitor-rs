@@ -926,7 +926,7 @@ pub struct PhysicalIOAdapter {
     pub usage: PhyIoMemberUsage,
     pub usage_policy: PhyIOUsagePolicy,
     pub vfs: VFList,
-    pub cbattr: std::collections::HashMap<String, String>,
+    pub cbattr: Option<std::collections::HashMap<String, String>>,
 }
 
 #[repr(i32)]
@@ -986,7 +986,7 @@ pub struct PhyIOUsagePolicy {
 #[serde(rename_all = "PascalCase")]
 pub struct VFList {
     pub count: u8,
-    pub data: Vec<EthVF>,
+    pub data: Option<Vec<EthVF>>,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]

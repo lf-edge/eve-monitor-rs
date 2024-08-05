@@ -1716,3 +1716,304 @@ fn test_downloader_1() {
     "#;
     let response: IpcMessage = serde_json::from_str(&json_data).unwrap();
 }
+
+#[test]
+fn test_io_adapters() {
+    let json_data = r#"
+        {
+            "type": "IOAdapters",
+            "message": {
+                "Initialized": true,
+                "AdapterList": [
+                    {
+                        "Ptype": 4,
+                        "Phylabel": "Audio",
+                        "Phyaddr": {
+                            "PciLong": "0000:00:0e.0",
+                            "Ifname": "",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "Audio",
+                        "Assigngrp": "group2",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "COM1",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyS2",
+                            "Irq": "10",
+                            "Ioports": "3e8-3ef",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "COM1",
+                        "Assigngrp": "COM1",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-1",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB0",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-1",
+                        "Assigngrp": "RS485-1",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-2",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB1",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-2",
+                        "Assigngrp": "RS485-2",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-3",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB2",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-3",
+                        "Assigngrp": "RS485-3",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-4",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB3",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-4",
+                        "Assigngrp": "RS485-4",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 13,
+                        "Phylabel": "USB",
+                        "Phyaddr": {
+                            "PciLong": "0000:00:15.0",
+                            "Ifname": "",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "USB",
+                        "Assigngrp": "group8",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 7,
+                        "Phylabel": "VGA",
+                        "Phyaddr": {
+                            "PciLong": "0000:00:02.0",
+                            "Ifname": "",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "VGA",
+                        "Assigngrp": "group0",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 1,
+                        "Phylabel": "eth0",
+                        "Phyaddr": {
+                            "PciLong": "0000:01:00.0",
+                            "Ifname": "eth0",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "eth0",
+                        "Assigngrp": "group14",
+                        "Parentassigngrp": "",
+                        "Usage": 1,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 1,
+                        "Phylabel": "eth1",
+                        "Phyaddr": {
+                            "PciLong": "0000:03:00.0",
+                            "Ifname": "eth1",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "eth1",
+                        "Assigngrp": "group16",
+                        "Parentassigngrp": "",
+                        "Usage": 1,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 5,
+                        "Phylabel": "wlan0",
+                        "Phyaddr": {
+                            "PciLong": "0000:02:00.0",
+                            "Ifname": "wlan0",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "wlan0",
+                        "Assigngrp": "group15",
+                        "Parentassigngrp": "",
+                        "Usage": 1,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    }
+                ]
+            }
+        }
+        "#;
+    let response: IpcMessage = serde_json::from_str(&json_data).unwrap();
+}

@@ -60,13 +60,17 @@ pub enum IpcMessage {
 //TODO: it will go away eventually
 static mut LOG_FILE_INDEX: u64 = 0;
 
-fn dump_to_file(message: &str) {
+fn dump_to_file(message: &str, is_error: bool) {
     use std::fs::OpenOptions;
     use std::io::Write;
 
     // get EVE_MONITOR_LOG_DIR from environment
     if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {
-        let log_file_name = format!("eve_ipc_message_{}.log", unsafe { LOG_FILE_INDEX });
+        let log_file_name = format!(
+            "eve_ipc_message{}-{}.json",
+            if is_error { "-err" } else { "" },
+            unsafe { LOG_FILE_INDEX }
+        );
         let log_file_name = std::path::Path::new(log_dir.as_str()).join(log_file_name);
         // increment log file index
         unsafe {
@@ -88,12 +92,15 @@ impl IpcMessage {
         // TODO: it is faster to call serde_json::from_reader directly
         // but I want to log the message if it fails to parse
         if let Ok(s) = String::from_utf8(bytes.to_vec()) {
-            dump_to_file(s.as_str());
             match serde_json::from_str(s.as_str()) {
-                Ok(message) => message,
+                Ok(message) => {
+                    dump_to_file(s.as_str(), false);
+                    message
+                }
                 Err(e) => {
                     error!("Failed to parse message: {}", e);
                     error!("MESSAGE: {}", s);
+                    dump_to_file(s.as_str(), true);
                     Self::Response {
                         id: 0,
                         result: Err("Failed to parse message".to_string()),

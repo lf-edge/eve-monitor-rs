@@ -181,17 +181,7 @@ impl<D> IVisible for Dialog<D> {}
 impl<D> IEventHandler for Dialog<D> {
     fn handle_event(&mut self, event: events::Event) -> Option<Action> {
         match event {
-            events::Event::Key(key) => {
-                if let Some(act) = self.handle_key_event(key) {
-                    match act {
-                        Activity::Action(action) => {
-                            return Some(Action::new(self.name.clone(), action))
-                        }
-                        Activity::Event(_) => (),
-                    }
-                }
-                None
-            }
+            events::Event::Key(key) => self.handle_key_event(key)?.try_into_action(&self.name),
             _ => None,
         }
     }

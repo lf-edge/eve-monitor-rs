@@ -1,21 +1,19 @@
-use core::fmt;
-use std::{cell::RefCell, fmt::Display, net::IpAddr, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use log::debug;
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
-    text::{Line, Span, Text},
+    text::Text,
     widgets::{
-        Block, BorderType, Borders, Cell, HighlightSpacing, ListItem, Padding, Row, StatefulWidget,
-        Table, TableState,
+        Block, BorderType, Borders, Cell, HighlightSpacing, Padding, Row, StatefulWidget, Table,
+        TableState,
     },
     Frame,
 };
 
 use crate::{
-    device::network::NetworkInterfaceStatus,
+    device::network::{NetworkInterfaceStatus, NetworkType},
     events::Event,
     model::{Model, MonitorModel},
     traits::{IEventHandler, IPresenter, IWindow},
@@ -142,7 +140,26 @@ fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Ro
     ])
     .height(ntp_row_height as u16);
 
-    vec![iface_type_row, dns_row, gateway_row, ntp_row]
+    let mut table = vec![iface_type_row, dns_row, gateway_row, ntp_row];
+
+    match &iface.media {
+        NetworkType::Ethernet => {}
+        NetworkType::WiFi(wifi_status) => {
+            // Row 4: SSID
+            let ssid = wifi_status
+                .ssid
+                .as_ref()
+                .map_or("N/A".to_string(), |v| v.clone());
+            let ssid_row = Row::new(vec![
+                Cell::from("SSID").style(Style::new().yellow()),
+                Cell::from(ssid).style(Style::new().white()),
+            ]);
+            table.push(ssid_row);
+        }
+        NetworkType::Cellular(_) => {}
+    }
+
+    table
 }
 
 impl IPresenter for NetworkPage {

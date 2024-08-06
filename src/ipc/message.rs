@@ -9,6 +9,7 @@ use log::error;
 use serde::Deserialize;
 use serde::Serialize;
 
+use super::eve_types::AppInstanceStatus;
 use super::eve_types::DeviceNetworkStatus;
 use super::eve_types::DevicePortConfig;
 use super::eve_types::DevicePortConfigList;
@@ -43,6 +44,7 @@ pub enum IpcMessage {
     DPCList(DevicePortConfigList),
     DownloaderStatus(DownloaderStatus),
     IOAdapters(PhysicalIOAdapterList),
+    AppStatus(AppInstanceStatus),
     Response {
         #[serde(flatten)]
         result: core::result::Result<String, String>,

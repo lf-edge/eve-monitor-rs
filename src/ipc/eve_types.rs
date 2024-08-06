@@ -879,37 +879,6 @@ pub enum ErrorEntityType {
     Volume = 11,
 }
 
-#[repr(u8)]
-#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug)]
-pub enum SwState {
-    Initial = 100,
-    ResolvingTag,
-    ResolvedTag,
-    Downloading,
-    Downloaded,
-    Verifying,
-    Verified,
-    Loading,
-    Loaded,
-    CreatingVolume,
-    CreatedVolume,
-    Installed,
-    AwaitNetworkInstance,
-    StartDelayed,
-    Booting,
-    Running,
-    Pausing,
-    Paused,
-    Halting,
-    Halted,
-    Broken,
-    Unknown,
-    Pending,
-    Scheduling,
-    Failed,
-    MaxState,
-}
-
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct PhysicalIOAdapterList {
@@ -1000,3 +969,187 @@ pub struct EthVF {
     pub mac: String,
     pub vlan_id: u16,
 }
+
+// application related types
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct AppInstanceStatus {
+    pub uuidand_version: UUIDandVersion,
+    pub display_name: String,
+    pub domain_name: String,
+    pub activated: bool,
+    pub activate_inprogress: bool,
+    pub fixed_resources: VmConfig,
+    pub volume_ref_status_list: Vec<VolumeRefStatus>,
+    #[serde(skip)]
+    pub app_net_adapters: Vec<AppNetAdapterStatus>,
+    pub boot_time: String, // Replace with a suitable time type
+    #[serde(skip)]
+    pub io_adapter_list: Vec<IoAdapter>,
+    pub restart_inprogress: Inprogress,
+    pub restart_started_at: String, // Replace with a suitable time type
+    pub purge_inprogress: Inprogress,
+    pub purge_started_at: String, // Replace with a suitable time type
+    pub state: SwState,
+    pub missing_network: bool,
+    pub missing_memory: bool,
+    #[serde(flatten)]
+    pub error_and_time_with_source: ErrorAndTimeWithSource,
+    pub start_time: String, // Replace with a suitable time type
+    #[serde(skip)]
+    pub snap_status: SnapshottingStatus,
+    pub mem_overhead: u64,
+}
+
+#[repr(u8)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum SwState {
+    Initial = 100,
+    ResolvingTag = 101,
+    ResolvedTag = 102,
+    Downloading = 103,
+    Downloaded = 104,
+    Verifying = 105,
+    Verified = 106,
+    Loading = 107,
+    Loaded = 108,
+    CreatingVolume = 109,
+    CreatedVolume = 110,
+    Installed = 111,
+    AwaitNetworkInstance = 112,
+    StartDelayed = 113,
+    Booting = 114,
+    Running = 115,
+    Pausing = 116,
+    Paused = 117,
+    Halting = 118,
+    Halted = 119,
+    Broken = 120,
+    Unknown = 121,
+    Pending = 122,
+    Scheduling = 123,
+    Failed = 124,
+    MaxState = 125,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct UUIDandVersion {
+    pub uuid: Uuid,
+    pub version: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct VmConfig {
+    pub kernel: String,
+    pub ramdisk: String,
+    pub memory: i32,
+    pub max_mem: i32,
+    pub vcpus: i32,
+    pub max_cpus: i32,
+    pub root_dev: String,
+    pub extra_args: String,
+    pub boot_loader: String,
+    pub cpus: String,
+    pub device_tree: String,
+    pub dt_dev: Vec<String>,
+    pub irqs: Vec<i32>,
+    pub iomem: Vec<String>,
+    pub virtualization_mode: VmMode,
+    pub enable_vnc: bool,
+    pub vnc_display: u32,
+    pub vnc_passwd: String,
+    pub cpus_pinned: bool,
+    pub vmm_max_mem: i32,
+    pub enable_vnc_shim_vm: bool,
+}
+
+#[repr(u8)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum VmMode {
+    PV = 0,
+    HVM = 1,
+    Filler = 2,
+    FML = 3,
+    NoHyper = 4,
+    Legacy = 5,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct VolumeRefStatus {
+    pub volume_id: Uuid,
+    pub generation_counter: i64,
+    pub local_generation_counter: i64,
+    pub app_uuid: Uuid,
+    pub state: SwState,
+    pub active_file_location: String,
+    pub content_format: Format,
+    pub read_only: bool,
+    pub display_name: String,
+    pub max_vol_size: u64,
+    pub pending_add: bool,
+    pub wwn: String,
+    pub verify_only: bool,
+    pub target: Target,
+    pub custom_meta: String,
+    pub reference_name: String,
+    #[serde(flatten)]
+    pub error_and_time_with_source: ErrorAndTimeWithSource,
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum Format {
+    FmtUnknown = 0,
+    RAW = 1,
+    QCOW = 2,
+    QCOW2 = 3,
+    VHD = 4,
+    VMDK = 5,
+    OVA = 6,
+    VHDX = 7,
+    Container = 8,
+    ISO = 9,
+    PVC = 10,
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum Target {
+    TgtUnknown = 0,
+    Disk = 1,
+    Kernel = 2,
+    Initrd = 3,
+    RamDisk = 4,
+    AppCustom = 5,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct ErrorAndTimeWithSource {
+    pub error_source_type: String,
+    #[serde(flatten)]
+    pub error_description: ErrorDescription,
+}
+
+#[repr(u8)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum Inprogress {
+    NotInprogress = 0,
+    DownloadAndVerify = 1,
+    BringDown = 2,
+    RecreateVolumes = 3,
+    BringUp = 4,
+}
+
+// Placeholder types for unknown ones
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+pub struct AppNetAdapterStatus {} // Replace with actual definition
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+pub struct IoAdapter {} // Replace with actual definition
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+pub struct SnapshottingStatus {} // Replace with actual definition

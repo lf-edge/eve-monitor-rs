@@ -19,7 +19,7 @@ use crate::{
     traits::{IEventHandler, IPresenter, IWindow},
 };
 
-use super::action::Action;
+use super::action::{Action, UiActions};
 
 const MAC_LENGTH: u16 = 17;
 const LINK_STATE_LENGTH: u16 = 4;
@@ -97,6 +97,13 @@ fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Ro
         Cell::from(iface_type).style(Style::new().white()),
     ]);
 
+    // IP type: DHCP/static
+    let ip_source = if iface.is_dhcp { "DHCP" } else { "Static" };
+    let ip_source_row = Row::new(vec![
+        Cell::from("IP source").style(Style::new().yellow()),
+        Cell::from(ip_source).style(Style::new().white()),
+    ]);
+
     // Row 1: DNS
     let dns = iface.dns.as_ref().map_or_else(
         || "N/A".to_string(),
@@ -140,7 +147,7 @@ fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Ro
     ])
     .height(ntp_row_height as u16);
 
-    let mut table = vec![iface_type_row, dns_row, gateway_row, ntp_row];
+    let mut table = vec![iface_type_row, ip_source_row, dns_row, gateway_row, ntp_row];
 
     match &iface.media {
         NetworkType::Ethernet => {}
@@ -283,7 +290,9 @@ impl IEventHandler for NetworkPage {
                 KeyCode::End if key.modifiers == KeyModifiers::CONTROL => self.select_last(),
                 KeyCode::Enter => {
                     let _selected_iface = self.selected();
-                    //TODO: send action to show dialog to edit interface
+                    if let Some(selected) = _selected_iface {
+                        return Some(Action::new("net", UiActions::EditIfaceConfig(selected)));
+                    }
                 }
                 _ => {}
             },

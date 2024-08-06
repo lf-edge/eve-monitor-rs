@@ -1,4 +1,4 @@
-use crate::traits::IPresenter;
+use crate::{device::network::NetworkInterfaceStatus, traits::IPresenter};
 use core::fmt::Debug;
 use crossterm::event::{KeyCode, KeyModifiers};
 use log::{debug, info, warn};
@@ -319,8 +319,8 @@ impl Ui {
                 //     gw: "1.1.1.1".to_string(),
                 // };
 
-                let d: NetworkDialog = NetworkDialog::new();
-                self.views[self.selected_tab as usize].push(Box::new(d));
+                // let d: NetworkDialog = NetworkDialog::new();
+                // self.views[self.selected_tab as usize].push(Box::new(d));
             }
 
             // handle Tab switching
@@ -346,8 +346,8 @@ impl Ui {
                     match action.action {
                         UiActions::DismissDialog => {
                             self.views[self.selected_tab as usize].pop();
-                            // self.invalidate();
                         }
+
                         _ => {
                             return Some(action);
                         }
@@ -380,6 +380,11 @@ impl Ui {
         }
 
         None
+    }
+
+    pub fn show_ip_dialog(&mut self, iface: NetworkInterfaceStatus) {
+        let d: NetworkDialog = NetworkDialog::new(iface);
+        self.views[self.selected_tab as usize].push(Box::new(d));
     }
 }
 

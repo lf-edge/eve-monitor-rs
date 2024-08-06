@@ -1,6 +1,11 @@
-use std::{cell::LazyCell, collections::HashMap};
+use std::{
+    cell::LazyCell,
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr},
+};
 
 use crate::{
+    device::network::NetworkInterfaceStatus,
     events::Event::{self, Key},
     traits::{IEventHandler, IWindow},
     ui::{action::UiActions, focus_tracker::FocusMode, widgets::button::ButtonElement},
@@ -54,19 +59,26 @@ const window_focus_order: LazyCell<Vec<String>> =
     LazyCell::new(|| vec!["ok".to_string(), "cancel".to_string()]);
 
 impl NetworkDialog {
-    pub fn new() -> Self {
+    pub fn new(data: NetworkInterfaceStatus) -> Self {
         let mut page_widgets = WidgetMap::new();
         page_widgets.insert("ok".to_string(), Box::new(ButtonElement::new("ok")));
         page_widgets.insert("cancel".to_string(), Box::new(ButtonElement::new("cancel")));
 
         let mut ip_fields = WidgetMap::new();
+
+        let mode = if data.is_dhcp { 1 } else { 0 };
+
         ip_fields.insert(
             "mode".to_string(),
-            Box::new(SpinBoxElement::new(vec!["static", "dynamic"])),
+            Box::new(SpinBoxElement::new(vec!["static", "DHCP"]).selected(mode)),
         );
+
+        // find first ipv4 address
+        let ip = data.ipv4.unwrap().first().unwrap().clone().to_string();
+
         ip_fields.insert(
             "ip".to_string(),
-            Box::new(InputFieldElement::new("IP", Some(&"".to_string()))),
+            Box::new(InputFieldElement::new("IP", Some(ip.as_str()))),
         );
         ip_fields.insert(
             "gateway".to_string(),
@@ -120,7 +132,8 @@ impl NetworkDialog {
 
         let mut spinbox_state = HashMap::new();
         NetworkTabs::iter().for_each(|i| {
-            spinbox_state.insert(i, 0);
+            let state = if i == NetworkTabs::IP { mode } else { 0 };
+            spinbox_state.insert(i, state);
             ()
         });
 
@@ -251,6 +264,11 @@ impl IEventHandler for NetworkDialog {
         match event {
             Key(key) => {
                 debug!("netconf edit dialog handling {:?}", key);
+
+                if key.code == KeyCode::Esc {
+                    return Some(Action::new("edit network", UiActions::DismissDialog));
+                }
+
                 if let Some(redraw) = self.focus.handle_key_event(key) {
                     return Some(Action::new("edit network", redraw));
                 }

@@ -92,6 +92,9 @@ impl Application {
                 debug!("Got Network status");
                 self.raw_model.set_network_status(cfg);
             }
+            IpcMessage::AppStatus(app) => {
+                debug!("Got AppStatus");
+            }
 
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);

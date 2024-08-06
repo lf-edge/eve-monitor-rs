@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use super::*;
 use eve_types::deserialize_mac;
+use eve_types::AppInstanceStatus;
 use eve_types::BondConfig;
 use eve_types::BondMode;
 use eve_types::DPCState;
@@ -3001,4 +3002,102 @@ fn test_network_port_status_dns() {
         n.dns_servers,
         Some(vec!["10.208.13.254".parse::<IpAddr>().unwrap()])
     );
+}
+
+#[test]
+fn test_app_data_full() {
+    let json_data = r#"
+        {
+            "type": "AppStatus",
+            "message": {
+                "UUIDandVersion": {
+                    "UUID": "7b1c286f-92ba-471c-916c-354817e1f970",
+                    "Version": "1"
+                },
+                "DisplayName": "cs_nginx-1",
+                "DomainName": "",
+                "Activated": false,
+                "ActivateInprogress": false,
+                "FixedResources": {
+                    "Kernel": "",
+                    "Ramdisk": "",
+                    "Memory": 524288,
+                    "MaxMem": 524288,
+                    "VCpus": 1,
+                    "MaxCpus": 0,
+                    "RootDev": "/dev/xvda1",
+                    "ExtraArgs": "",
+                    "BootLoader": "/usr/bin/pygrub",
+                    "CPUs": "",
+                    "DeviceTree": "",
+                    "DtDev": null,
+                    "IRQs": null,
+                    "IOMem": null,
+                    "VirtualizationMode": 0,
+                    "EnableVnc": true,
+                    "VncDisplay": 0,
+                    "VncPasswd": "",
+                    "CPUsPinned": false,
+                    "VMMMaxMem": 0,
+                    "EnableVncShimVM": false
+                },
+                "VolumeRefStatusList": [
+                    {
+                        "VolumeID": "8ac426df-38d6-4f7e-8a6d-723a1a9db644",
+                        "GenerationCounter": 0,
+                        "LocalGenerationCounter": 0,
+                        "AppUUID": "7b1c286f-92ba-471c-916c-354817e1f970",
+                        "State": 100,
+                        "ActiveFileLocation": "",
+                        "ContentFormat": 0,
+                        "ReadOnly": false,
+                        "DisplayName": "",
+                        "MaxVolSize": 0,
+                        "PendingAdd": false,
+                        "WWN": "",
+                        "VerifyOnly": true,
+                        "Target": 0,
+                        "CustomMeta": "",
+                        "ReferenceName": "",
+                        "ErrorSourceType": "",
+                        "Error": "",
+                        "ErrorTime": "0001-01-01T00:00:00Z",
+                        "ErrorSeverity": 0,
+                        "ErrorRetryCondition": "",
+                        "ErrorEntities": null
+                    }
+                ],
+                "AppNetAdapters": null,
+                "BootTime": "0001-01-01T00:00:00Z",
+                "IoAdapterList": null,
+                "RestartInprogress": 0,
+                "RestartStartedAt": "0001-01-01T00:00:00Z",
+                "PurgeInprogress": 0,
+                "PurgeStartedAt": "0001-01-01T00:00:00Z",
+                "State": 100,
+                "MissingNetwork": false,
+                "MissingMemory": false,
+                "ErrorSourceType": "",
+                "Error": "",
+                "ErrorTime": "0001-01-01T00:00:00Z",
+                "ErrorSeverity": 0,
+                "ErrorRetryCondition": "",
+                "ErrorEntities": null,
+                "StartTime": "2024-08-06T11:51:10.714191287Z",
+                "SnapStatus": {
+                    "MaxSnapshots": 1,
+                    "RequestedSnapshots": null,
+                    "AvailableSnapshots": null,
+                    "SnapshotsToBeDeleted": null,
+                    "PreparedVolumesSnapshotConfigs": null,
+                    "SnapshotOnUpgrade": false,
+                    "HasRollbackRequest": false,
+                    "ActiveSnapshot": "",
+                    "RollbackInProgress": false
+                },
+                "MemOverhead": 0
+            }
+        }
+        "#;
+    let a: IpcMessage = serde_json::from_str(json_data).unwrap();
 }

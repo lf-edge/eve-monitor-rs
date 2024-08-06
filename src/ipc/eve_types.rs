@@ -974,7 +974,8 @@ pub struct EthVF {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct AppInstanceStatus {
-    pub uuidand_version: UUIDandVersion,
+    #[serde(rename = "UUIDandVersion")]
+    pub uuid_and_version: UUIDandVersion,
     pub display_name: String,
     pub domain_name: String,
     pub activated: bool,
@@ -1035,6 +1036,7 @@ pub enum SwState {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct UUIDandVersion {
+    #[serde(rename = "UUID")]
     pub uuid: Uuid,
     pub version: String,
 }
@@ -1046,22 +1048,29 @@ pub struct VmConfig {
     pub ramdisk: String,
     pub memory: i32,
     pub max_mem: i32,
+    #[serde(rename = "VCpus")]
     pub vcpus: i32,
     pub max_cpus: i32,
     pub root_dev: String,
     pub extra_args: String,
     pub boot_loader: String,
+    #[serde(rename = "CPUs")]
     pub cpus: String,
     pub device_tree: String,
-    pub dt_dev: Vec<String>,
-    pub irqs: Vec<i32>,
-    pub iomem: Vec<String>,
+    pub dt_dev: Option<Vec<String>>,
+    #[serde(rename = "IRQs")]
+    pub irqs: Option<Vec<i32>>,
+    #[serde(rename = "IOMem")]
+    pub iomem: Option<Vec<String>>,
     pub virtualization_mode: VmMode,
     pub enable_vnc: bool,
     pub vnc_display: u32,
     pub vnc_passwd: String,
+    #[serde(rename = "CPUsPinned")]
     pub cpus_pinned: bool,
+    #[serde(rename = "VMMMaxMem")]
     pub vmm_max_mem: i32,
+    #[serde(rename = "EnableVncShimVM")]
     pub enable_vnc_shim_vm: bool,
 }
 
@@ -1079,9 +1088,11 @@ pub enum VmMode {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct VolumeRefStatus {
+    #[serde(rename = "VolumeID")]
     pub volume_id: Uuid,
     pub generation_counter: i64,
     pub local_generation_counter: i64,
+    #[serde(rename = "AppUUID")]
     pub app_uuid: Uuid,
     pub state: SwState,
     pub active_file_location: String,
@@ -1090,6 +1101,7 @@ pub struct VolumeRefStatus {
     pub display_name: String,
     pub max_vol_size: u64,
     pub pending_add: bool,
+    #[serde(rename = "WWN")]
     pub wwn: String,
     pub verify_only: bool,
     pub target: Target,

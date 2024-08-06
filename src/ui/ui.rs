@@ -57,7 +57,7 @@ pub struct Ui {
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
 enum UiTabs {
     #[default]
-    Debug,
+    //Debug,
     Home,
     Network,
     // Applications,
@@ -199,7 +199,7 @@ impl Ui {
     pub fn init(&mut self) {
         let w = self.create_main_wnd();
 
-        self.views[UiTabs::Debug as usize].push(Box::new(w));
+        //self.views[UiTabs::Debug as usize].push(Box::new(w));
 
         let s = IpDialogState {
             ip: "10.208.13.10".to_string(),
@@ -215,7 +215,7 @@ impl Ui {
             MonActions::NetworkInterfaceUpdated(s),
         );
 
-        self.views[UiTabs::Debug as usize].push(Box::new(d));
+        //self.views[UiTabs::Debug as usize].push(Box::new(d));
 
         self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
 

@@ -1,6 +1,6 @@
 use crate::ipc::eve_types::{
-    DeviceNetworkStatus, DevicePortConfig, DevicePortConfigList, PhysicalIOAdapterList,
     DeviceNetworkStatus, DevicePortConfig, DevicePortConfigList, DownloaderStatus,
+    PhysicalIOAdapterList,
 };
 #[derive(Debug)]
 pub struct RawModel {

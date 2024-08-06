@@ -96,6 +96,11 @@ impl Application {
                 debug!("Got AppStatus");
             }
 
+            IpcMessage::DownloaderStatus(cfg) => {
+                self.raw_model.set_downloader_status(cfg);
+                debug!("Got DownloaderStatus");
+            }
+
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
             }

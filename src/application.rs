@@ -92,6 +92,9 @@ impl Application {
                 debug!("Got Network status");
                 self.raw_model.set_network_status(cfg);
             }
+            IpcMessage::AppStatus(app) => {
+                debug!("Got AppStatus");
+            }
 
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
@@ -364,6 +367,8 @@ impl Application {
                             let action = self.ui.handle_event(Event::Key(key));
                             if let Some(action) = action {
                                 info!("Event loop got action: {:?}", action);
+
+                                self.handle_action(action);
                             }
                          }
                         Some(Event::TerminalResize(w, h)) => {
@@ -459,5 +464,23 @@ impl Application {
     fn draw_ui(&mut self, model: Rc<Model>) -> Result<()> {
         self.ui.draw(model);
         Ok(())
+    }
+
+    fn handle_action(&mut self, action: Action) {
+        match action.action {
+            UiActions::EditIfaceConfig(iface) => {
+                // get interface info by name
+                let model = self.model.borrow();
+                let iface_data = model
+                    .network
+                    .iter()
+                    .find(|e| e.name == iface)
+                    .map(|e| e.clone());
+                if let Some(iface_data) = iface_data {
+                    self.ui.show_ip_dialog(iface_data);
+                }
+            }
+            _ => {}
+        }
     }
 }

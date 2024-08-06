@@ -210,6 +210,7 @@ pub struct NetworkPortStatus {
     #[serde(deserialize_with = "deserialize_ipaddr")]
     pub ntp_server: Option<IpAddr>,
     pub domain_name: String,
+    #[serde(rename = "DNSServers")]
     pub dns_servers: Option<Vec<IpAddr>>,
     pub ntp_servers: Option<Vec<IpAddr>>,
     pub addr_info_list: Option<Vec<AddrInfo>>,
@@ -317,12 +318,14 @@ pub struct WifiConfig {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct CipherBlockStatus {
+    #[serde(rename = "CipherBlockID")]
     pub cipher_block_id: String,
+    #[serde(rename = "CipherContextID")]
     pub cipher_context_id: String,
-    pub initial_value: Vec<u8>,
+    pub initial_value: Option<String>, //Vec<u8>,
     #[serde(rename = "pubsub-large-CipherData")]
-    pub cipher_data: Vec<u8>,
-    pub clear_text_hash: Vec<u8>,
+    pub cipher_data: Option<String>, //Vec<u8>,
+    pub clear_text_hash: Option<String>, //Vec<u8>,
     pub is_cipher: bool,
     pub cipher_context: Option<CipherContext>,
     #[serde(flatten)]
@@ -876,33 +879,289 @@ pub enum ErrorEntityType {
     Volume = 11,
 }
 
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct PhysicalIOAdapterList {
+    pub initialized: bool,
+    pub adapter_list: Vec<PhysicalIOAdapter>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct PhysicalIOAdapter {
+    pub ptype: PhyIoType,
+    pub phylabel: String,
+    pub phyaddr: PhysicalAddress,
+    pub logicallabel: String,
+    pub assigngrp: String,
+    pub parentassigngrp: String,
+    pub usage: PhyIoMemberUsage,
+    pub usage_policy: PhyIOUsagePolicy,
+    pub vfs: VFList,
+    pub cbattr: Option<std::collections::HashMap<String, String>>,
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum PhyIoType {
+    PhyIoTypeNoop = 0,
+    PhyIoTypeNetEth = 1,
+    PhyIoTypeUSB = 2,
+    PhyIoTypeCOM = 3,
+    PhyIoTypeAudio = 4,
+    PhyIoTypeNetWLAN = 5,
+    PhyIoTypeNetWWAN = 6,
+    PhyIoTypeHDMI = 7,
+    PhyIoTypeNVMEStorage = 9,
+    PhyIoTypeSATAStorage = 10,
+    PhyIoTypeNetEthPF = 11,
+    PhyIoTypeNetEthVF = 12,
+    PhyIoTypeUSBController = 13,
+    PhyIoTypeUSBDevice = 14,
+    PhyIoTypeCAN = 15,
+    PhyIoTypeVCAN = 16,
+    PhyIoTypeLCAN = 17,
+    PhyIoTypeOther = 255,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct PhysicalAddress {
+    pub pci_long: String,
+    pub ifname: String,
+    pub serial: String,
+    pub irq: String,
+    pub ioports: String,
+    pub usb_addr: String,
+    pub usb_product: String,
+    pub unknown_type: String,
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum PhyIoMemberUsage {
+    PhyIoUsageNone = 0,
+    PhyIoUsageMgmtAndApps = 1,
+    PhyIoUsageShared = 2,
+    PhyIoUsageDedicated = 3,
+    PhyIoUsageDisabled = 4,
+    PhyIoUsageMgmtOnly = 5,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct PhyIOUsagePolicy {
+    pub free_uplink: bool,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct VFList {
+    pub count: u8,
+    pub data: Option<Vec<EthVF>>,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct EthVF {
+    pub index: u8,
+    pub pci_long: String,
+    pub mac: String,
+    pub vlan_id: u16,
+}
+
+// application related types
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct AppInstanceStatus {
+    #[serde(rename = "UUIDandVersion")]
+    pub uuid_and_version: UUIDandVersion,
+    pub display_name: String,
+    pub domain_name: String,
+    pub activated: bool,
+    pub activate_inprogress: bool,
+    pub fixed_resources: VmConfig,
+    pub volume_ref_status_list: Vec<VolumeRefStatus>,
+    #[serde(skip)]
+    pub app_net_adapters: Vec<AppNetAdapterStatus>,
+    pub boot_time: String, // Replace with a suitable time type
+    #[serde(skip)]
+    pub io_adapter_list: Vec<IoAdapter>,
+    pub restart_inprogress: Inprogress,
+    pub restart_started_at: String, // Replace with a suitable time type
+    pub purge_inprogress: Inprogress,
+    pub purge_started_at: String, // Replace with a suitable time type
+    pub state: SwState,
+    pub missing_network: bool,
+    pub missing_memory: bool,
+    #[serde(flatten)]
+    pub error_and_time_with_source: ErrorAndTimeWithSource,
+    pub start_time: String, // Replace with a suitable time type
+    #[serde(skip)]
+    pub snap_status: SnapshottingStatus,
+    pub mem_overhead: u64,
+}
+
 #[repr(u8)]
-#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
 pub enum SwState {
     Initial = 100,
-    ResolvingTag,
-    ResolvedTag,
-    Downloading,
-    Downloaded,
-    Verifying,
-    Verified,
-    Loading,
-    Loaded,
-    CreatingVolume,
-    CreatedVolume,
-    Installed,
-    AwaitNetworkInstance,
-    StartDelayed,
-    Booting,
-    Running,
-    Pausing,
-    Paused,
-    Halting,
-    Halted,
-    Broken,
-    Unknown,
-    Pending,
-    Scheduling,
-    Failed,
-    MaxState,
+    ResolvingTag = 101,
+    ResolvedTag = 102,
+    Downloading = 103,
+    Downloaded = 104,
+    Verifying = 105,
+    Verified = 106,
+    Loading = 107,
+    Loaded = 108,
+    CreatingVolume = 109,
+    CreatedVolume = 110,
+    Installed = 111,
+    AwaitNetworkInstance = 112,
+    StartDelayed = 113,
+    Booting = 114,
+    Running = 115,
+    Pausing = 116,
+    Paused = 117,
+    Halting = 118,
+    Halted = 119,
+    Broken = 120,
+    Unknown = 121,
+    Pending = 122,
+    Scheduling = 123,
+    Failed = 124,
+    MaxState = 125,
 }
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct UUIDandVersion {
+    #[serde(rename = "UUID")]
+    pub uuid: Uuid,
+    pub version: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct VmConfig {
+    pub kernel: String,
+    pub ramdisk: String,
+    pub memory: i32,
+    pub max_mem: i32,
+    #[serde(rename = "VCpus")]
+    pub vcpus: i32,
+    pub max_cpus: i32,
+    pub root_dev: String,
+    pub extra_args: String,
+    pub boot_loader: String,
+    #[serde(rename = "CPUs")]
+    pub cpus: String,
+    pub device_tree: String,
+    pub dt_dev: Option<Vec<String>>,
+    #[serde(rename = "IRQs")]
+    pub irqs: Option<Vec<i32>>,
+    #[serde(rename = "IOMem")]
+    pub iomem: Option<Vec<String>>,
+    pub virtualization_mode: VmMode,
+    pub enable_vnc: bool,
+    pub vnc_display: u32,
+    pub vnc_passwd: String,
+    #[serde(rename = "CPUsPinned")]
+    pub cpus_pinned: bool,
+    #[serde(rename = "VMMMaxMem")]
+    pub vmm_max_mem: i32,
+    #[serde(rename = "EnableVncShimVM")]
+    pub enable_vnc_shim_vm: bool,
+}
+
+#[repr(u8)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum VmMode {
+    PV = 0,
+    HVM = 1,
+    Filler = 2,
+    FML = 3,
+    NoHyper = 4,
+    Legacy = 5,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct VolumeRefStatus {
+    #[serde(rename = "VolumeID")]
+    pub volume_id: Uuid,
+    pub generation_counter: i64,
+    pub local_generation_counter: i64,
+    #[serde(rename = "AppUUID")]
+    pub app_uuid: Uuid,
+    pub state: SwState,
+    pub active_file_location: String,
+    pub content_format: Format,
+    pub read_only: bool,
+    pub display_name: String,
+    pub max_vol_size: u64,
+    pub pending_add: bool,
+    #[serde(rename = "WWN")]
+    pub wwn: String,
+    pub verify_only: bool,
+    pub target: Target,
+    pub custom_meta: String,
+    pub reference_name: String,
+    #[serde(flatten)]
+    pub error_and_time_with_source: ErrorAndTimeWithSource,
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum Format {
+    FmtUnknown = 0,
+    RAW = 1,
+    QCOW = 2,
+    QCOW2 = 3,
+    VHD = 4,
+    VMDK = 5,
+    OVA = 6,
+    VHDX = 7,
+    Container = 8,
+    ISO = 9,
+    PVC = 10,
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum Target {
+    TgtUnknown = 0,
+    Disk = 1,
+    Kernel = 2,
+    Initrd = 3,
+    RamDisk = 4,
+    AppCustom = 5,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct ErrorAndTimeWithSource {
+    pub error_source_type: String,
+    #[serde(flatten)]
+    pub error_description: ErrorDescription,
+}
+
+#[repr(u8)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum Inprogress {
+    NotInprogress = 0,
+    DownloadAndVerify = 1,
+    BringDown = 2,
+    RecreateVolumes = 3,
+    BringUp = 4,
+}
+
+// Placeholder types for unknown ones
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+pub struct AppNetAdapterStatus {} // Replace with actual definition
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+pub struct IoAdapter {} // Replace with actual definition
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
+pub struct SnapshottingStatus {} // Replace with actual definition

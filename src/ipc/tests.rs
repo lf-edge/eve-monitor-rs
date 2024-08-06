@@ -1,7 +1,9 @@
+use std::net::IpAddr;
 use std::str::FromStr;
 
 use super::*;
 use eve_types::deserialize_mac;
+use eve_types::AppInstanceStatus;
 use eve_types::BondConfig;
 use eve_types::BondMode;
 use eve_types::DPCState;
@@ -12,6 +14,7 @@ use eve_types::GoIpNetwork;
 use eve_types::LacpRate;
 use eve_types::MIIMonitor;
 use eve_types::NetworkPortStatus;
+use eve_types::NetworkType;
 use eve_types::RadioSilence;
 use eve_types::ResultData;
 use eve_types::WirelessCfg;
@@ -1715,4 +1718,1386 @@ fn test_downloader_1() {
     }
     "#;
     let response: IpcMessage = serde_json::from_str(&json_data).unwrap();
+}
+
+#[test]
+fn test_io_adapters() {
+    let json_data = r#"
+        {
+            "type": "IOAdapters",
+            "message": {
+                "Initialized": true,
+                "AdapterList": [
+                    {
+                        "Ptype": 4,
+                        "Phylabel": "Audio",
+                        "Phyaddr": {
+                            "PciLong": "0000:00:0e.0",
+                            "Ifname": "",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "Audio",
+                        "Assigngrp": "group2",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "COM1",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyS2",
+                            "Irq": "10",
+                            "Ioports": "3e8-3ef",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "COM1",
+                        "Assigngrp": "COM1",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-1",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB0",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-1",
+                        "Assigngrp": "RS485-1",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-2",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB1",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-2",
+                        "Assigngrp": "RS485-2",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-3",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB2",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-3",
+                        "Assigngrp": "RS485-3",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-4",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB3",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-4",
+                        "Assigngrp": "RS485-4",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 13,
+                        "Phylabel": "USB",
+                        "Phyaddr": {
+                            "PciLong": "0000:00:15.0",
+                            "Ifname": "",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "USB",
+                        "Assigngrp": "group8",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 7,
+                        "Phylabel": "VGA",
+                        "Phyaddr": {
+                            "PciLong": "0000:00:02.0",
+                            "Ifname": "",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "VGA",
+                        "Assigngrp": "group0",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 1,
+                        "Phylabel": "eth0",
+                        "Phyaddr": {
+                            "PciLong": "0000:01:00.0",
+                            "Ifname": "eth0",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "eth0",
+                        "Assigngrp": "group14",
+                        "Parentassigngrp": "",
+                        "Usage": 1,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 1,
+                        "Phylabel": "eth1",
+                        "Phyaddr": {
+                            "PciLong": "0000:03:00.0",
+                            "Ifname": "eth1",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "eth1",
+                        "Assigngrp": "group16",
+                        "Parentassigngrp": "",
+                        "Usage": 1,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 5,
+                        "Phylabel": "wlan0",
+                        "Phyaddr": {
+                            "PciLong": "0000:02:00.0",
+                            "Ifname": "wlan0",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "wlan0",
+                        "Assigngrp": "group15",
+                        "Parentassigngrp": "",
+                        "Usage": 1,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    }
+                ]
+            }
+        }
+        "#;
+    let response: IpcMessage = serde_json::from_str(&json_data).unwrap();
+}
+
+#[test]
+fn test_io_adapters_1() {
+    let json_data = r#"
+        {
+            "type": "IOAdapters",
+            "message": {
+                "Initialized": true,
+                "AdapterList": [
+                    {
+                        "Ptype": 4,
+                        "Phylabel": "Audio",
+                        "Phyaddr": {
+                            "PciLong": "0000:00:0e.0",
+                            "Ifname": "",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "Audio",
+                        "Assigngrp": "group2",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "COM1",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyS2",
+                            "Irq": "10",
+                            "Ioports": "3e8-3ef",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "COM1",
+                        "Assigngrp": "COM1",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-1",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB0",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-1",
+                        "Assigngrp": "RS485-1",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-2",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB1",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-2",
+                        "Assigngrp": "RS485-2",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-3",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB2",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-3",
+                        "Assigngrp": "RS485-3",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 3,
+                        "Phylabel": "RS485-4",
+                        "Phyaddr": {
+                            "PciLong": "",
+                            "Ifname": "",
+                            "Serial": "/dev/ttyXRUSB3",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "RS485-4",
+                        "Assigngrp": "RS485-4",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 13,
+                        "Phylabel": "USB",
+                        "Phyaddr": {
+                            "PciLong": "0000:00:15.0",
+                            "Ifname": "",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "USB",
+                        "Assigngrp": "group8",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 7,
+                        "Phylabel": "VGA",
+                        "Phyaddr": {
+                            "PciLong": "0000:00:02.0",
+                            "Ifname": "",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "VGA",
+                        "Assigngrp": "group0",
+                        "Parentassigngrp": "",
+                        "Usage": 0,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 1,
+                        "Phylabel": "eth0",
+                        "Phyaddr": {
+                            "PciLong": "0000:01:00.0",
+                            "Ifname": "eth0",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "eth0",
+                        "Assigngrp": "group14",
+                        "Parentassigngrp": "",
+                        "Usage": 1,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 1,
+                        "Phylabel": "eth1",
+                        "Phyaddr": {
+                            "PciLong": "0000:03:00.0",
+                            "Ifname": "eth1",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "eth1",
+                        "Assigngrp": "group16",
+                        "Parentassigngrp": "",
+                        "Usage": 1,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    },
+                    {
+                        "Ptype": 5,
+                        "Phylabel": "wlan0",
+                        "Phyaddr": {
+                            "PciLong": "0000:02:00.0",
+                            "Ifname": "wlan0",
+                            "Serial": "",
+                            "Irq": "",
+                            "Ioports": "",
+                            "UsbAddr": "",
+                            "UsbProduct": "",
+                            "UnknownType": ""
+                        },
+                        "Logicallabel": "wlan0",
+                        "Assigngrp": "group15",
+                        "Parentassigngrp": "",
+                        "Usage": 1,
+                        "UsagePolicy": {
+                            "FreeUplink": false
+                        },
+                        "Vfs": {
+                            "Count": 0,
+                            "Data": null
+                        },
+                        "Cbattr": null
+                    }
+                ]
+            }
+        }
+        "#;
+    let response: IpcMessage = serde_json::from_str(&json_data).unwrap();
+}
+
+#[test]
+fn test_dpc_with_wifi_cypher() {
+    let json_data = r#"
+        {
+            "type": "DPCList",
+            "message": {
+                "CurrentIndex": 0,
+                "PortConfigList": [
+                    {
+                        "Version": 1,
+                        "Key": "zedagent",
+                        "TimePriority": "2024-08-05T21:37:05.087642277Z",
+                        "State": 8,
+                        "ShaFile": "",
+                        "ShaValue": null,
+                        "LastFailed": "2024-08-05T21:37:16.857215018Z",
+                        "LastSucceeded": "0001-01-01T00:00:00Z",
+                        "LastError": "physicalIO USB (phyLabel USB) is not a network adapter",
+                        "LastIPAndDNS": "0001-01-01T00:00:00Z",
+                        "Ports": [
+                            {
+                                "IfName": "eth0",
+                                "USBAddr": "",
+                                "PCIAddr": "0000:01:00.0",
+                                "Phylabel": "eth0",
+                                "Logicallabel": "eth0",
+                                "SharedLabels": [
+                                    "all",
+                                    "uplink",
+                                    "freeuplink"
+                                ],
+                                "Alias": "",
+                                "NetworkUUID": "2e6038c1-ece6-4ffd-b95b-a7302c219d59",
+                                "IsMgmt": true,
+                                "IsL3Port": true,
+                                "InvalidConfig": false,
+                                "Cost": 0,
+                                "MTU": 0,
+                                "Dhcp": 4,
+                                "AddrSubnet": "",
+                                "Gateway": "",
+                                "DomainName": "",
+                                "NTPServer": "",
+                                "DNSServers": null,
+                                "Type": 4,
+                                "Proxies": null,
+                                "Exceptions": "",
+                                "Pacfile": "",
+                                "NetworkProxyEnable": false,
+                                "NetworkProxyURL": "",
+                                "WpadURL": "",
+                                "pubsub-large-ProxyCertPEM": null,
+                                "L2Type": 0,
+                                "VLAN": {
+                                    "ParentPort": "",
+                                    "ID": 0
+                                },
+                                "Bond": {
+                                    "AggregatedPorts": null,
+                                    "Mode": 0,
+                                    "LacpRate": 0,
+                                    "MIIMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "UpDelay": 0,
+                                        "DownDelay": 0
+                                    },
+                                    "ARPMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "IPTargets": null
+                                    }
+                                },
+                                "WirelessCfg": {
+                                    "WType": 0,
+                                    "CellularV2": {
+                                        "AccessPoints": null,
+                                        "Probe": {
+                                            "Disable": false,
+                                            "Address": ""
+                                        },
+                                        "LocationTracking": false
+                                    },
+                                    "Wifi": null,
+                                    "Cellular": null
+                                },
+                                "LastFailed": "0001-01-01T00:00:00Z",
+                                "LastSucceeded": "0001-01-01T00:00:00Z",
+                                "LastError": ""
+                            },
+                            {
+                                "IfName": "eth1",
+                                "USBAddr": "",
+                                "PCIAddr": "0000:03:00.0",
+                                "Phylabel": "eth1",
+                                "Logicallabel": "eth1",
+                                "SharedLabels": [
+                                    "all",
+                                    "uplink",
+                                    "freeuplink"
+                                ],
+                                "Alias": "",
+                                "NetworkUUID": "2e6038c1-ece6-4ffd-b95b-a7302c219d59",
+                                "IsMgmt": true,
+                                "IsL3Port": true,
+                                "InvalidConfig": false,
+                                "Cost": 0,
+                                "MTU": 0,
+                                "Dhcp": 4,
+                                "AddrSubnet": "",
+                                "Gateway": "",
+                                "DomainName": "",
+                                "NTPServer": "",
+                                "DNSServers": null,
+                                "Type": 4,
+                                "Proxies": null,
+                                "Exceptions": "",
+                                "Pacfile": "",
+                                "NetworkProxyEnable": false,
+                                "NetworkProxyURL": "",
+                                "WpadURL": "",
+                                "pubsub-large-ProxyCertPEM": null,
+                                "L2Type": 0,
+                                "VLAN": {
+                                    "ParentPort": "",
+                                    "ID": 0
+                                },
+                                "Bond": {
+                                    "AggregatedPorts": null,
+                                    "Mode": 0,
+                                    "LacpRate": 0,
+                                    "MIIMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "UpDelay": 0,
+                                        "DownDelay": 0
+                                    },
+                                    "ARPMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "IPTargets": null
+                                    }
+                                },
+                                "WirelessCfg": {
+                                    "WType": 0,
+                                    "CellularV2": {
+                                        "AccessPoints": null,
+                                        "Probe": {
+                                            "Disable": false,
+                                            "Address": ""
+                                        },
+                                        "LocationTracking": false
+                                    },
+                                    "Wifi": null,
+                                    "Cellular": null
+                                },
+                                "LastFailed": "0001-01-01T00:00:00Z",
+                                "LastSucceeded": "0001-01-01T00:00:00Z",
+                                "LastError": ""
+                            },
+                            {
+                                "IfName": "wlan0",
+                                "USBAddr": "",
+                                "PCIAddr": "0000:02:00.0",
+                                "Phylabel": "wlan0",
+                                "Logicallabel": "wlan0",
+                                "SharedLabels": [
+                                    "all",
+                                    "uplink",
+                                    "freeuplink"
+                                ],
+                                "Alias": "",
+                                "NetworkUUID": "f309d034-68d0-435f-986d-a8f12d9b6006",
+                                "IsMgmt": true,
+                                "IsL3Port": true,
+                                "InvalidConfig": false,
+                                "Cost": 0,
+                                "MTU": 0,
+                                "Dhcp": 4,
+                                "AddrSubnet": "",
+                                "Gateway": "",
+                                "DomainName": "",
+                                "NTPServer": "192.168.7.1",
+                                "DNSServers": null,
+                                "Type": 4,
+                                "Proxies": null,
+                                "Exceptions": "",
+                                "Pacfile": "",
+                                "NetworkProxyEnable": false,
+                                "NetworkProxyURL": "",
+                                "WpadURL": "",
+                                "pubsub-large-ProxyCertPEM": null,
+                                "L2Type": 0,
+                                "VLAN": {
+                                    "ParentPort": "",
+                                    "ID": 0
+                                },
+                                "Bond": {
+                                    "AggregatedPorts": null,
+                                    "Mode": 0,
+                                    "LacpRate": 0,
+                                    "MIIMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "UpDelay": 0,
+                                        "DownDelay": 0
+                                    },
+                                    "ARPMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "IPTargets": null
+                                    }
+                                },
+                                "WirelessCfg": {
+                                    "WType": 2,
+                                    "CellularV2": {
+                                        "AccessPoints": null,
+                                        "Probe": {
+                                            "Disable": false,
+                                            "Address": ""
+                                        },
+                                        "LocationTracking": false
+                                    },
+                                    "Wifi": [
+                                        {
+                                            "SSID": "Milan",
+                                            "KeyScheme": 1,
+                                            "Identity": "",
+                                            "Password": "",
+                                            "Priority": 0,
+                                            "CipherBlockID": "f309d034-68d0-435f-986d-a8f12d9b6006-Milan",
+                                            "CipherContextID": "3d829ff7-32f0-5295-84bd-a229a5dbedf6",
+                                            "InitialValue": "WdRHlp5ePd3P1ucNJIMtvA==",
+                                            "pubsub-large-CipherData": "+I1MISaSkjcFfkZ+Lq7nScTm7FYHc9DFCJdds9oWYjd7IRYUCWgGVLNUPYjgGpw/jfv8RiQDcPFTro+UNBPzUNLE",
+                                            "ClearTextHash": "R5pBGu15+9xY5MKGiTZG55lYHGE5O/IVwZzNmEIgNis=",
+                                            "IsCipher": true,
+                                            "CipherContext": {
+                                                "ContextID": "3d829ff7-32f0-5295-84bd-a229a5dbedf6",
+                                                "HashScheme": 1,
+                                                "KeyExchangeScheme": 1,
+                                                "EncryptionScheme": 1,
+                                                "ControllerCertHash": "uvaLT0Er26gi7u7chv4a3A==",
+                                                "DeviceCertHash": "uakirbFVql9TY6nIxwRpog==",
+                                                "Error": "",
+                                                "ErrorTime": "0001-01-01T00:00:00Z",
+                                                "ErrorSeverity": 0,
+                                                "ErrorRetryCondition": "",
+                                                "ErrorEntities": null
+                                            },
+                                            "Error": "",
+                                            "ErrorTime": "0001-01-01T00:00:00Z",
+                                            "ErrorSeverity": 0,
+                                            "ErrorRetryCondition": "",
+                                            "ErrorEntities": null
+                                        }
+                                    ],
+                                    "Cellular": null
+                                },
+                                "LastFailed": "0001-01-01T00:00:00Z",
+                                "LastSucceeded": "0001-01-01T00:00:00Z",
+                                "LastError": ""
+                            }
+                        ]
+                    },
+                    {
+                        "Version": 1,
+                        "Key": "zedagent",
+                        "TimePriority": "2024-08-05T21:36:55.720354176Z",
+                        "State": 3,
+                        "ShaFile": "",
+                        "ShaValue": null,
+                        "LastFailed": "2024-08-05T21:36:56.528687096Z",
+                        "LastSucceeded": "2024-08-05T21:41:59.072285605Z",
+                        "LastError": "",
+                        "LastIPAndDNS": "2024-08-05T21:41:59.072285322Z",
+                        "Ports": [
+                            {
+                                "IfName": "eth0",
+                                "USBAddr": "",
+                                "PCIAddr": "0000:01:00.0",
+                                "Phylabel": "eth0",
+                                "Logicallabel": "eth0",
+                                "SharedLabels": [
+                                    "all",
+                                    "uplink",
+                                    "freeuplink"
+                                ],
+                                "Alias": "",
+                                "NetworkUUID": "2e6038c1-ece6-4ffd-b95b-a7302c219d59",
+                                "IsMgmt": true,
+                                "IsL3Port": true,
+                                "InvalidConfig": false,
+                                "Cost": 0,
+                                "MTU": 0,
+                                "Dhcp": 4,
+                                "AddrSubnet": "",
+                                "Gateway": "",
+                                "DomainName": "",
+                                "NTPServer": "",
+                                "DNSServers": null,
+                                "Type": 4,
+                                "Proxies": null,
+                                "Exceptions": "",
+                                "Pacfile": "",
+                                "NetworkProxyEnable": false,
+                                "NetworkProxyURL": "",
+                                "WpadURL": "",
+                                "pubsub-large-ProxyCertPEM": null,
+                                "L2Type": 0,
+                                "VLAN": {
+                                    "ParentPort": "",
+                                    "ID": 0
+                                },
+                                "Bond": {
+                                    "AggregatedPorts": null,
+                                    "Mode": 0,
+                                    "LacpRate": 0,
+                                    "MIIMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "UpDelay": 0,
+                                        "DownDelay": 0
+                                    },
+                                    "ARPMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "IPTargets": null
+                                    }
+                                },
+                                "WirelessCfg": {
+                                    "WType": 0,
+                                    "CellularV2": {
+                                        "AccessPoints": null,
+                                        "Probe": {
+                                            "Disable": false,
+                                            "Address": ""
+                                        },
+                                        "LocationTracking": false
+                                    },
+                                    "Wifi": null,
+                                    "Cellular": null
+                                },
+                                "LastFailed": "0001-01-01T00:00:00Z",
+                                "LastSucceeded": "0001-01-01T00:00:00Z",
+                                "LastError": ""
+                            },
+                            {
+                                "IfName": "eth1",
+                                "USBAddr": "",
+                                "PCIAddr": "0000:03:00.0",
+                                "Phylabel": "eth1",
+                                "Logicallabel": "eth1",
+                                "SharedLabels": [
+                                    "all",
+                                    "uplink",
+                                    "freeuplink"
+                                ],
+                                "Alias": "",
+                                "NetworkUUID": "2e6038c1-ece6-4ffd-b95b-a7302c219d59",
+                                "IsMgmt": true,
+                                "IsL3Port": true,
+                                "InvalidConfig": false,
+                                "Cost": 0,
+                                "MTU": 0,
+                                "Dhcp": 4,
+                                "AddrSubnet": "",
+                                "Gateway": "",
+                                "DomainName": "",
+                                "NTPServer": "",
+                                "DNSServers": null,
+                                "Type": 4,
+                                "Proxies": null,
+                                "Exceptions": "",
+                                "Pacfile": "",
+                                "NetworkProxyEnable": false,
+                                "NetworkProxyURL": "",
+                                "WpadURL": "",
+                                "pubsub-large-ProxyCertPEM": null,
+                                "L2Type": 0,
+                                "VLAN": {
+                                    "ParentPort": "",
+                                    "ID": 0
+                                },
+                                "Bond": {
+                                    "AggregatedPorts": null,
+                                    "Mode": 0,
+                                    "LacpRate": 0,
+                                    "MIIMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "UpDelay": 0,
+                                        "DownDelay": 0
+                                    },
+                                    "ARPMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "IPTargets": null
+                                    }
+                                },
+                                "WirelessCfg": {
+                                    "WType": 0,
+                                    "CellularV2": {
+                                        "AccessPoints": null,
+                                        "Probe": {
+                                            "Disable": false,
+                                            "Address": ""
+                                        },
+                                        "LocationTracking": false
+                                    },
+                                    "Wifi": null,
+                                    "Cellular": null
+                                },
+                                "LastFailed": "0001-01-01T00:00:00Z",
+                                "LastSucceeded": "0001-01-01T00:00:00Z",
+                                "LastError": ""
+                            },
+                            {
+                                "IfName": "wlan0",
+                                "USBAddr": "",
+                                "PCIAddr": "0000:02:00.0",
+                                "Phylabel": "wlan0",
+                                "Logicallabel": "wlan0",
+                                "SharedLabels": [
+                                    "all",
+                                    "uplink",
+                                    "freeuplink"
+                                ],
+                                "Alias": "",
+                                "NetworkUUID": "f309d034-68d0-435f-986d-a8f12d9b6006",
+                                "IsMgmt": true,
+                                "IsL3Port": true,
+                                "InvalidConfig": false,
+                                "Cost": 0,
+                                "MTU": 0,
+                                "Dhcp": 4,
+                                "AddrSubnet": "",
+                                "Gateway": "",
+                                "DomainName": "",
+                                "NTPServer": "192.168.7.1",
+                                "DNSServers": null,
+                                "Type": 4,
+                                "Proxies": null,
+                                "Exceptions": "",
+                                "Pacfile": "",
+                                "NetworkProxyEnable": false,
+                                "NetworkProxyURL": "",
+                                "WpadURL": "",
+                                "pubsub-large-ProxyCertPEM": null,
+                                "L2Type": 0,
+                                "VLAN": {
+                                    "ParentPort": "",
+                                    "ID": 0
+                                },
+                                "Bond": {
+                                    "AggregatedPorts": null,
+                                    "Mode": 0,
+                                    "LacpRate": 0,
+                                    "MIIMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "UpDelay": 0,
+                                        "DownDelay": 0
+                                    },
+                                    "ARPMonitor": {
+                                        "Enabled": false,
+                                        "Interval": 0,
+                                        "IPTargets": null
+                                    }
+                                },
+                                "WirelessCfg": {
+                                    "WType": 2,
+                                    "CellularV2": {
+                                        "AccessPoints": null,
+                                        "Probe": {
+                                            "Disable": false,
+                                            "Address": ""
+                                        },
+                                        "LocationTracking": false
+                                    },
+                                    "Wifi": [
+                                        {
+                                            "SSID": "Milan",
+                                            "KeyScheme": 1,
+                                            "Identity": "",
+                                            "Password": "",
+                                            "Priority": 0,
+                                            "CipherBlockID": "f309d034-68d0-435f-986d-a8f12d9b6006-Milan",
+                                            "CipherContextID": "",
+                                            "InitialValue": null,
+                                            "pubsub-large-CipherData": null,
+                                            "ClearTextHash": null,
+                                            "IsCipher": false,
+                                            "CipherContext": null,
+                                            "Error": "",
+                                            "ErrorTime": "0001-01-01T00:00:00Z",
+                                            "ErrorSeverity": 0,
+                                            "ErrorRetryCondition": "",
+                                            "ErrorEntities": null
+                                        }
+                                    ],
+                                    "Cellular": null
+                                },
+                                "LastFailed": "0001-01-01T00:00:00Z",
+                                "LastSucceeded": "0001-01-01T00:00:00Z",
+                                "LastError": ""
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        "#;
+    let response: IpcMessage = serde_json::from_str(&json_data).unwrap();
+}
+
+#[test]
+fn test_network_port_status_dns() {
+    let json_data = r#"
+        {
+            "IfName": "eth0",
+            "Phylabel": "eth0",
+            "Logicallabel": "eth0",
+            "SharedLabels": [
+                "all",
+                "uplink",
+                "freeuplink"
+            ],
+            "Alias": "",
+            "IsMgmt": true,
+            "IsL3Port": true,
+            "InvalidConfig": false,
+            "Cost": 0,
+            "Dhcp": 4,
+            "Type": 4,
+            "Subnet": {
+                "IP": "10.208.13.0",
+                "Mask": "////AA=="
+            },
+            "NtpServer": "",
+            "DomainName": "",
+            "DNSServers": [
+                "10.208.13.254"
+            ],
+            "NtpServers": [
+                "194.164.164.175",
+                "49.12.199.148"
+            ],
+            "AddrInfoList": [
+                {
+                    "Addr": "10.208.13.81",
+                    "Geo": {
+                        "ip": "",
+                        "hostname": "",
+                        "city": "",
+                        "region": "",
+                        "country": "",
+                        "loc": "",
+                        "org": "",
+                        "postal": ""
+                    },
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                },
+                {
+                    "Addr": "fe80::b4f9:9a:708f:3b9b",
+                    "Geo": {
+                        "ip": "",
+                        "hostname": "",
+                        "city": "",
+                        "region": "",
+                        "country": "",
+                        "loc": "",
+                        "org": "",
+                        "postal": ""
+                    },
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                }
+            ],
+            "Up": true,
+            "MacAddr": "AOBLai/6",
+            "DefaultRouters": [
+                "10.208.13.254"
+            ],
+            "MTU": 1500,
+            "WirelessCfg": {
+                "WType": 0,
+                "CellularV2": {
+                    "AccessPoints": null,
+                    "Probe": {
+                        "Disable": false,
+                        "Address": ""
+                    },
+                    "LocationTracking": false
+                },
+                "Wifi": null,
+                "Cellular": null
+            },
+            "WirelessStatus": {
+                "WType": 0,
+                "Cellular": {
+                    "LogicalLabel": "",
+                    "PhysAddrs": {
+                        "Interface": "",
+                        "USB": "",
+                        "PCI": "",
+                        "Dev": ""
+                    },
+                    "Module": {
+                        "Name": "",
+                        "IMEI": "",
+                        "Model": "",
+                        "Manufacturer": "",
+                        "Revision": "",
+                        "ControlProtocol": "",
+                        "OpMode": ""
+                    },
+                    "SimCards": null,
+                    "ConfigError": "",
+                    "ProbeError": "",
+                    "CurrentProvider": {
+                        "PLMN": "",
+                        "Description": "",
+                        "CurrentServing": false,
+                        "Roaming": false,
+                        "Forbidden": false
+                    },
+                    "VisibleProviders": null,
+                    "CurrentRATs": null,
+                    "ConnectedAt": 0,
+                    "IPSettings": {
+                        "Address": null,
+                        "Gateway": "",
+                        "DNSServers": null,
+                        "MTU": 0
+                    },
+                    "LocationTracking": false
+                }
+            },
+            "Proxies": null,
+            "Exceptions": "",
+            "Pacfile": "",
+            "NetworkProxyEnable": false,
+            "NetworkProxyURL": "",
+            "WpadURL": "",
+            "pubsub-large-ProxyCertPEM": null,
+            "L2Type": 0,
+            "VLAN": {
+                "ParentPort": "",
+                "ID": 0
+            },
+            "Bond": {
+                "AggregatedPorts": null,
+                "Mode": 0,
+                "LacpRate": 0,
+                "MIIMonitor": {
+                    "Enabled": false,
+                    "Interval": 0,
+                    "UpDelay": 0,
+                    "DownDelay": 0
+                },
+                "ARPMonitor": {
+                    "Enabled": false,
+                    "Interval": 0,
+                    "IPTargets": null
+                }
+            },
+            "LastFailed": "0001-01-01T00:00:00Z",
+            "LastSucceeded": "2024-08-05T23:42:37.872333051Z",
+            "LastError": ""
+        }
+    "#;
+    let n: NetworkPortStatus = serde_json::from_str(&json_data).unwrap();
+    assert_eq!(n.is_mgmt, true);
+    assert_eq!(n.cost, 0);
+    assert_eq!(n.dhcp, DhcpType::Client);
+    assert_eq!(n.network_type, NetworkType::IPv4);
+    assert_eq!(
+        n.dns_servers,
+        Some(vec!["10.208.13.254".parse::<IpAddr>().unwrap()])
+    );
+}
+
+#[test]
+fn test_app_data_full() {
+    let json_data = r#"
+        {
+            "type": "AppStatus",
+            "message": {
+                "UUIDandVersion": {
+                    "UUID": "7b1c286f-92ba-471c-916c-354817e1f970",
+                    "Version": "1"
+                },
+                "DisplayName": "cs_nginx-1",
+                "DomainName": "",
+                "Activated": false,
+                "ActivateInprogress": false,
+                "FixedResources": {
+                    "Kernel": "",
+                    "Ramdisk": "",
+                    "Memory": 524288,
+                    "MaxMem": 524288,
+                    "VCpus": 1,
+                    "MaxCpus": 0,
+                    "RootDev": "/dev/xvda1",
+                    "ExtraArgs": "",
+                    "BootLoader": "/usr/bin/pygrub",
+                    "CPUs": "",
+                    "DeviceTree": "",
+                    "DtDev": null,
+                    "IRQs": null,
+                    "IOMem": null,
+                    "VirtualizationMode": 0,
+                    "EnableVnc": true,
+                    "VncDisplay": 0,
+                    "VncPasswd": "",
+                    "CPUsPinned": false,
+                    "VMMMaxMem": 0,
+                    "EnableVncShimVM": false
+                },
+                "VolumeRefStatusList": [
+                    {
+                        "VolumeID": "8ac426df-38d6-4f7e-8a6d-723a1a9db644",
+                        "GenerationCounter": 0,
+                        "LocalGenerationCounter": 0,
+                        "AppUUID": "7b1c286f-92ba-471c-916c-354817e1f970",
+                        "State": 100,
+                        "ActiveFileLocation": "",
+                        "ContentFormat": 0,
+                        "ReadOnly": false,
+                        "DisplayName": "",
+                        "MaxVolSize": 0,
+                        "PendingAdd": false,
+                        "WWN": "",
+                        "VerifyOnly": true,
+                        "Target": 0,
+                        "CustomMeta": "",
+                        "ReferenceName": "",
+                        "ErrorSourceType": "",
+                        "Error": "",
+                        "ErrorTime": "0001-01-01T00:00:00Z",
+                        "ErrorSeverity": 0,
+                        "ErrorRetryCondition": "",
+                        "ErrorEntities": null
+                    }
+                ],
+                "AppNetAdapters": null,
+                "BootTime": "0001-01-01T00:00:00Z",
+                "IoAdapterList": null,
+                "RestartInprogress": 0,
+                "RestartStartedAt": "0001-01-01T00:00:00Z",
+                "PurgeInprogress": 0,
+                "PurgeStartedAt": "0001-01-01T00:00:00Z",
+                "State": 100,
+                "MissingNetwork": false,
+                "MissingMemory": false,
+                "ErrorSourceType": "",
+                "Error": "",
+                "ErrorTime": "0001-01-01T00:00:00Z",
+                "ErrorSeverity": 0,
+                "ErrorRetryCondition": "",
+                "ErrorEntities": null,
+                "StartTime": "2024-08-06T11:51:10.714191287Z",
+                "SnapStatus": {
+                    "MaxSnapshots": 1,
+                    "RequestedSnapshots": null,
+                    "AvailableSnapshots": null,
+                    "SnapshotsToBeDeleted": null,
+                    "PreparedVolumesSnapshotConfigs": null,
+                    "SnapshotOnUpgrade": false,
+                    "HasRollbackRequest": false,
+                    "ActiveSnapshot": "",
+                    "RollbackInProgress": false
+                },
+                "MemOverhead": 0
+            }
+        }
+        "#;
+    let a: IpcMessage = serde_json::from_str(json_data).unwrap();
 }

@@ -1,27 +1,25 @@
-use core::fmt;
-use std::{cell::RefCell, fmt::Display, net::IpAddr, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
-use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use log::debug;
+use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
-    text::{Line, Span, Text},
+    text::Text,
     widgets::{
-        Block, BorderType, Borders, Cell, HighlightSpacing, ListItem, Padding, Row, StatefulWidget,
-        Table, TableState,
+        Block, BorderType, Borders, Cell, HighlightSpacing, Padding, Row, StatefulWidget, Table,
+        TableState,
     },
     Frame,
 };
 
 use crate::{
-    device::network::NetworkInterfaceStatus,
+    device::network::{NetworkInterfaceStatus, NetworkType},
     events::Event,
     model::{Model, MonitorModel},
     traits::{IEventHandler, IPresenter, IWindow},
 };
 
-use super::action::Action;
+use super::action::{Action, UiActions};
 
 const MAC_LENGTH: u16 = 17;
 const LINK_STATE_LENGTH: u16 = 4;
@@ -99,6 +97,13 @@ fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Ro
         Cell::from(iface_type).style(Style::new().white()),
     ]);
 
+    // IP type: DHCP/static
+    let ip_source = if iface.is_dhcp { "DHCP" } else { "Static" };
+    let ip_source_row = Row::new(vec![
+        Cell::from("IP source").style(Style::new().yellow()),
+        Cell::from(ip_source).style(Style::new().white()),
+    ]);
+
     // Row 1: DNS
     let dns = iface.dns.as_ref().map_or_else(
         || "N/A".to_string(),
@@ -142,7 +147,26 @@ fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Ro
     ])
     .height(ntp_row_height as u16);
 
-    vec![iface_type_row, dns_row, gateway_row, ntp_row]
+    let mut table = vec![iface_type_row, ip_source_row, dns_row, gateway_row, ntp_row];
+
+    match &iface.media {
+        NetworkType::Ethernet => {}
+        NetworkType::WiFi(wifi_status) => {
+            // Row 4: SSID
+            let ssid = wifi_status
+                .ssid
+                .as_ref()
+                .map_or("N/A".to_string(), |v| v.clone());
+            let ssid_row = Row::new(vec![
+                Cell::from("SSID").style(Style::new().yellow()),
+                Cell::from(ssid).style(Style::new().white()),
+            ]);
+            table.push(ssid_row);
+        }
+        NetworkType::Cellular(_) => {}
+    }
+
+    table
 }
 
 impl IPresenter for NetworkPage {
@@ -266,7 +290,9 @@ impl IEventHandler for NetworkPage {
                 KeyCode::End if key.modifiers == KeyModifiers::CONTROL => self.select_last(),
                 KeyCode::Enter => {
                     let _selected_iface = self.selected();
-                    //TODO: send action to show dialog to edit interface
+                    if let Some(selected) = _selected_iface {
+                        return Some(Action::new("net", UiActions::EditIfaceConfig(selected)));
+                    }
                 }
                 _ => {}
             },

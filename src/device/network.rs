@@ -1,6 +1,6 @@
 use std::{clone, net::IpAddr};
 
-use crate::ipc::eve_types::{NetworkPortConfig, NetworkPortStatus, WirelessType};
+use crate::ipc::eve_types::{DhcpType, NetworkPortConfig, NetworkPortStatus, WirelessType};
 use macaddr::MacAddr;
 
 pub struct NetworkStatus {
@@ -54,6 +54,7 @@ pub struct NetworkInterfaceStatus {
     pub media: NetworkType,
     pub dns: Option<Vec<IpAddr>>,
     pub gw: Option<IpAddr>,
+    pub is_dhcp: bool,
 }
 
 // pub struct NetworkInterfaceConfig {
@@ -113,6 +114,8 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             _ => NetworkType::Ethernet,
         };
 
+        let is_dhcp = port.dhcp == DhcpType::Client;
+
         // collect DNS servers
         let dns = port.dns_servers.as_ref().map(|dns_servers| {
             dns_servers
@@ -139,6 +142,7 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             media,
             dns,
             gw,
+            is_dhcp,
         }
     }
 }

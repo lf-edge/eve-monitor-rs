@@ -10,6 +10,7 @@ pub enum UiActions {
     ButtonClicked(String),
     DismissDialog,
     MonActions(MonActions),
+    EditIfaceConfig(String),
 }
 
 #[derive(Debug, Clone)]

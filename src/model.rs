@@ -1,7 +1,9 @@
 use std::cell::RefCell;
 
 use crate::{
-    device::network::NetworkInterfaceStatus, ipc::message::IpcMessage, raw_model::RawModel,
+    device::network::NetworkInterfaceStatus,
+    ipc::{eve_types::DownloaderStatus, message::IpcMessage},
+    raw_model::RawModel,
 };
 
 pub type Model = RefCell<MonitorModel>;
@@ -9,6 +11,7 @@ pub type Model = RefCell<MonitorModel>;
 pub struct MonitorModel {
     pub dmesg: Vec<rmesg::entry::Entry>,
     pub network: Vec<NetworkInterfaceStatus>,
+    pub downloader: Option<DownloaderStatus>,
 }
 
 impl MonitorModel {
@@ -25,6 +28,7 @@ impl MonitorModel {
         // we need to implement a way to handle this e.g. check update time or
         // better do "almost equal" comparison algorithm
         self.network = self.get_network_settings(raw_model).unwrap_or_default();
+        self.downloader = raw_model.get_downloader_status().map(|f| (*f).clone());
     }
 }
 
@@ -33,6 +37,7 @@ impl Default for MonitorModel {
         MonitorModel {
             dmesg: Vec::with_capacity(1000),
             network: Vec::new(),
+            downloader: None,
         }
     }
 }

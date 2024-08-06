@@ -8,6 +8,7 @@ use serde::de;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use std::net::IpAddr;
+use strum::Display;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -796,7 +797,7 @@ pub struct DhcpConfig {
     pub dhcp_type: NetworkType,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct DownloaderStatus {
     pub image_sha256: String,
@@ -1003,7 +1004,7 @@ pub struct AppInstanceStatus {
 }
 
 #[repr(u8)]
-#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Debug, Clone, Copy, Display)]
 pub enum SwState {
     Initial = 100,
     ResolvingTag = 101,

@@ -1,8 +1,11 @@
 use crate::device::summary::DeviceSummary;
+use crate::ipc::eve_types::DownloaderStatus;
 use ratatui::text::Line;
 use ratatui::text::Text;
 use ratatui::widgets::Block;
+use ratatui::widgets::Gauge;
 use ratatui::widgets::Wrap;
+use std::borrow;
 use std::rc::Rc;
 
 use crate::events;
@@ -36,13 +39,17 @@ impl HomePage {
         let [left, right] =
             Layout::horizontal([Constraint::Ratio(1, 3), Constraint::Ratio(2, 3)]).areas(*area);
 
+        let [details, download] =
+            Layout::vertical([Constraint::Fill(0), Constraint::Length(5)]).areas(left);
+
         let [usb, pci] =
             Layout::vertical([Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)]).areas(right);
 
         let mut lm = LayoutMap::new();
-        let _ = lm.insert("summary".to_string(), left.clone());
-        let _ = lm.insert("usb".to_string(), usb.clone());
-        let _ = lm.insert("pci".to_string(), pci.clone());
+        lm.insert("summary".to_string(), details);
+        lm.insert("download".to_string(), download);
+        lm.insert("usb".to_string(), usb);
+        lm.insert("pci".to_string(), pci);
         lm
     }
 
@@ -64,6 +71,8 @@ impl HomePage {
         .block(Block::bordered().title("Device Summary"));
         frame.render_widget(left, layout["summary"]);
 
+        self.render_download(layout["download"], frame, &model.borrow().downloader);
+
         let usb = Paragraph::new(Text::from(self.state.usb_devices.join("\n")))
             .wrap(Wrap { trim: true })
             .block(Block::bordered().title("USB Devices"));
@@ -73,6 +82,29 @@ impl HomePage {
             .wrap(Wrap { trim: true })
             .block(Block::bordered().title("PCI Devices"));
         frame.render_widget(pci, layout["pci"]);
+    }
+
+    fn render_download(&self, area: Rect, frame: &mut Frame<'_>, model: &Option<DownloaderStatus>) {
+        let download = Block::bordered().title("Download status");
+        frame.render_widget(&download, area);
+
+        let Some(model) = model else {
+            frame.render_widget(Line::raw("No download in progress"), download.inner(area));
+            return;
+        };
+
+        let contents = download.inner(area);
+        let [area_status, area_name, area_progress] = Layout::vertical([
+            Constraint::Length(1),
+            Constraint::Length(1),
+            Constraint::Length(1),
+        ])
+        .areas(contents);
+
+        let download_progress = Gauge::default().block(download);
+        frame.render_widget(Line::raw(format!("State: {}", model.state)), area_status);
+        frame.render_widget(Line::raw(format!("File: {}", &model.name)), area_name);
+        frame.render_widget(download_progress, area_progress);
     }
 }
 

@@ -210,6 +210,7 @@ pub struct NetworkPortStatus {
     #[serde(deserialize_with = "deserialize_ipaddr")]
     pub ntp_server: Option<IpAddr>,
     pub domain_name: String,
+    #[serde(rename = "DNSServers")]
     pub dns_servers: Option<Vec<IpAddr>>,
     pub ntp_servers: Option<Vec<IpAddr>>,
     pub addr_info_list: Option<Vec<AddrInfo>>,

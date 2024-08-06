@@ -1,3 +1,4 @@
+use std::net::IpAddr;
 use std::str::FromStr;
 
 use super::*;
@@ -12,6 +13,7 @@ use eve_types::GoIpNetwork;
 use eve_types::LacpRate;
 use eve_types::MIIMonitor;
 use eve_types::NetworkPortStatus;
+use eve_types::NetworkType;
 use eve_types::RadioSilence;
 use eve_types::ResultData;
 use eve_types::WirelessCfg;
@@ -2833,4 +2835,170 @@ fn test_dpc_with_wifi_cypher() {
 
         "#;
     let response: IpcMessage = serde_json::from_str(&json_data).unwrap();
+}
+
+#[test]
+fn test_network_port_status_dns() {
+    let json_data = r#"
+        {
+            "IfName": "eth0",
+            "Phylabel": "eth0",
+            "Logicallabel": "eth0",
+            "SharedLabels": [
+                "all",
+                "uplink",
+                "freeuplink"
+            ],
+            "Alias": "",
+            "IsMgmt": true,
+            "IsL3Port": true,
+            "InvalidConfig": false,
+            "Cost": 0,
+            "Dhcp": 4,
+            "Type": 4,
+            "Subnet": {
+                "IP": "10.208.13.0",
+                "Mask": "////AA=="
+            },
+            "NtpServer": "",
+            "DomainName": "",
+            "DNSServers": [
+                "10.208.13.254"
+            ],
+            "NtpServers": [
+                "194.164.164.175",
+                "49.12.199.148"
+            ],
+            "AddrInfoList": [
+                {
+                    "Addr": "10.208.13.81",
+                    "Geo": {
+                        "ip": "",
+                        "hostname": "",
+                        "city": "",
+                        "region": "",
+                        "country": "",
+                        "loc": "",
+                        "org": "",
+                        "postal": ""
+                    },
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                },
+                {
+                    "Addr": "fe80::b4f9:9a:708f:3b9b",
+                    "Geo": {
+                        "ip": "",
+                        "hostname": "",
+                        "city": "",
+                        "region": "",
+                        "country": "",
+                        "loc": "",
+                        "org": "",
+                        "postal": ""
+                    },
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                }
+            ],
+            "Up": true,
+            "MacAddr": "AOBLai/6",
+            "DefaultRouters": [
+                "10.208.13.254"
+            ],
+            "MTU": 1500,
+            "WirelessCfg": {
+                "WType": 0,
+                "CellularV2": {
+                    "AccessPoints": null,
+                    "Probe": {
+                        "Disable": false,
+                        "Address": ""
+                    },
+                    "LocationTracking": false
+                },
+                "Wifi": null,
+                "Cellular": null
+            },
+            "WirelessStatus": {
+                "WType": 0,
+                "Cellular": {
+                    "LogicalLabel": "",
+                    "PhysAddrs": {
+                        "Interface": "",
+                        "USB": "",
+                        "PCI": "",
+                        "Dev": ""
+                    },
+                    "Module": {
+                        "Name": "",
+                        "IMEI": "",
+                        "Model": "",
+                        "Manufacturer": "",
+                        "Revision": "",
+                        "ControlProtocol": "",
+                        "OpMode": ""
+                    },
+                    "SimCards": null,
+                    "ConfigError": "",
+                    "ProbeError": "",
+                    "CurrentProvider": {
+                        "PLMN": "",
+                        "Description": "",
+                        "CurrentServing": false,
+                        "Roaming": false,
+                        "Forbidden": false
+                    },
+                    "VisibleProviders": null,
+                    "CurrentRATs": null,
+                    "ConnectedAt": 0,
+                    "IPSettings": {
+                        "Address": null,
+                        "Gateway": "",
+                        "DNSServers": null,
+                        "MTU": 0
+                    },
+                    "LocationTracking": false
+                }
+            },
+            "Proxies": null,
+            "Exceptions": "",
+            "Pacfile": "",
+            "NetworkProxyEnable": false,
+            "NetworkProxyURL": "",
+            "WpadURL": "",
+            "pubsub-large-ProxyCertPEM": null,
+            "L2Type": 0,
+            "VLAN": {
+                "ParentPort": "",
+                "ID": 0
+            },
+            "Bond": {
+                "AggregatedPorts": null,
+                "Mode": 0,
+                "LacpRate": 0,
+                "MIIMonitor": {
+                    "Enabled": false,
+                    "Interval": 0,
+                    "UpDelay": 0,
+                    "DownDelay": 0
+                },
+                "ARPMonitor": {
+                    "Enabled": false,
+                    "Interval": 0,
+                    "IPTargets": null
+                }
+            },
+            "LastFailed": "0001-01-01T00:00:00Z",
+            "LastSucceeded": "2024-08-05T23:42:37.872333051Z",
+            "LastError": ""
+        }
+    "#;
+    let n: NetworkPortStatus = serde_json::from_str(&json_data).unwrap();
+    assert_eq!(n.is_mgmt, true);
+    assert_eq!(n.cost, 0);
+    assert_eq!(n.dhcp, DhcpType::Client);
+    assert_eq!(n.network_type, NetworkType::IPv4);
+    assert_eq!(
+        n.dns_servers,
+        Some(vec!["10.208.13.254".parse::<IpAddr>().unwrap()])
+    );
 }

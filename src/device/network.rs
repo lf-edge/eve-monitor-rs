@@ -99,15 +99,16 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
                     .cellular_v2
                     .as_ref()
                     .and_then(|c| {
-                        Some(
-                            c.access_points
-                                .iter()
-                                .map(|s| SimStatus {
-                                    apn: s.apn.clone(),
-                                    slot: u32::from(s.sim_slot),
-                                })
-                                .collect(),
-                        )
+                        c.access_points.as_ref().and_then(|a| {
+                            Some(
+                                a.iter()
+                                    .map(|s| SimStatus {
+                                        apn: s.apn.clone(),
+                                        slot: u32::from(s.sim_slot),
+                                    })
+                                    .collect(),
+                            )
+                        })
                     })
                     .unwrap(),
             }),

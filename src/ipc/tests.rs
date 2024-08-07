@@ -21,10 +21,21 @@ use eve_types::WirelessCfg;
 use eve_types::WirelessType;
 use macaddr::MacAddr;
 use message::IpcMessage;
-use serde::de;
 use serde::Deserialize;
 use serde_json::from_value;
 use serde_json::json;
+
+// Common conciderations for the tests:
+// 1. Date and Time
+// DateTime<UTC> and go date.Date are a bit different when it comes to serialization to a string
+// in go trailing zeros are omited. HEre is the snippet from the go code:
+// ----------------------------------------------------------------------
+// fmtFrac formats the fraction of v/10**prec (e.g., ".12345") into the
+// tail of buf, omitting trailing zeros. It omits the decimal
+// point too when the fraction is 0. It returns the index where the
+// output bytes begin and the value v/10**prec.
+// ----------------------------------------------------------------------
+// so some test data is fixed by hand to add the trailing zeros
 
 #[test]
 fn test_result_data() {
@@ -1277,11 +1288,14 @@ fn test_dpc_list_full() {
                         "PCIAddr": "",
                         "Phylabel": "eth0",
                         "Logicallabel": "eth0",
+                        "SharedLabels": null,
                         "Alias": "",
                         "NetworkUUID": "00000000-0000-0000-0000-000000000000",
                         "IsMgmt": true,
                         "IsL3Port": true,
+                        "InvalidConfig": false,
                         "Cost": 0,
+                        "MTU": 1500,
                         "Dhcp": 4,
                         "AddrSubnet": "",
                         "Gateway": "",
@@ -1340,11 +1354,14 @@ fn test_dpc_list_full() {
                         "PCIAddr": "",
                         "Phylabel": "eth1",
                         "Logicallabel": "eth1",
+                        "SharedLabels": null,
                         "Alias": "",
                         "NetworkUUID": "00000000-0000-0000-0000-000000000000",
                         "IsMgmt": true,
                         "IsL3Port": true,
+                        "InvalidConfig": false,
                         "Cost": 0,
+                        "MTU": 1500,
                         "Dhcp": 4,
                         "AddrSubnet": "",
                         "Gateway": "",
@@ -1401,10 +1418,19 @@ fn test_dpc_list_full() {
             }
         ]
     }"#;
-    let result: DevicePortConfigList = serde_json::from_str(json_data).unwrap();
-    assert_eq!(result.current_index, 0);
+    let dpc_list: DevicePortConfigList = serde_json::from_str(json_data).unwrap();
 
-    let port_list = result.port_config_list.unwrap();
+    // serialize back to json
+    let new_json = serde_json::to_string_pretty(&dpc_list).unwrap();
+
+    assert_eq!(
+        json_data.parse::<serde_json::Value>().unwrap(),
+        new_json.parse::<serde_json::Value>().unwrap()
+    );
+
+    assert_eq!(dpc_list.current_index, 0);
+
+    let port_list = dpc_list.port_config_list.unwrap();
 
     assert_eq!(port_list.len(), 1);
     assert_eq!(port_list[0].version, 1);
@@ -1428,7 +1454,7 @@ fn test_dpc_list_full_1() {
                         "LastFailed": "0001-01-01T00:00:00Z",
                         "LastSucceeded": "2024-07-28T19:14:16.557806833Z",
                         "LastError": "",
-                        "LastIPAndDNS": "2024-07-28T19:14:16.55780657Z",
+                        "LastIPAndDNS": "2024-07-28T19:14:16.557806570Z",
                         "Ports": [
                             {
                                 "IfName": "eth0",
@@ -1442,6 +1468,7 @@ fn test_dpc_list_full_1() {
                                 "IsL3Port": true,
                                 "InvalidConfig": false,
                                 "Cost": 0,
+                                "SharedLabels": null,
                                 "MTU": 0,
                                 "Dhcp": 4,
                                 "AddrSubnet": "",
@@ -1507,6 +1534,7 @@ fn test_dpc_list_full_1() {
                                 "IsL3Port": true,
                                 "InvalidConfig": false,
                                 "Cost": 0,
+                                "SharedLabels": null,
                                 "MTU": 0,
                                 "Dhcp": 4,
                                 "AddrSubnet": "",
@@ -1566,13 +1594,26 @@ fn test_dpc_list_full_1() {
             }
     }
     "#;
-    let result: IpcMessage = serde_json::from_str(json_data).unwrap();
-    // assert_eq!(result.current_index, 0);
+    let dpc_list: IpcMessage = serde_json::from_str(json_data).unwrap();
 
-    // let port_list = result.port_config_list.unwrap();
+    // serialize back to json
+    let new_json = serde_json::to_string_pretty(&dpc_list).unwrap();
 
-    // assert_eq!(port_list.len(), 1);
-    // assert_eq!(port_list[0].version, 1);
+    assert_eq!(
+        json_data.parse::<serde_json::Value>().unwrap(),
+        new_json.parse::<serde_json::Value>().unwrap()
+    );
+
+    match dpc_list {
+        IpcMessage::DPCList(dpc_list) => {
+            assert_eq!(dpc_list.current_index, 0);
+            let dpc = dpc_list.get_dpc_by_key("lastresort").unwrap();
+            let port = dpc.get_port_by_name("eth0").unwrap();
+            assert_eq!(port.if_name, "eth0");
+            assert_eq!(port.usb_addr, "");
+        }
+        _ => panic!("Expected IpcMessage::DPCList"),
+    }
 }
 
 #[test]

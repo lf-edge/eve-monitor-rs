@@ -93,6 +93,7 @@ pub struct Vlan {
 #[serde(rename_all = "PascalCase")]
 pub struct WirelessCfg {
     pub cellular: Option<String>,
+    #[serde(rename = "CellularV2")]
     pub cellular_v2: CellularV2,
     pub w_type: WirelessType,
     pub wifi: Option<String>,
@@ -161,6 +162,16 @@ where
     } else {
         let ip = s.parse().map_err(serde::de::Error::custom)?;
         Ok(Some(ip))
+    }
+}
+
+fn serialize_ipaddr<S>(ip: &Option<IpAddr>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    match ip {
+        Some(ip) => ip.to_string().serialize(serializer),
+        None => "".serialize(serializer),
     }
 }
 
@@ -248,6 +259,7 @@ pub struct ProxyConfig {
     pub network_proxy_url: String,
     #[serde(rename = "WpadURL")]
     pub wpad_url: String,
+    #[serde(rename = "pubsub-large-ProxyCertPEM")]
     pub proxy_cert_pem: Option<Vec<Vec<u8>>>,
 }
 
@@ -255,6 +267,7 @@ pub struct ProxyConfig {
 #[serde(rename_all = "PascalCase")]
 pub struct L2LinkConfig {
     l2_type: L2LinkType,
+    #[serde(rename = "VLAN")]
     vlan: Option<VLANConfig>,
     bond: Option<BondConfig>,
 }
@@ -277,7 +290,7 @@ pub struct WirelessStatus {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct ProxyEntry {
-    #[serde(rename = "Type")]
+    #[serde(rename = "type")]
     proxy_type: NetworkProxyType,
     server: String,
     port: u32,
@@ -340,7 +353,7 @@ pub struct CipherContext {
 
 #[repr(u8)]
 #[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
-enum WifiKeySchemeType {
+pub enum WifiKeySchemeType {
     KeySchemeNone = 0,
     KeySchemeWpaPsk = 1,
     KeySchemeWpaEap = 2,
@@ -350,7 +363,11 @@ enum WifiKeySchemeType {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct DeprecatedCellConfig {
-    // Define the fields
+    #[serde(rename = "APN")]
+    pub apn: String,
+    pub probe_addr: String,
+    pub disable_probe: String,
+    pub location_tracking: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -432,7 +449,7 @@ pub enum WwanRAT {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct CellNetPortConfig {
-    pub access_points: Vec<CellularAccessPoint>,
+    pub access_points: Option<Vec<CellularAccessPoint>>,
     pub probe: WwanProbe,
     pub location_tracking: bool,
 }
@@ -446,7 +463,7 @@ pub struct WwanProbe {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-enum WwanAuthProtocol {
+pub enum WwanAuthProtocol {
     None,
     Pap,
     Chap,
@@ -580,6 +597,7 @@ pub struct BondMIIMonitor {
 #[serde(rename_all = "PascalCase")]
 pub struct BondArpMonitor {
     pub enabled: bool,
+    #[serde(rename = "IPTargets")]
     pub ip_targets: Option<String>,
     pub interval: u32,
 }
@@ -661,58 +679,15 @@ pub enum WirelessType {
 }
 
 // WirelessConfig struct
-#[derive(Debug, Serialize, PartialEq, Clone)]
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WirelessConfig {
+    #[serde(rename = "WType")]
     pub w_type: WirelessType,
+    #[serde(rename = "CellularV2")]
     pub cellular_v2: Option<CellNetPortConfig>,
     pub wifi: Option<Vec<WifiConfig>>,
     pub cellular: Option<Vec<DeprecatedCellConfig>>,
-}
-// If EVE would be written in Rust, WirelessConfig would be an enum
-// to avoid endless Option<T> in the nested structs e.g in CellNetPortConfig
-// we deserialize based on the WirelessType
-// TODO: Q: deserialize this and other EVE types directly into our structures to avoid
-// nested Option<T>? and make a clean interface?
-impl<'de> Deserialize<'de> for WirelessConfig {
-    fn deserialize<D>(deserializer: D) -> Result<WirelessConfig, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let value = serde_json::Value::deserialize(deserializer)?;
-        let mut cellular_v2 = None;
-        let mut wifi = None;
-        let cellular = None;
-
-        let obj = value.as_object().unwrap();
-        let w_type = serde_json::from_value(obj.get("WType").unwrap().clone())
-            .map_err(serde::de::Error::custom)?;
-
-        // match on the WirelessType
-        match w_type {
-            //TODO: we can receive old Cellular and new CellularV2 but let's solve this later
-            // WirelessType::Cellular => {
-            //     cellular = serde_json::from_value(obj.get("Cellular").unwrap().clone())
-            //         .map_err(serde::de::Error::custom)?;
-            // }
-            WirelessType::Wifi => {
-                wifi = serde_json::from_value(obj.get("Wifi").unwrap().clone())
-                    .map_err(serde::de::Error::custom)?;
-            }
-            WirelessType::Cellular => {
-                cellular_v2 = serde_json::from_value(obj.get("CellularV2").unwrap().clone())
-                    .map_err(serde::de::Error::custom)?;
-            }
-            _ => {}
-        }
-
-        Ok(WirelessConfig {
-            w_type,
-            cellular_v2,
-            wifi,
-            cellular,
-        })
-    }
 }
 
 // DevicePortConfigVersion type
@@ -733,6 +708,15 @@ pub struct DevicePortConfig {
     #[serde(rename = "LastIPAndDNS")]
     pub last_ip_and_dns: DateTime<Utc>,
     pub ports: Vec<NetworkPortConfig>,
+}
+
+impl DevicePortConfig {
+    pub fn get_port_by_name(&self, name: &str) -> Option<&NetworkPortConfig> {
+        self.ports.iter().find(|npc| npc.if_name == name)
+    }
+    pub fn get_port_by_name_mut(&mut self, name: &str) -> Option<&mut NetworkPortConfig> {
+        self.ports.iter_mut().find(|npc| npc.if_name == name)
+    }
 }
 
 // DevicePortConfigList struct
@@ -764,12 +748,16 @@ pub struct NetworkPortConfig {
     pub phy_label: String,
     #[serde(rename = "Logicallabel")]
     pub logical_label: String,
+    pub shared_labels: Option<Vec<String>>,
     pub alias: String,
     #[serde(rename = "NetworkUUID")]
     pub network_uuid: Uuid,
     pub is_mgmt: bool,
     pub is_l3_port: bool,
+    pub invalid_config: bool,
     pub cost: u8,
+    #[serde(rename = "MTU")]
+    pub mtu: u16,
     #[serde(flatten)]
     pub dhcp_config: DhcpConfig,
     #[serde(flatten)]
@@ -785,14 +773,18 @@ pub struct NetworkPortConfig {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct DhcpConfig {
-    pub addr_subnet: String,
     pub dhcp: DhcpType,
+    pub addr_subnet: String,
+    pub gateway: String,
+    pub domain_name: String,
+    #[serde(
+        rename = "NTPServer",
+        deserialize_with = "deserialize_ipaddr",
+        serialize_with = "serialize_ipaddr"
+    )]
+    pub ntp_server: Option<IpAddr>,
     #[serde(rename = "DNSServers")]
     pub dns_servers: Option<Vec<IpAddr>>,
-    pub domain_name: String,
-    pub gateway: String,
-    #[serde(rename = "NTPServer")]
-    pub ntp_server: String,
     #[serde(rename = "Type")]
     pub dhcp_type: NetworkType,
 }

@@ -7,6 +7,7 @@ use macaddr::MacAddr8;
 use serde::de;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::default;
 use std::net::IpAddr;
 use strum::Display;
 use uuid::Uuid;
@@ -272,7 +273,7 @@ pub struct L2LinkConfig {
     bond: Option<BondConfig>,
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone, Default)]
 #[serde(rename_all = "PascalCase")]
 pub struct TestResults {
     last_failed: DateTime<Utc>,
@@ -717,6 +718,32 @@ impl DevicePortConfig {
     pub fn get_port_by_name_mut(&mut self, name: &str) -> Option<&mut NetworkPortConfig> {
         self.ports.iter_mut().find(|npc| npc.if_name == name)
     }
+
+    // create new DPC with the given key based on the current DPC
+    pub fn to_new_dpc_with_key(&self, key: &str) -> DevicePortConfig {
+        DevicePortConfig {
+            version: self.version,
+            key: key.to_string(),
+            // set current time as time_priority
+            time_priority: Utc::now(),
+            // TODO: is this correct?
+            state: DPCState::None,
+            // TODO: not sure what to do with sha_file and sha_value
+            sha_file: self.sha_file.clone(),
+            sha_value: self.sha_value.clone(),
+            test_results: TestResults::default(),
+            last_ip_and_dns: DateTime::default(),
+            ports: self.ports.clone(),
+        }
+    }
+
+    // pub fn update_or_insert_port(&mut self, port: NetworkPortConfig) {
+    //     if let Some(p) = self.get_port_by_name_mut(&port.if_name) {
+    //         *p = port;
+    //     } else {
+    //         self.ports.push(port);
+    //     }
+    // }
 }
 
 // DevicePortConfigList struct
@@ -732,6 +759,26 @@ impl DevicePortConfigList {
         self.port_config_list
             .as_ref()
             .and_then(|list| list.iter().find(|dpc| dpc.key == key))
+    }
+
+    pub fn get_current_dpc_ref(&self) -> Option<&DevicePortConfig> {
+        self.port_config_list
+            .as_ref()
+            .and_then(|list| list.get(self.current_index as usize))
+    }
+
+    pub fn get_current_dpc_mut(&mut self) -> Option<&mut DevicePortConfig> {
+        self.port_config_list
+            .as_mut()
+            .and_then(|list| list.get_mut(self.current_index as usize))
+    }
+
+    pub fn get_current_dpc_key(&self) -> Option<&str> {
+        self.get_current_dpc_ref().map(|dpc| dpc.key.as_str())
+    }
+
+    pub fn get_current_dpc_cloned(&self) -> Option<DevicePortConfig> {
+        self.get_current_dpc_ref().map(|dpc| dpc.clone())
     }
 }
 
@@ -767,6 +814,70 @@ pub struct NetworkPortConfig {
     pub wireless_cfg: WirelessConfig,
     #[serde(flatten)]
     pub test_results: TestResults,
+}
+
+impl NetworkPortConfig {
+    pub fn is_dhcp(&self) -> bool {
+        self.dhcp_config.dhcp == DhcpType::Client
+    }
+    pub fn is_static(&self) -> bool {
+        self.dhcp_config.dhcp == DhcpType::Static
+    }
+    // change the type of the port to DHCP
+    pub fn into_dhcp(mut self) -> Self {
+        self.dhcp_config.dhcp = DhcpType::Client;
+        // clean static ip fields
+        self.dhcp_config.addr_subnet = String::new();
+        self.dhcp_config.gateway = String::new();
+        self.dhcp_config.domain_name = String::new();
+        self.dhcp_config.ntp_server = None;
+        self.dhcp_config.dns_servers = None;
+        //TODO: what do we do with NetworkUUID?
+        self
+    }
+
+    pub fn into_static(
+        mut self,
+        addr_subnet: String,
+        gateway: String,
+        domain_name: String,
+        ntp_server: Option<IpAddr>,
+        dns_servers: Option<Vec<IpAddr>>,
+    ) -> Self {
+        self.dhcp_config.dhcp = DhcpType::Static;
+        self.dhcp_config.addr_subnet = addr_subnet;
+        self.dhcp_config.gateway = gateway;
+        self.dhcp_config.domain_name = domain_name;
+        self.dhcp_config.ntp_server = ntp_server;
+        self.dhcp_config.dns_servers = dns_servers;
+        self
+    }
+
+    pub fn to_dhcp(&mut self) {
+        self.dhcp_config.dhcp = DhcpType::Client;
+        // clean static ip fields
+        self.dhcp_config.addr_subnet = String::new();
+        self.dhcp_config.gateway = String::new();
+        self.dhcp_config.domain_name = String::new();
+        self.dhcp_config.ntp_server = None;
+        self.dhcp_config.dns_servers = None;
+    }
+
+    pub fn to_static(
+        &mut self,
+        addr_subnet: String,
+        gateway: String,
+        domain_name: String,
+        ntp_server: Option<IpAddr>,
+        dns_servers: Option<Vec<IpAddr>>,
+    ) {
+        self.dhcp_config.dhcp = DhcpType::Static;
+        self.dhcp_config.addr_subnet = addr_subnet;
+        self.dhcp_config.gateway = gateway;
+        self.dhcp_config.domain_name = domain_name;
+        self.dhcp_config.ntp_server = ntp_server;
+        self.dhcp_config.dns_servers = dns_servers;
+    }
 }
 
 // DhcpConfig struct

@@ -13,7 +13,6 @@ use crate::{
     ui::action::UiActions,
 };
 
-use super::element::VisualState;
 #[derive(Debug, Clone, PartialEq)]
 enum InputMode {
     Insert,
@@ -40,7 +39,6 @@ pub enum InputModifiers {
 }
 
 pub struct InputFieldElement {
-    v: VisualState,
     caption: String,
     value: Option<String>,
     input_position: usize,
@@ -78,7 +76,6 @@ impl InputFieldElement {
             input_position,
             cursor_position: input_position as u16,
             input_mode: InputMode::Insert,
-            v: Default::default(),
             on_update: None,
             on_char: Some(Box::new(|c| Some(*c))),
             text_area: Rect::default(),

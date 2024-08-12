@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::{
     traits::{IElementEventHandler, IWidget, IWidgetPresenter},
-    ui::activity::Activity,
+    ui::{action::UiActions, activity::Activity},
 };
 
 pub struct LabelElement {
@@ -65,13 +65,6 @@ impl IWidgetPresenter for LabelElement {
 }
 
 impl IElementEventHandler for LabelElement {
-    fn handle_key_event(
-        &mut self,
-        _key: crossterm::event::KeyEvent,
-    ) -> Option<crate::ui::activity::Activity> {
-        None
-    }
-
     fn handle_tick(&mut self) -> Option<crate::ui::activity::Activity> {
         trace!("LabelElement::handle_tick");
         self.state_updated = false;

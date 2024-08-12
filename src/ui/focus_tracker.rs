@@ -74,6 +74,15 @@ impl FocusTracker {
     pub fn get_focused_view(&self) -> Option<String> {
         self.tab_order.get(self.focused_view).cloned()
     }
+
+    pub fn get_focused_index(&self) -> usize {
+        self.focused_view
+    }
+
+    pub fn set_focused_index(&mut self, index: usize) {
+        self.focused_view = index;
+    }
+
     pub fn focus_next(&mut self) -> Option<String> {
         if self.too_late {
             return None;

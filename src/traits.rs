@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
-use crate::ui::action::Action;
+use crate::ui::action::{Action, UiActions};
 use crate::ui::activity::Activity;
 use crate::{events::Event, model::Model};
+use log::info;
 use ratatui::{layout::Rect, Frame};
 
 pub trait IPresenter {
@@ -27,7 +28,7 @@ pub trait IEventHandler {
 }
 
 pub trait IElementEventHandler {
-    fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<Activity> {
+    fn handle_key_event(&mut self, _key: crossterm::event::KeyEvent) -> Option<UiActions> {
         None
     }
     fn handle_tick(&mut self) -> Option<Activity> {
@@ -42,7 +43,12 @@ pub trait IWidgetPresenter {
     }
 }
 
-pub trait IWindow: IPresenter + IEventHandler {}
+pub trait IWindow: IPresenter + IEventHandler {
+    fn on_child_action(&mut self, source: String, action: UiActions) -> Option<Action> {
+        info!("Window received child action: {:?} from {}", action, source);
+        None
+    }
+}
 pub trait IWidget: IWidgetPresenter + IElementEventHandler {
     fn set_enabled(&mut self, _enabled: bool) {}
     fn is_enabled(&self) -> bool {

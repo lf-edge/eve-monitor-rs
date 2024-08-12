@@ -209,7 +209,7 @@ impl InputFieldElement {
 }
 
 impl IElementEventHandler for InputFieldElement {
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
         trace!("input element {} handling key {:?}", self.caption, key.code);
         let old_value = self.value.clone();
         if let Some(value) = self.value.as_mut() {
@@ -287,9 +287,9 @@ impl IElementEventHandler for InputFieldElement {
                 _ => {}
             }
             if old_value != self.value {
-                return Some(Activity::Action(UiActions::Input {
+                return Some(UiActions::Input {
                     text: self.value.clone().unwrap_or_default(),
-                }));
+                });
             }
         }
         None

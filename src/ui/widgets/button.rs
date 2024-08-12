@@ -1,4 +1,4 @@
-use crate::ui::activity::Activity;
+use crate::ui::{action::Action, activity::Activity};
 use crossterm::event::{KeyCode, KeyEvent};
 use log::{info, trace};
 use ratatui::{
@@ -80,7 +80,7 @@ impl IWidgetPresenter for ButtonElement {
 }
 
 impl IElementEventHandler for ButtonElement {
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
         info!("Handling key event: {:?}", key);
         match key.code {
             KeyCode::Enter | KeyCode::Char(' ') => {
@@ -88,9 +88,7 @@ impl IElementEventHandler for ButtonElement {
                     self.pushed = true;
                     info!("Button pushed");
 
-                    return Some(Activity::Action(UiActions::ButtonClicked(
-                        self.label.clone(),
-                    )));
+                    return Some(UiActions::ButtonClicked(self.label.clone()));
 
                 // TODO: Release event never comes if crossterm::event::PushKeyboardEnhancementFlags
                 // is not enabled.

@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::{
     traits::{IElementEventHandler, IWidget, IWidgetPresenter},
-    ui::activity::Activity,
+    ui::{action::UiActions, activity::Activity},
 };
 
 pub struct RadioGroupElement {
@@ -30,11 +30,11 @@ impl RadioGroupElement {
             title: title.into(),
         }
     }
-    fn create_status_update(&self) -> Activity {
+    fn create_status_update(&self) -> UiActions {
         info!("RadioGroupElement: selected: {}", self.selected);
-        Activity::ui_action(crate::ui::action::UiActions::RadioGroup {
+        UiActions::RadioGroup {
             selected: self.selected,
-        })
+        }
     }
 }
 
@@ -81,24 +81,22 @@ impl IWidgetPresenter for RadioGroupElement {
 }
 
 impl IElementEventHandler for RadioGroupElement {
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
         trace!("handle_key_event: RadioGroupView {}", &self.title);
         match key.code {
             KeyCode::Up => {
                 self.focused = self.focused.saturating_sub(1);
-                return Some(Activity::redraw());
+                Some(UiActions::Redraw)
             }
             KeyCode::Down => {
                 self.focused = (self.focused + 1).min(self.labels.len() - 1);
-                return Some(Activity::redraw());
+                Some(UiActions::Redraw)
             }
             KeyCode::Enter | KeyCode::Char(' ') => {
                 self.selected = self.focused;
-                return Some(self.create_status_update());
+                Some(self.create_status_update())
             }
-            _ => {
-                return None;
-            }
+            _ => None,
         }
     }
 }

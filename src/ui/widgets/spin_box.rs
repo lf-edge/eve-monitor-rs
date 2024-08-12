@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::{
     traits::{IElementEventHandler, IWidget, IWidgetPresenter},
-    ui::activity::Activity,
+    ui::{action::UiActions, activity::Activity},
 };
 #[derive(PartialEq)]
 pub enum SpinBoxLayout {
@@ -55,11 +55,11 @@ impl SpinBoxElement {
         self
     }
 
-    fn create_status_update(&self) -> Activity {
+    fn create_status_update(&self) -> UiActions {
         info!("SpinBoxElement: selected: {}", self.selected);
-        Activity::ui_action(crate::ui::action::UiActions::SpinBox {
+        UiActions::SpinBox {
             selected: self.selected,
-        })
+        }
     }
 
     fn on_up(&mut self) {
@@ -106,7 +106,7 @@ impl SpinBoxElement {
 }
 
 impl IElementEventHandler for SpinBoxElement {
-    fn handle_key_event(&mut self, key: crossterm::event::KeyEvent) -> Option<Activity> {
+    fn handle_key_event(&mut self, key: crossterm::event::KeyEvent) -> Option<UiActions> {
         if self.layout == SpinBoxLayout::Horizontal {
             match key {
                 crossterm::event::KeyEvent {

@@ -1,11 +1,10 @@
 use crate::events;
 use crate::model::Model;
-use crate::ui::activity::Activity;
 use std::borrow::BorrowMut;
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::HashMap;
 use std::{fmt::Debug, rc::Rc};
 
-use crossterm::event::{KeyCode, KeyEvent};
+use crossterm::event::KeyEvent;
 use indexmap::IndexMap;
 use log::{debug, trace, warn};
 use ratatui::layout::Rect;
@@ -23,7 +22,6 @@ pub type LayoutMap = HashMap<String, Rect>;
 
 pub type LayoutFn<D> = Rc<dyn Fn(&mut Window<D>, &Rect, &Rc<Model>)>;
 pub type RenderFn<D> = Rc<dyn Fn(&mut Window<D>, &Rect, &mut ratatui::Frame<'_>, &Rc<Model>)>;
-pub type ActionFn<D> = Rc<dyn Fn(Action, &mut D) -> Option<Action>>;
 pub type ChildActionFn<D> = Rc<dyn Fn(&mut Window<D>, &String, &UiActions) -> Option<Action>>;
 
 pub struct WindowBuilder<D> {
@@ -38,7 +36,6 @@ pub struct WindowBuilder<D> {
     // initial focus
     focused_view: Option<String>,
 
-    on_action: Option<ActionFn<D>>,
     on_child_ui_action: Option<ChildActionFn<D>>,
     on_init: Option<Rc<dyn Fn(&mut Window<D>)>>,
 
@@ -66,14 +63,6 @@ impl<D> WindowBuilder<D> {
         F: Fn(&mut Window<D>, &Rect, &mut ratatui::Frame<'_>, &Rc<Model>) + 'static,
     {
         self.do_render = Some(Rc::new(do_render));
-        self
-    }
-
-    pub fn with_on_action<F>(mut self, on_action: F) -> Self
-    where
-        F: Fn(Action, &mut D) -> Option<Action> + 'static,
-    {
-        self.on_action = Some(Rc::new(on_action));
         self
     }
 
@@ -152,7 +141,6 @@ impl<D> WindowBuilder<D> {
             self.widgets,
             self.do_layout,
             self.do_render,
-            self.on_action,
             self.on_child_ui_action,
             self.on_key_event,
             self.on_init,
@@ -168,7 +156,6 @@ pub struct Window<D> {
     layout: LayoutMap,
     do_layout: Option<LayoutFn<D>>,
     do_render: Option<RenderFn<D>>,
-    on_action: Option<ActionFn<D>>,
     on_init: Option<Rc<dyn Fn(&mut Window<D>)>>,
     on_child_ui_action: Option<ChildActionFn<D>>,
     on_key_event: Option<Rc<dyn Fn(&mut Window<D>, KeyEvent) -> Option<Action>>>,
@@ -189,7 +176,6 @@ impl<D> Window<D> {
         widgets: WidgetMap,
         do_layout: Option<LayoutFn<D>>,
         do_render: Option<RenderFn<D>>,
-        on_action: Option<ActionFn<D>>,
         on_child_ui_action: Option<ChildActionFn<D>>,
         on_key_event: Option<Rc<dyn Fn(&mut Window<D>, KeyEvent) -> Option<Action>>>,
         on_init: Option<Rc<dyn Fn(&mut Window<D>)>>,
@@ -202,7 +188,6 @@ impl<D> Window<D> {
             layout: HashMap::new(),
             do_layout,
             do_render,
-            on_action,
             on_child_ui_action,
             on_key_event,
             state,
@@ -219,7 +204,6 @@ impl<D> Window<D> {
             do_render: None,
             tab_order: None,
             focused_view: None,
-            on_action: None,
             on_child_ui_action: None,
             on_key_event: None,
             state: None,

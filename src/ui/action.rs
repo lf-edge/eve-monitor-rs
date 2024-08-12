@@ -11,6 +11,7 @@ pub enum UiActions {
     DismissDialog,
     MonActions(MonActions),
     EditIfaceConfig(String),
+    TabChanged(String, String),
 }
 
 #[derive(Debug, Clone)]
@@ -30,6 +31,11 @@ impl Action {
     }
     pub fn target<S: Into<String>>(mut self, target: S) -> Self {
         self.target = Some(target.into());
+        self
+    }
+
+    pub fn source<S: Into<String>>(mut self, source: S) -> Self {
+        self.source = source.into();
         self
     }
 }

@@ -38,18 +38,19 @@ pub struct Dialog<D> {
 }
 
 impl<D: 'static> Dialog<D> {
-    pub fn new(
+    pub fn new<S: Into<String>>(
         size: (u16, u16),
-        name: String,
-        buttons: Vec<String>,
+        name: S,
+        buttons: Vec<S>,
         focused_button: &str,
         state: D,
     ) -> Self {
+        let buttons: Vec<String> = buttons.into_iter().map(|s| s.into()).collect();
         // create buttons and add them to the window builder
         let mut widgets = WidgetMap::new();
         for button_name in buttons.iter() {
             let button = ButtonElement::new(button_name);
-            widgets.insert(button_name.to_string(), Box::new(button));
+            widgets.insert(button_name.into(), Box::new(button));
         }
 
         let focus = FocusTracker::new(
@@ -59,7 +60,7 @@ impl<D: 'static> Dialog<D> {
         );
 
         Self {
-            name,
+            name: name.into(),
             focus,
             widgets,
             size,
@@ -181,32 +182,44 @@ impl<D> IVisible for Dialog<D> {}
 impl<D> IEventHandler for Dialog<D> {
     fn handle_event(&mut self, event: events::Event) -> Option<Action> {
         match event {
-            events::Event::Key(key) => self.handle_key_event(key)?.try_into_action(&self.name),
+            events::Event::Key(key) => {
+                let next_action = self.handle_key_event(key)?;
+                Some(Action::new(&self.name, next_action))
+            }
             _ => None,
         }
     }
 }
 impl<D> IElementEventHandler for Dialog<D> {
-    fn handle_key_event(&mut self, key: KeyEvent) -> Option<Activity> {
+    fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
         trace!("Handling key event for dialog {}: {:?}", self.name, key);
         // if Escape is pressed then dismiss the dialog
         if key.code == crossterm::event::KeyCode::Esc {
             trace!("Dismissing dialog: {}", self.name);
-            return Some(Activity::Action(UiActions::DismissDialog));
+            return Some(UiActions::DismissDialog);
         }
 
         if let Some(action) = self.focus.handle_key_event(key) {
-            if let UiActions::ButtonClicked(ref name) = action {
-                if name == "Cancel" {
-                    return Some(Activity::Action(UiActions::DismissDialog));
-                }
-            }
-            return Some(Activity::Action(action));
+            return Some(action);
         }
 
-        self.widgets
+        if let Some(action) = self
+            .widgets
             .get_mut(&self.focus.get_focused_view()?)
             .unwrap()
             .handle_key_event(key)
+        {
+            match action {
+                UiActions::ButtonClicked(ref name) => {
+                    if name == "Ok" || name == "Yes" {
+                        return Some(action);
+                    } else {
+                        return Some(UiActions::DismissDialog);
+                    }
+                }
+                _ => return Some(action),
+            }
+        }
+        return None;
     }
 }

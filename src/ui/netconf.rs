@@ -7,11 +7,11 @@ use std::{
 use crate::{
     device::network::NetworkInterfaceStatus,
     events::Event::{self, Key},
-    traits::{IEventHandler, IWindow},
+    traits::{IAction, IEventHandler, IWindow},
     ui::{action::UiActions, focus_tracker::FocusMode, widgets::button::ButtonElement},
 };
 use crossterm::event::{KeyCode, KeyModifiers};
-use log::debug;
+use log::{debug, error};
 use ratatui::{
     layout::{Constraint, Flex, Layout, Margin, Rect},
     style::{Color, Modifier, Style, Stylize},
@@ -44,6 +44,8 @@ pub struct NetworkDialog {
     tab_widgets: HashMap<NetworkTabs, WidgetMap>,
     spinbox_state: HashMap<NetworkTabs, usize>,
     interface_name: String,
+    ip: String,
+    gw: String,
 }
 
 #[derive(
@@ -74,7 +76,11 @@ impl NetworkDialog {
         );
 
         // find first ipv4 address
-        let ip = data.ipv4.unwrap().first().unwrap().clone().to_string();
+        let ip = data
+            .ipv4
+            .map(|i| i.first().map(|g| g.to_string()).unwrap_or("".to_string()))
+            .unwrap_or("".to_string());
+        let gw = data.gw.map(|f| f.to_string()).unwrap_or("".to_string());
 
         ip_fields.insert(
             "ip".to_string(),
@@ -82,7 +88,7 @@ impl NetworkDialog {
         );
         ip_fields.insert(
             "gateway".to_string(),
-            Box::new(InputFieldElement::new("Gateway", Some(&"".to_string()))),
+            Box::new(InputFieldElement::new("Gateway", Some(gw.as_str()))),
         );
         ip_fields.insert(
             "dns".to_string(),
@@ -144,8 +150,10 @@ impl NetworkDialog {
             page_widgets,
             tab_widgets,
             selected_tab: NetworkTabs::IP,
-            interface_name: "Home".to_string(),
+            interface_name: data.name,
             spinbox_state,
+            ip: "".to_string(),
+            gw: "".to_string(),
         }
     }
 
@@ -292,8 +300,35 @@ impl IEventHandler for NetworkDialog {
                 debug!("focused view {}", focus);
                 if let Some(widget) = self.page_widgets.get_mut(&focus) {
                     if let Some(activity) = widget.handle_key_event(key) {
-                        return activity.try_into_action("edit network");
+                        let widget_action = activity.try_into_action("edit network");
+                        debug!("WID AC {:?}", widget_action);
+                        if let Some(action) = widget_action {
+                            match &action.action {
+                                UiActions::ButtonClicked(name) => match name.as_str() {
+                                    "ok" => {
+                                        return Some(Action::new(
+                                            "edit network",
+                                            UiActions::UpdateIP {
+                                                iface: self.interface_name.clone(),
+                                                ip: self.ip.clone(),
+                                                gw: self.gw.clone(),
+                                            },
+                                        ));
+                                    }
+                                    "cancel" => {
+                                        return Some(Action::new(
+                                            "edit network",
+                                            UiActions::DismissDialog,
+                                        ));
+                                    }
+                                    _ => {}
+                                },
+                                _ => {}
+                            }
+                        }
                     }
+                } else {
+                    error!("Active widget {} not found", focus);
                 }
 
                 let tab_widgets = &mut self.tab_widgets.get_mut(&self.selected_tab)?;
@@ -307,6 +342,16 @@ impl IEventHandler for NetworkDialog {
                         debug!("updated spinbox_state {selected}");
                         None
                     }
+                    UiActions::Input { text } => {
+                        debug!("SOURCE: {} text {}", focus, text);
+                        match focus.as_str() {
+                            "ip" => self.ip = text,
+                            "gateway" => self.gw = text,
+                            _ => {}
+                        }
+                        None
+                    }
+
                     other => Some(Action::new("edit network", other)),
                 }
             }

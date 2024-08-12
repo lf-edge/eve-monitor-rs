@@ -1,8 +1,9 @@
-use crate::ui::action::UiActions;
+use crate::{events::Event, ui::action::UiActions};
 use crossterm::event::KeyEvent;
 
 use super::action::Action;
 
+#[derive(Debug)]
 pub enum Activity {
     Action(UiActions),
     Event(KeyEvent),

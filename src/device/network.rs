@@ -1,6 +1,8 @@
 use std::{clone, net::IpAddr};
 
-use crate::ipc::eve_types::{DhcpType, NetworkPortConfig, NetworkPortStatus, WirelessType};
+use crate::ipc::eve_types::{
+    DhcpType, NetworkPortConfig, NetworkPortStatus, NetworkProxyType, ProxyEntry, WirelessType,
+};
 use macaddr::MacAddr;
 
 pub struct NetworkStatus {
@@ -40,6 +42,145 @@ impl NetworkType {
     }
 }
 
+pub enum IpConfig {
+    Static {
+        ip: Vec<IpAddr>,
+        gw: IpAddr,
+        ntp_servers: Option<Vec<IpAddr>>,
+        routes: Option<Vec<IpAddr>>,
+    },
+    Dhcp,
+}
+
+pub enum PhyConfig {
+    Ethernet { mtu: u32 },
+    WiFi { ssid: String, password: String },
+    Cellular { apn: String, slot: u32 },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ProxyHost {
+    server: String,
+    port: u32,
+}
+
+impl ProxyHost {
+    pub fn to_url(&self) -> String {
+        format!("{}:{}", self.server, self.port)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ProxyConfig {
+    None,
+    Pac {
+        url: String,
+    },
+    Manual {
+        http: Option<ProxyHost>,
+        https: Option<ProxyHost>,
+        ftp: Option<ProxyHost>,
+        socks: Option<ProxyHost>,
+    },
+    Wad {
+        url: String,
+    },
+}
+
+impl ProxyConfig {
+    fn is_manual(&self) -> bool {
+        if let ProxyConfig::Manual {
+            http,
+            https,
+            ftp,
+            socks,
+        } = self
+        {
+            http.is_some() || https.is_some() || ftp.is_some() || socks.is_some()
+        } else {
+            false
+        }
+    }
+}
+
+impl From<&crate::ipc::eve_types::ProxyConfig> for ProxyConfig {
+    fn from(port_proxy_config: &crate::ipc::eve_types::ProxyConfig) -> Self {
+        let iface_proxy_config = if port_proxy_config.network_proxy_enable {
+            ProxyConfig::Wad {
+                url: port_proxy_config.network_proxy_url.clone(),
+            }
+        } else if !port_proxy_config.pacfile.is_empty() {
+            ProxyConfig::Pac {
+                url: port_proxy_config.pacfile.clone(),
+            }
+        } else if let Some(proxies) = &port_proxy_config.proxies {
+            let mut http_proxy = None;
+            let mut https_proxy = None;
+            let mut ftp_proxy = None;
+            let mut socks_proxy = None;
+
+            proxies.iter().for_each(|proxy| match proxy.proxy_type {
+                NetworkProxyType::HTTP => {
+                    http_proxy = Some(ProxyHost {
+                        server: proxy.server.clone(),
+                        port: proxy.port,
+                    });
+                }
+                NetworkProxyType::SOCKS => {
+                    socks_proxy = Some(ProxyHost {
+                        server: proxy.server.clone(),
+                        port: proxy.port,
+                    });
+                }
+                NetworkProxyType::FTP => {
+                    ftp_proxy = Some(ProxyHost {
+                        server: proxy.server.clone(),
+                        port: proxy.port,
+                    });
+                }
+                NetworkProxyType::HTTPS => {
+                    https_proxy = Some(ProxyHost {
+                        server: proxy.server.clone(),
+                        port: proxy.port,
+                    });
+                }
+                NetworkProxyType::NOPROXY => {}
+                NetworkProxyType::LAST => {}
+            });
+
+            let manual_proxies = ProxyConfig::Manual {
+                http: http_proxy,
+                https: https_proxy,
+                ftp: ftp_proxy,
+                socks: socks_proxy,
+            };
+
+            if manual_proxies.is_manual() {
+                manual_proxies
+            } else {
+                ProxyConfig::None
+            }
+        } else {
+            ProxyConfig::None
+        };
+        iface_proxy_config
+    }
+}
+
+impl Default for PhyConfig {
+    fn default() -> Self {
+        PhyConfig::Ethernet { mtu: 1500 }
+    }
+}
+
+pub struct InterfaceConfig {
+    pub name: String,
+    pub ip_config: IpConfig,
+    pub phy_config: PhyConfig,
+    pub proxy_config: ProxyConfig,
+    pub proxy_certificate: Option<String>,
+}
+
 //TODO: convert to enum and create a separate struct for common fields
 #[derive(Debug, Clone, PartialEq)]
 pub struct NetworkInterfaceStatus {
@@ -55,12 +196,10 @@ pub struct NetworkInterfaceStatus {
     pub dns: Option<Vec<IpAddr>>,
     pub gw: Option<IpAddr>,
     pub is_dhcp: bool,
+    pub proxy_config: ProxyConfig,
+    pub domain: Option<String>,
+    pub cost: u8,
 }
-
-// pub struct NetworkInterfaceConfig {
-//     pub name: String,
-//     pub gw: Option<IpAddr>,
-// }
 
 impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
     fn from(port: &NetworkPortStatus) -> Self {
@@ -144,6 +283,13 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             dns,
             gw,
             is_dhcp,
+            cost: port.cost,
+            domain: if port.domain_name.is_empty() {
+                None
+            } else {
+                Some(port.domain_name.clone())
+            },
+            proxy_config: (&port.proxy_config).into(),
         }
     }
 }

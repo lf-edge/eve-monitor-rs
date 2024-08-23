@@ -3,13 +3,12 @@ use crate::{actions::MonActions, traits::IAction};
 pub enum UiActions {
     Quit,
     Redraw,
-    CheckBox { checked: bool },
     RadioGroup { selected: usize },
     SpinBox { selected: usize },
     Input { text: String },
     ButtonClicked(String),
     DismissDialog,
-    MonActions(MonActions),
+    AppAction(MonActions),
     EditIfaceConfig(String),
     TabChanged(String, String),
 }

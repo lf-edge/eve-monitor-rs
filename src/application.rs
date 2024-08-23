@@ -79,7 +79,8 @@ impl Application {
     }
 
     fn is_desktop() -> bool {
-        std::env::var("XDG_RUNTIME_DIR").is_ok()
+        //std::env::var("XDG_RUNTIME_DIR").is_ok()
+        false
     }
 
     pub fn handle_ipc_message(&mut self, msg: IpcMessage) {

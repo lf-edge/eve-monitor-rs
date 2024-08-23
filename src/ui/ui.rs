@@ -1,4 +1,8 @@
-use crate::{device::network::NetworkInterfaceStatus, traits::IPresenter};
+use crate::{
+    device::network::NetworkInterfaceStatus,
+    traits::{IPresenter, IWindow},
+    ui::ipdialog::create_ip_dialog,
+};
 use core::fmt::Debug;
 use crossterm::event::{KeyCode, KeyModifiers};
 use log::{debug, info, warn};
@@ -16,18 +20,17 @@ use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    actions::{IpDialogState, MainWndState, MonActions},
+    actions::{MainWndState, MonActions},
     device::dmesg::DmesgViewer,
     events::Event,
     model::Model,
     terminal::TerminalWrapper,
     traits::IEventHandler,
-    ui::{action::UiActions, netconf::NetworkDialog},
+    ui::action::UiActions,
 };
 
 use super::{
     action::Action,
-    dialog::Dialog,
     homepage::HomePage,
     layer_stack::LayerStack,
     networkpage::create_network_page,
@@ -55,7 +58,7 @@ pub struct Ui {
 }
 
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
-enum UiTabs {
+pub enum UiTabs {
     #[default]
     //Debug,
     Home,
@@ -141,27 +144,27 @@ impl Ui {
             .widget("3-2", spinner_2)
             .with_layout(do_layout)
             .with_focused_view("0-3")
-            .on_action(|action, state: &mut MainWndState| {
+            .with_on_child_ui_action(|w: &mut Window<MainWndState>, _source, action| {
                 debug!("on_action Action: {:?}", action);
-                match action.action {
-                    UiActions::CheckBox { checked: _ } => todo!(),
+                match action {
                     UiActions::RadioGroup { selected } => {
                         info!("RadioGroup updated: {}", selected);
                     }
                     UiActions::Input { text } => {
-                        info!("Input updated: {}", &text);
-                        state.ip = text;
+                        info!("Input updated: {}", text);
+                        w.state.ip = text.clone();
                     }
                     UiActions::ButtonClicked(_) => {
-                        state.a += 1;
-                        info!("Button clicked: counter {}", state.a);
+                        w.state.a += 1;
+                        info!("Button clicked: counter {}", w.state.a);
                         // Send user action to indicate that the state was updated
-                        return Some(UiActions::MonActions(MonActions::MainWndStateUpdated(
-                            state.clone(),
-                        )));
+                        return Some(Action::new(
+                            "",
+                            UiActions::AppAction(MonActions::MainWndStateUpdated(w.state.clone())),
+                        ));
                     }
                     _ => {
-                        if action.action != UiActions::Redraw {
+                        if *action != UiActions::Redraw {
                             warn!("Unhandled action: {:?}", action);
                         }
                     }
@@ -197,27 +200,27 @@ impl Ui {
     }
 
     pub fn init(&mut self) {
-        let w = self.create_main_wnd();
+        // let w = self.create_main_wnd();
 
         //self.views[UiTabs::Debug as usize].push(Box::new(w));
 
-        let s = IpDialogState {
-            ip: "10.208.13.10".to_string(),
-            mode: "DHCP".to_string(),
-            gw: "1.1.1.1".to_string(),
-        };
+        // let s = IpDialogState {
+        //     ip: "10.208.13.10".to_string(),
+        //     mode: "DHCP".to_string(),
+        //     gw: "1.1.1.1".to_string(),
+        // };
 
-        let d: Dialog<MonActions> = Dialog::new(
-            (50, 20),
-            "confirm".to_string(),
-            vec!["Ok".to_string(), "Cancel".to_string()],
-            "Cancel",
-            MonActions::NetworkInterfaceUpdated(s),
-        );
-
-        //self.views[UiTabs::Debug as usize].push(Box::new(d));
+        // let d: Dialog<MonActions> = Dialog::new(
+        //     (50, 20),
+        //     "confirm",
+        //     vec!["Ok", "Cancel"],
+        //     "Cancel",
+        //     MonActions::NetworkInterfaceUpdated(s),
+        // );
 
         self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
+
+        // self.views[UiTabs::Home as usize].push(Box::new(d));
 
         self.views[UiTabs::Network as usize].push(Box::new(create_network_page()));
 
@@ -282,30 +285,32 @@ impl Ui {
                 if (key.code == KeyCode::Char('p')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {
                 debug!("CTRL+p: manual layer.pop() requested");
-                self.views[self.selected_tab as usize].pop();
+                self.pop_layer();
             }
 
             // show dialog on ctrl+d
-            Event::Key(key)
-                if (key.code == KeyCode::Char('d')) && (key.modifiers == KeyModifiers::CONTROL) =>
-            {
-                debug!("CTRL+d: show dialog");
+            // Event::Key(key)
+            //     if (key.code == KeyCode::Char('d')) && (key.modifiers == KeyModifiers::CONTROL) =>
+            // {
+            //     debug!("CTRL+d: show dialog");
 
-                let s = IpDialogState {
-                    ip: "10.208.13.10".to_string(),
-                    mode: "DHCP".to_string(),
-                    gw: "1.1.1.1".to_string(),
-                };
+            //     // let s = IpDialogState {
+            //     //     ip: "10.208.13.10".to_string(),
+            //     //     mode: "DHCP".to_string(),
+            //     //     gw: "1.1.1.1".to_string(),
+            //     // };
 
-                let d: Dialog<MonActions> = Dialog::new(
-                    (50, 30),
-                    "confirm".to_string(),
-                    vec!["Ok".to_string(), "Cancel".to_string()],
-                    "Cancel",
-                    MonActions::NetworkInterfaceUpdated(s),
-                );
-                self.views[self.selected_tab as usize].push(Box::new(d));
-            }
+            //     // let d: Dialog<MonActions> = Dialog::new(
+            //     //     (50, 30),
+            //     //     "confirm".to_string(),
+            //     //     vec!["Ok".to_string(), "Cancel".to_string()],
+            //     //     "Cancel",
+            //     //     MonActions::NetworkInterfaceUpdated(s),
+            //     // );
+
+            //     let d = create_ip_dialog();
+            //     self.push_layer(d);
+            // }
 
             // show network edit dialog on ctrl+e
             Event::Key(key)
@@ -345,8 +350,18 @@ impl Ui {
                 {
                     match action.action {
                         UiActions::DismissDialog => {
-                            self.views[self.selected_tab as usize].pop();
+                            self.pop_layer();
                         }
+
+                        UiActions::ButtonClicked(name) => match name.as_str() {
+                            "Ok" => {
+                                self.pop_layer();
+                            }
+                            "Cancel" => {
+                                self.pop_layer();
+                            }
+                            _ => {}
+                        },
 
                         _ => {
                             return Some(action);
@@ -382,9 +397,17 @@ impl Ui {
         None
     }
 
+    fn push_layer(&mut self, d: impl IWindow + 'static) {
+        self.views[self.selected_tab as usize].push(Box::new(d))
+    }
+
+    fn pop_layer(&mut self) -> Option<Box<dyn IWindow>> {
+        self.views[self.selected_tab as usize].pop()
+    }
+
     pub fn show_ip_dialog(&mut self, iface: NetworkInterfaceStatus) {
-        let d: NetworkDialog = NetworkDialog::new(iface);
-        self.views[self.selected_tab as usize].push(Box::new(d));
+        let d = create_ip_dialog(&iface);
+        self.push_layer(d);
     }
 }
 

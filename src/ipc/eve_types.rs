@@ -292,9 +292,9 @@ pub struct WirelessStatus {
 #[serde(rename_all = "PascalCase")]
 pub struct ProxyEntry {
     #[serde(rename = "type")]
-    proxy_type: NetworkProxyType,
-    server: String,
-    port: u32,
+    pub proxy_type: NetworkProxyType,
+    pub server: String,
+    pub port: u32,
 }
 
 #[derive(Debug, Deserialize, Serialize)]

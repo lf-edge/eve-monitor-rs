@@ -9,7 +9,12 @@ use ratatui::{
     Frame,
 };
 
-use crate::{model::Model, traits::IWindow};
+use crate::{
+    actions::MonActions,
+    device::network::{NetworkInterfaceStatus, ProxyConfig},
+    model::Model,
+    traits::IWindow,
+};
 
 use super::{
     action::{Action, UiActions},
@@ -21,12 +26,36 @@ use super::{
     window::Window,
 };
 
-#[derive(Default)]
+#[derive(Clone, Debug, PartialEq)]
+enum ProxyType {
+    None,
+    Manual,
+    Pac,
+    Wad,
+}
+
+// here we deal with Strings becasue we update then from InputFiled
+#[derive(Clone, Debug, PartialEq)]
 pub struct IpDialogState {
     iface_name: String,
     selected_tab: String,
     focus_tarcker_state: HashMap<String, usize>,
     ip_dhcp: bool,
+    proxy_type: ProxyType,
+    ipv4: String,
+    ipv6: String,
+    mask: String,
+    gw: String,
+    proxy_url: String,
+    proxy_certificate: String,
+    pac_file: String,
+    domain: String,
+    dns: String,
+    // manual proxies
+    proxy_http: String,
+    proxy_https: String,
+    proxy_ftp: String,
+    proxy_socks: String,
 }
 
 impl IpDialogState {
@@ -39,10 +68,25 @@ impl IpDialogState {
                 if self.ip_dhcp {
                     vec!["ip_spinner"]
                 } else {
-                    vec!["ip_spinner", "ip", "mask", "gw"]
+                    vec!["ip_spinner", "ipv4", "ipv6", "mask", "gw", "domain", "dns"]
                 }
             }
-            "Proxy" => vec!["proxy_spinner", "url"],
+            "Proxy" => match self.proxy_type {
+                ProxyType::None => vec!["proxy_spinner"],
+                ProxyType::Manual => {
+                    vec![
+                        "proxy_spinner",
+                        "http",
+                        "https",
+                        "ftp",
+                        "socks",
+                        "certificate",
+                        "upload",
+                    ]
+                }
+                ProxyType::Wad => vec!["proxy_spinner"],
+                ProxyType::Pac => vec!["proxy_spinner", "pac_file", "upload"],
+            },
             _ => vec![],
         };
         order.push("ok");
@@ -91,19 +135,73 @@ fn create_widgets(w: &mut Window<IpDialogState>) {
         "ip_spinner",
         SpinBoxElement::new(vec!["DHCP", "Static"]).selected(index),
     );
-    w.add_widget("ip", InputFieldElement::new("IPv4", Some("192.168.1.1")));
+
+    w.add_widget(
+        "ipv4",
+        InputFieldElement::new("IPv4", Some(w.state.ipv4.as_str()))
+            .with_text_hint("e.g. 192.168.0.1"),
+    );
+
+    w.add_widget(
+        "ipv6",
+        InputFieldElement::new("IPv6", Some(w.state.ipv6.as_str())).with_text_hint("e.g. c820::1"),
+    );
+
     w.add_widget(
         "mask",
-        InputFieldElement::new("Mask", Some("255.255.255.0")),
+        InputFieldElement::new("Mask", Some(w.state.mask.as_str()))
+            .with_text_hint("w.g. 255.255.255.0"),
     );
-    w.add_widget("gw", InputFieldElement::new("Gateway", Some("192.168.0.1")));
+    w.add_widget(
+        "gw",
+        InputFieldElement::new("Gateway", Some(w.state.gw.as_str()))
+            .with_text_hint("e.g. 192.168.1.1"),
+    );
+    w.add_widget(
+        "dns",
+        InputFieldElement::new("DNS", Some(w.state.dns.as_str()))
+            .with_text_hint("e.g. 1.1.1.1, 4.4.4.4"),
+    );
+    w.add_widget(
+        "domain",
+        InputFieldElement::new("Domain", Some(w.state.domain.as_str()))
+            .with_text_hint("e.g. example.com"),
+    );
 
     // proxy widgets
-    w.add_widget("proxy_spinner", SpinBoxElement::new(vec!["None", "Manual"]));
     w.add_widget(
-        "url",
-        InputFieldElement::new("URL", Some("http://proxy.com")),
+        "proxy_spinner",
+        SpinBoxElement::new(vec!["None", "Manual", "Pac"]),
     );
+    w.add_widget(
+        "http",
+        InputFieldElement::new("HTTP", Some(&w.state.proxy_http.as_str())),
+    );
+    w.add_widget(
+        "https",
+        InputFieldElement::new("HTTPs", Some(&w.state.proxy_https.as_str())),
+    );
+    w.add_widget(
+        "ftp",
+        InputFieldElement::new("FTP", Some(&w.state.proxy_ftp.as_str())),
+    );
+    w.add_widget(
+        "socks",
+        InputFieldElement::new("SOCKS", Some(&w.state.proxy_socks.as_str())),
+    );
+    w.add_widget(
+        "pac_file",
+        InputFieldElement::new("PAC file", Some(&w.state.pac_file.as_str())).enabled(false),
+    );
+    w.add_widget(
+        "certificate",
+        InputFieldElement::new(
+            "Proxy Certificcate",
+            Some(&w.state.proxy_certificate.as_str()),
+        )
+        .enabled(false),
+    );
+    w.add_widget("upload", ButtonElement::new("Upload"));
 }
 
 fn update_ip_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
@@ -115,41 +213,65 @@ fn update_ip_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
     w.update_layout("ip_spinner", spinner_rect);
 
     if !w.state.ip_dhcp {
-        let [ip, mask, gw] = Layout::vertical(vec![
+        let [ip, ipv6, mask, gw, domain, dns] = Layout::vertical(vec![
+            Constraint::Length(3),
+            Constraint::Length(3),
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
         ])
         .areas(input_rect);
 
-        w.update_layout("ip", ip);
+        w.update_layout("ipv4", ip);
         w.update_layout("mask", mask);
         w.update_layout("gw", gw);
-        //w.set_focus_tracker_tab_order(vec!["ip_spinner", "ip", "mask", "gw"]);
-        //w.set_focused_view(w.state.focus_tarcker_state["IP"]);
+        w.update_layout("ipv6", ipv6);
+        w.update_layout("domain", domain);
+        w.update_layout("dns", dns);
     }
 }
 fn update_proxy_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
     debug!("update_proxy_layout");
     let [spinner_rect, input_rect] =
-        Layout::vertical(vec![Constraint::Length(3), Constraint::Fill(1)]).areas(*rect);
+        Layout::vertical(vec![Constraint::Length(1), Constraint::Fill(1)]).areas(*rect);
 
     w.update_layout("proxy_spinner", spinner_rect);
 
-    if !w.state.ip_dhcp {
-        let [url, ip, mask, gw] = Layout::vertical(vec![
-            Constraint::Length(3),
-            Constraint::Length(3),
-            Constraint::Length(3),
-            Constraint::Length(3),
-        ])
-        .areas(input_rect);
+    match w.state.proxy_type {
+        ProxyType::None => {}
+        ProxyType::Manual => {
+            let [http, https, ftp, socks, certificate] = Layout::vertical(vec![
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+                Constraint::Length(3),
+            ])
+            .areas(input_rect);
 
-        w.update_layout("url", url);
-        // w.update_layout("mask", mask);
-        // w.update_layout("gw", gw);
-        // w.set_focus_tracker_tab_order(vec!["ip_spinner", "ip", "mask", "gw"]);
-        //w.set_focused_view(w.state.focus_tarcker_state["Proxy"]);
+            let [cert_str, upload_button] =
+                Layout::horizontal(vec![Constraint::Fill(1), Constraint::Length(10)])
+                    .flex(Flex::End)
+                    .areas(certificate);
+
+            w.update_layout("http", http);
+            w.update_layout("https", https);
+            w.update_layout("ftp", ftp);
+            w.update_layout("socks", socks);
+            w.update_layout("certificate", cert_str);
+            w.update_layout("upload", upload_button);
+        }
+        ProxyType::Pac => {
+            let [pac_file_area] = Layout::vertical(vec![Constraint::Length(3)]).areas(input_rect);
+            let [pac_url, upload] =
+                Layout::horizontal(vec![Constraint::Fill(1), Constraint::Length(10)])
+                    .flex(Flex::SpaceBetween)
+                    .areas(pac_file_area);
+            w.update_layout("pac_file", pac_url);
+            w.update_layout("upload", upload);
+        }
+        ProxyType::Wad => {}
     }
 }
 
@@ -169,7 +291,7 @@ fn ip_dialog_layout(w: &mut Window<IpDialogState>, rect: &Rect, model: &Rc<Model
     debug!("ip_dialog_layout. selected tab: {}", w.state.selected_tab);
     w.clear_layout();
 
-    let rect = centered_rect(60, 60, *rect);
+    let rect = centered_rect(40, 80, *rect);
     let content_with_buttons = rect.inner(Margin {
         horizontal: 1,
         vertical: 1,
@@ -219,17 +341,6 @@ fn ip_dialog_render(
         .title(w.state.iface_name.as_str());
 
     frame.render_widget(block, frame_rect);
-
-    // // render debug rect
-    //     w.update_layout("dialog_content_rect", dialog_content_rect);
-    // let debug_rect = w.get_layout("dialog_content_rect");
-    // let block = Block::default()
-    //     .borders(Borders::ALL)
-    //     .border_type(BorderType::Rounded)
-    //     .border_style(Style::default().fg(Color::White))
-    //     .style(Style::default().bg(Color::Black))
-    //     .title("Debug");
-    // frame.render_widget(block, debug_rect);
 }
 
 fn on_key_event(w: &mut Window<IpDialogState>, key: KeyEvent) -> Option<Action> {
@@ -259,12 +370,44 @@ fn on_child_ui_action(
         UiActions::SpinBox { selected } => match source.as_str() {
             "ip_spinner" => {
                 w.state.ip_dhcp = *selected == 0;
+                update_tab_order(w);
+                Some(Action::new(source, UiActions::Redraw))
+            }
+            "proxy_spinner" => {
+                w.state.proxy_type = match *selected {
+                    0 => ProxyType::None,
+                    1 => ProxyType::Manual,
+                    2 => ProxyType::Pac,
+                    _ => ProxyType::None,
+                };
+                update_tab_order(w);
                 Some(Action::new(source, UiActions::Redraw))
             }
             _ => None,
         },
-        UiActions::ButtonClicked(name) if name == "cancel" => {
-            Some(Action::new(&w.name, UiActions::DismissDialog))
+        UiActions::ButtonClicked(name) => match name.as_str() {
+            "cancel" => Some(Action::new(&w.name, UiActions::DismissDialog)),
+            "ok" => Some(Action::new(
+                &w.name,
+                UiActions::AppAction(MonActions::NetworkInterfaceUpdated(w.state.clone())),
+            )),
+            _ => None,
+        },
+        UiActions::Input { text } => {
+            match source.as_str() {
+                "ipv4" => w.state.ipv4 = text.clone(),
+                "ipv6" => w.state.ipv6 = text.clone(),
+                "mask" => w.state.mask = text.clone(),
+                "gw" => w.state.gw = text.clone(),
+                "dns" => w.state.dns = text.clone(),
+                "domain" => w.state.domain = text.clone(),
+                "http" => w.state.proxy_http = text.clone(),
+                "https" => w.state.proxy_https = text.clone(),
+                "ftp" => w.state.proxy_ftp = text.clone(),
+                "socks" => w.state.proxy_socks = text.clone(),
+                _ => {}
+            }
+            None
         }
         _ => None,
     }
@@ -279,14 +422,7 @@ fn save_restore_ft_state(w: &mut Window<IpDialogState>, old_tab: &String, select
     w.state.selected_tab = selected_tab.clone();
 
     // restore FocusTracker state for the new tab
-    // update tab order
-    let new_tab_order = w
-        .state
-        .get_current_tab_order()
-        .iter()
-        .map(|x| x.to_string())
-        .collect::<Vec<String>>();
-    w.set_focus_tracker_tab_order(new_tab_order);
+    update_tab_order(w);
 
     // and the focused view
     let focus_tracker_state = w.state.focus_tarcker_state.get(selected_tab);
@@ -295,18 +431,118 @@ fn save_restore_ft_state(w: &mut Window<IpDialogState>, old_tab: &String, select
     }
 }
 
-pub fn create_ip_dialog() -> impl IWindow {
+fn update_tab_order(w: &mut Window<IpDialogState>) {
+    let new_tab_order = w
+        .state
+        .get_current_tab_order()
+        .iter()
+        .map(|x| x.to_string())
+        .collect::<Vec<String>>();
+    w.set_focus_tracker_tab_order(new_tab_order);
+}
+
+impl From<&NetworkInterfaceStatus> for IpDialogState {
+    fn from(iface: &NetworkInterfaceStatus) -> Self {
+        // take only the first ipv4  and ipv6 address
+        // TODO: per Milan, we may get local IPs on interfaces
+        // need to find out how to filter them out
+        // but those are just to fill the dialog, so it's not a big deal
+        // user will change them anyway
+        let ipv4 = iface
+            .ipv4
+            .as_ref()
+            .map(|ipv4: &Vec<std::net::IpAddr>| ipv4.first().cloned())
+            .flatten()
+            .map(|addr| addr.to_string())
+            .unwrap_or_default();
+
+        let ipv6 = iface
+            .ipv6
+            .as_ref()
+            .map(|ipv6: &Vec<std::net::IpAddr>| ipv6.first().cloned())
+            .flatten()
+            .map(|addr| addr.to_string())
+            .unwrap_or_default();
+
+        let proxy_type = match iface.proxy_config {
+            ProxyConfig::None => ProxyType::None,
+            ProxyConfig::Manual { .. } => ProxyType::Manual,
+            ProxyConfig::Pac { .. } => ProxyType::Pac,
+            ProxyConfig::Wad { .. } => ProxyType::Wad,
+        };
+
+        let proxy_url = if let ProxyConfig::Wad { url, .. } = &iface.proxy_config {
+            url.to_string()
+        } else {
+            "".to_string()
+        };
+
+        let pac_file = if let ProxyConfig::Pac { url, .. } = &iface.proxy_config {
+            url.to_string()
+        } else {
+            "".to_string()
+        };
+
+        let mut proxy_ftp = "".to_string();
+        let mut proxy_http = "".to_string();
+        let mut proxy_https = "".to_string();
+        let mut proxy_socks = "".to_string();
+
+        if let ProxyConfig::Manual {
+            http,
+            https,
+            ftp,
+            socks,
+        } = &iface.proxy_config
+        {
+            proxy_ftp = ftp.as_ref().map(|p| p.to_url()).unwrap_or_default();
+            proxy_http = http.as_ref().map(|p| p.to_url()).unwrap_or_default();
+            proxy_https = https.as_ref().map(|p| p.to_url()).unwrap_or_default();
+            proxy_socks = socks.as_ref().map(|p| p.to_url()).unwrap_or_default();
+        }
+
+        let dns = iface
+            .dns
+            .iter()
+            .flatten()
+            .map(|ip| ip.to_string())
+            .collect::<Vec<String>>()
+            .join(",");
+
+        let domain = iface.domain.clone().unwrap_or_default();
+
+        IpDialogState {
+            iface_name: iface.name.clone(),
+            selected_tab: "IP".to_string(),
+            focus_tarcker_state: HashMap::new(),
+            ip_dhcp: iface.is_dhcp,
+            ipv4: ipv4.clone(),
+            ipv6: ipv6.clone(),
+            proxy_type,
+            mask: "255.255.255.0".to_string(),
+            gw: iface.gw.map(|ip| ip.to_string()).unwrap_or_default(),
+            proxy_url,
+            proxy_certificate: "".to_string(),
+            pac_file,
+            domain,
+            dns,
+            proxy_ftp,
+            proxy_http,
+            proxy_https,
+            proxy_socks,
+        }
+    }
+}
+
+pub fn create_ip_dialog(iface: &NetworkInterfaceStatus) -> impl IWindow {
+    let state = IpDialogState::from(iface);
     let w = Window::builder("IP configuration")
         .with_layout(ip_dialog_layout)
         .with_render(ip_dialog_render)
         .with_on_child_ui_action(on_child_ui_action)
         .with_on_key_event(on_key_event)
         .with_on_init(on_init)
-        .with_state(IpDialogState {
-            iface_name: "example".to_string(),
-            selected_tab: "IP".to_string(),
-            ..Default::default()
-        })
+        .with_state(state)
         .build()
         .unwrap();
     w

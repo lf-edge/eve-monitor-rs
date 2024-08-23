@@ -82,8 +82,8 @@ impl InputFieldElement {
             scroll_left: 0,
             enabled: true,
             modifiers: vec![
-                InputModifiers::DisplayMode,
-                InputModifiers::DisplayPosition,
+                // InputModifiers::DisplayMode,
+                // InputModifiers::DisplayPosition,
                 InputModifiers::DisplayCaption,
             ],
             size_hint: None,
@@ -212,9 +212,14 @@ impl IElementEventHandler for InputFieldElement {
     fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
         trace!("input element {} handling key {:?}", self.caption, key.code);
         let old_value = self.value.clone();
+        let is_enabled = self.is_enabled();
         if let Some(value) = self.value.as_mut() {
             match key.code {
                 KeyCode::Char(c) => {
+                    if !is_enabled {
+                        return None;
+                    }
+
                     if let Some(f) = self.on_char.as_mut() {
                         if let Some(c) = f(&c) {
                             if self.input_mode == InputMode::Overwrite {
@@ -233,6 +238,9 @@ impl IElementEventHandler for InputFieldElement {
                     }
                 }
                 KeyCode::Backspace => {
+                    if !is_enabled {
+                        return None;
+                    }
                     if self.input_position > 0 {
                         value.remove(self.input_position - 1);
                         self.input_position -= 1;
@@ -240,6 +248,9 @@ impl IElementEventHandler for InputFieldElement {
                     }
                 }
                 KeyCode::Delete => {
+                    if !is_enabled {
+                        return None;
+                    }
                     if self.input_position < value.len() {
                         value.remove(self.input_position);
                     }

@@ -3177,3 +3177,23 @@ fn test_vault_status() {
         "#;
     let _: IpcMessage = serde_json::from_str(json_data).unwrap();
 }
+
+#[test]
+fn test_app_summary() {
+    let json_data = r#"
+        {
+          "type": "AppSummary",
+          "message": {
+            "UUIDandVersion": {
+              "UUID": "00000000-0000-0000-0000-000000000000",
+              "Version": ""
+            },
+            "TotalStarting": 1,
+            "TotalRunning": 0,
+            "TotalStopping": 0,
+            "TotalError": 0
+          }
+        }
+        "#;
+    let _: IpcMessage = serde_json::from_str(json_data).unwrap();
+}

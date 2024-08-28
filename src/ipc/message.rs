@@ -10,6 +10,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 use super::eve_types::AppInstanceStatus;
+use super::eve_types::AppInstanceSummary;
 use super::eve_types::DeviceNetworkStatus;
 use super::eve_types::DevicePortConfig;
 use super::eve_types::DevicePortConfigList;
@@ -47,6 +48,7 @@ pub enum IpcMessage {
     DownloaderStatus(DownloaderStatus),
     IOAdapters(PhysicalIOAdapterList),
     AppStatus(AppInstanceStatus),
+    AppSummary(AppInstanceSummary),
     VaultStatus(VaultStatus),
     OnboardingStatus(OnboardingStatus),
     Response {
@@ -54,7 +56,7 @@ pub enum IpcMessage {
         result: core::result::Result<String, String>,
         id: u64,
     },
-    // #[serde(untagged)]
+    #[serde(untagged)]
     Request {
         #[serde(flatten)]
         request: Request,

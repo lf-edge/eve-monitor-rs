@@ -1306,3 +1306,16 @@ pub enum PCRStatus {
     PcrEnabled = 1,  // Enabled PCR
     PcrDisabled = 2, // Disabled PCR
 }
+
+type AppCount = u8;
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct AppInstanceSummary {
+    #[serde(rename = "UUIDandVersion")]
+    pub uuid_and_version: UUIDandVersion,
+    pub total_starting: AppCount, // Total number of apps starting/booting
+    pub total_running: AppCount,  // Total number of apps in running state
+    pub total_stopping: AppCount, // Total number of apps in halting state
+    pub total_error: AppCount,    // Total number of apps in error state
+}

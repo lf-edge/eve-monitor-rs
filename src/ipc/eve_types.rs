@@ -1269,3 +1269,40 @@ pub struct IoAdapter {} // Replace with actual definition
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone, Default)]
 pub struct SnapshottingStatus {} // Replace with actual definition
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct OnboardingStatus {
+    #[serde(rename = "DeviceUUID")]
+    pub device_uuid: Uuid,
+    pub hardware_model: String, // From controller
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct VaultStatus {
+    pub name: String,
+    pub status: DataSecAtRestStatus,
+    #[serde(rename = "PCRStatus")]
+    pub pcr_status: PCRStatus,
+    pub conversion_complete: bool,
+    #[serde(flatten)]
+    pub error_and_time: ErrorAndTime, // Unknown type, skipped
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum DataSecAtRestStatus {
+    DataSecAtRestUnknown = 0,  // Status is unknown
+    DataSecAtRestDisabled = 1, // Enabled, but not being used
+    DataSecAtRestEnabled = 2,  // Enabled, and used
+    DataSecAtRestError = 4,    // Enabled, but encountered an error
+}
+
+#[repr(i32)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum PCRStatus {
+    PcrUnknown = 0,  // Status is unknown
+    PcrEnabled = 1,  // Enabled PCR
+    PcrDisabled = 2, // Disabled PCR
+}

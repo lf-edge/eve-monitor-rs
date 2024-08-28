@@ -3140,5 +3140,40 @@ fn test_app_data_full() {
             }
         }
         "#;
-    let a: IpcMessage = serde_json::from_str(json_data).unwrap();
+    let _: IpcMessage = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_onboarding_status() {
+    let json_data = r#"
+        {
+          "type": "OnboardingStatus",
+          "message": {
+            "DeviceUUID": "584a643c-c8b1-45d5-a287-84fc81e0d39c",
+            "HardwareModel": "QEMU.Standard PC (Q35 + ICH9, 2009)"
+          }
+        }
+        "#;
+    let _: IpcMessage = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_vault_status() {
+    let json_data = r#"
+        {
+          "type": "VaultStatus",
+          "message": {
+            "Name": "Application Data Store",
+            "Status": 1,
+            "PCRStatus": 2,
+            "ConversionComplete": true,
+            "Error": "TPM is either absent or not in use",
+            "ErrorTime": "2024-08-28T20:15:08.246947098Z",
+            "ErrorSeverity": 3,
+            "ErrorRetryCondition": "",
+            "ErrorEntities": null
+          }
+        }
+        "#;
+    let _: IpcMessage = serde_json::from_str(json_data).unwrap();
 }

@@ -7,6 +7,7 @@ pub mod homepage;
 pub mod ipdialog;
 pub mod layer_stack;
 // pub mod netconf;
+pub mod app_page;
 pub mod networkpage;
 pub mod statusbar;
 pub mod tools;

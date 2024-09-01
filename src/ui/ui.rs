@@ -31,6 +31,7 @@ use crate::{
 
 use super::{
     action::Action,
+    app_page::ApplicationsPage,
     homepage::HomePage,
     layer_stack::LayerStack,
     networkpage::create_network_page,
@@ -64,7 +65,7 @@ pub enum UiTabs {
     //Debug,
     Home,
     Network,
-    // Applications,
+    Applications,
     Dmesg,
 }
 
@@ -226,6 +227,7 @@ impl Ui {
 
         self.views[UiTabs::Network as usize].push(Box::new(create_network_page()));
 
+        self.views[UiTabs::Applications as usize].push(Box::new(ApplicationsPage::new()));
         self.views[UiTabs::Dmesg as usize].push(Box::new(DmesgViewer::new()));
     }
 

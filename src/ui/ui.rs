@@ -266,12 +266,14 @@ impl Ui {
     }
 
     pub fn handle_event(&mut self, event: Event) -> Option<Action> {
-        debug!("Ui handle_event {:?}", event);
+        if event != Event::Tick {
+            debug!("Ui handle_event {:?}", event);
+        }
 
         match event {
             // only fo debugging purposes
             Event::Key(key)
-                if (key.code == KeyCode::Char('q')) && (key.modifiers == KeyModifiers::CONTROL) =>
+                if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {
                 debug!("CTRL+q: application Quit requested");
                 self.action_tx
@@ -318,20 +320,20 @@ impl Ui {
             // }
 
             // show network edit dialog on ctrl+e
-            Event::Key(key)
-                if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
-            {
-                debug!("CTRL+e: show dialog");
+            // Event::Key(key)
+            //     if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
+            // {
+            //     debug!("CTRL+e: show dialog");
 
-                // let s = IpDialogState {
-                //     ip: "10.208.13.10".to_string(),
-                //     mode: "DHCP".to_string(),
-                //     gw: "1.1.1.1".to_string(),
-                // };
+            //     // let s = IpDialogState {
+            //     //     ip: "10.208.13.10".to_string(),
+            //     //     mode: "DHCP".to_string(),
+            //     //     gw: "1.1.1.1".to_string(),
+            //     // };
 
-                // let d: NetworkDialog = NetworkDialog::new();
-                // self.views[self.selected_tab as usize].push(Box::new(d));
-            }
+            //     // let d: NetworkDialog = NetworkDialog::new();
+            //     // self.views[self.selected_tab as usize].push(Box::new(d));
+            // }
 
             // handle Tab switching
             // Event::Key(key)

@@ -92,24 +92,55 @@ impl Application {
             }
             IpcMessage::NetworkStatus(cfg) => {
                 debug!("Got Network status");
-                self.raw_model.set_network_status(cfg);
+                self.model.borrow_mut().update_network_status(cfg);
             }
             IpcMessage::AppStatus(app) => {
                 debug!("Got AppStatus");
+                self.model.borrow_mut().update_app_status(app);
             }
 
-            IpcMessage::DownloaderStatus(cfg) => {
-                self.raw_model.set_downloader_status(cfg);
+            IpcMessage::DownloaderStatus(dnl) => {
                 debug!("Got DownloaderStatus");
+                self.model.borrow_mut().update_downloader_status(dnl);
+            }
+
+            // this event is guaranteed to be sent before periodic events
+            IpcMessage::AppSummary(summary) => {
+                debug!("Got AppSummary");
+                self.model.borrow_mut().update_app_summary(summary);
+            }
+
+            // this event is guaranteed to be sent before periodic events
+            IpcMessage::NodeStatus(node_status) => {
+                debug!("Got NodeStatus");
+                self.model.borrow_mut().update_node_status(node_status);
+            }
+
+            IpcMessage::OnboardingStatus(o_status) => {
+                debug!("Got OnboardingStatus");
+                self.model.borrow_mut().update_onboarding_status(o_status);
+            }
+
+            IpcMessage::VaultStatus(status) => {
+                debug!("Got VaultStatus");
+                self.model.borrow_mut().update_vault_status(status);
+            }
+
+            IpcMessage::LedBlinkCounter(led) => {
+                // self.raw_model.set_led_blink_counter(led);
+                debug!("Got LedBlinkCounter");
+            }
+
+            // this event is guaranteed to be sent before periodic events
+            IpcMessage::AppsList(app_list) => {
+                debug!("Got AppsList");
+                self.model.borrow_mut().update_app_list(app_list);
             }
 
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
             }
         }
-        self.model
-            .borrow_mut()
-            .update_from_raw_model(&self.raw_model);
     }
 
     pub fn send_dpc(&self) {

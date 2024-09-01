@@ -10,6 +10,7 @@ pub mod layer_stack;
 pub mod app_page;
 pub mod networkpage;
 pub mod statusbar;
+pub mod summary_page;
 pub mod tools;
 pub mod traits;
 pub mod ui;

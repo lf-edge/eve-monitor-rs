@@ -36,6 +36,7 @@ use super::{
     layer_stack::LayerStack,
     networkpage::create_network_page,
     statusbar::{create_status_bar, StatusBarState},
+    summary_page::SummaryPage,
     widgets::{
         button::ButtonElement,
         input_field::{InputFieldElement, InputModifiers},
@@ -63,6 +64,7 @@ pub struct Ui {
 pub enum UiTabs {
     #[default]
     //Debug,
+    Summary,
     Home,
     Network,
     Applications,
@@ -221,6 +223,7 @@ impl Ui {
         //     MonActions::NetworkInterfaceUpdated(s),
         // );
 
+        self.views[UiTabs::Summary as usize].push(Box::new(SummaryPage::new()));
         self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
 
         // self.views[UiTabs::Home as usize].push(Box::new(d));

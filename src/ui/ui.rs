@@ -55,6 +55,7 @@ pub struct Ui {
     pub views: Vec<LayerStack>,
     pub selected_tab: UiTabs,
     pub status_bar: Window<StatusBarState>,
+    first_frame: bool,
 }
 
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
@@ -81,6 +82,7 @@ impl Ui {
             views: vec![LayerStack::new(); UiTabs::COUNT],
             selected_tab: UiTabs::default(),
             status_bar: create_status_bar(),
+            first_frame: true,
         })
     }
 
@@ -236,11 +238,14 @@ impl Ui {
             let area = frame.size();
             let [tabs, body, statusbar_rect] = screen_layout.areas(area);
 
+            if self.first_frame {
+                self.first_frame = false;
+                frame.render_widget(Clear, area);
+            }
             tabs_widget
                 .select(self.selected_tab as usize)
                 .render(tabs, frame.buffer_mut());
 
-            Clear.render(body, frame.buffer_mut());
 
             // redraw from the bottom up
             let stack = &mut self.views[self.selected_tab as usize];

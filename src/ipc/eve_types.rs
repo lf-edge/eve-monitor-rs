@@ -7,6 +7,7 @@ use macaddr::MacAddr8;
 use serde::de;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use std::collections::HashMap;
 use std::default;
 use std::net::IpAddr;
 use strum::Display;
@@ -963,6 +964,7 @@ pub enum ErrorSeverity {
 #[serde(rename_all = "PascalCase")]
 pub struct ErrorEntity {
     pub entity_type: ErrorEntityType,
+    #[serde(rename = "EntityID")]
     pub entity_id: String,
 }
 
@@ -1137,6 +1139,11 @@ pub enum SwState {
     MaxState = 125,
 }
 
+impl SwState {
+    pub fn to_string(&self) -> String {
+        format!("{}", self)
+    }
+}
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct UUIDandVersion {
@@ -1272,7 +1279,7 @@ pub struct SnapshottingStatus {} // Replace with actual definition
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct OnboardingStatus {
+pub struct EveOnboardingStatus {
     #[serde(rename = "DeviceUUID")]
     pub device_uuid: Uuid,
     pub hardware_model: String, // From controller
@@ -1280,12 +1287,14 @@ pub struct OnboardingStatus {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "PascalCase")]
-pub struct VaultStatus {
+pub struct EveVaultStatus {
     pub name: String,
     pub status: DataSecAtRestStatus,
     #[serde(rename = "PCRStatus")]
     pub pcr_status: PCRStatus,
     pub conversion_complete: bool,
+    #[serde(rename = "MissmatchingPCRs")]
+    pub missmatching_pcrs: Vec<i32>,
     #[serde(flatten)]
     pub error_and_time: ErrorAndTime, // Unknown type, skipped
 }
@@ -1309,13 +1318,62 @@ pub enum PCRStatus {
 
 type AppCount = u8;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
 pub struct AppInstanceSummary {
-    #[serde(rename = "UUIDandVersion")]
-    pub uuid_and_version: UUIDandVersion,
+    //#[serde(rename = "UUIDandVersion")]
+    //pub uuid_and_version: UUIDandVersion,
     pub total_starting: AppCount, // Total number of apps starting/booting
     pub total_running: AppCount,  // Total number of apps in running state
     pub total_stopping: AppCount, // Total number of apps in halting state
     pub total_error: AppCount,    // Total number of apps in error state
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct LedBlinkCounter {
+    pub blink_counter: LedBlinkCount,
+}
+
+#[repr(u8)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum LedBlinkCount {
+    LedBlinkUndefined = 0,
+    LedBlinkWaitingForIP,
+    LedBlinkConnectingToController,
+    LedBlinkConnectedToController,
+    LedBlinkOnboarded,
+    LedBlinkRadioSilence,
+    LedBlinkOnboardingFailure = 10,
+    LedBlinkRespWithoutTLS = 12,
+    LedBlinkRespWithoutOSCP,
+    LedBlinkInvalidControllerCert,
+    LedBlinkInvalidAuthContainer,
+    LedBlinkInvalidBootstrapConfig,
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct EveNodeStatus {
+    pub server: Option<String>,
+    #[serde(deserialize_with = "zero_uuid_as_none")]
+    pub node_uuid: Option<Uuid>,
+    pub onboarded: bool,
+    pub app_instance_summary: Option<AppInstanceSummary>,
+}
+
+fn zero_uuid_as_none<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let s = String::deserialize(deserializer)?;
+    if s == "00000000-0000-0000-0000-000000000000" {
+        Ok(None)
+    } else {
+        Ok(Some(Uuid::parse_str(&s).map_err(serde::de::Error::custom)?))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct AppsList {
+    pub apps: Vec<AppInstanceStatus>,
 }

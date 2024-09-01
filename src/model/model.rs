@@ -72,7 +72,6 @@ pub struct MonitorModel {
     pub downloader: Option<DownloaderStatus>,
     pub node_status: NodeStatus,
     pub apps: HashMap<Uuid, AppInstance>,
-    pub app_summary: AppInstanceSummary,
     pub vault_status: VaultStatus,
 }
 
@@ -90,7 +89,7 @@ impl From<EveVaultStatus> for VaultStatus {
                 let err = EveError::from(vault_status.error_and_time);
 
                 let pcrs = if err.error.contains("Vault key unavailable") {
-                    Some(vault_status.missmatching_pcrs)
+                    vault_status.missmatching_pcrs
                 } else {
                     None
                 };
@@ -179,7 +178,7 @@ impl MonitorModel {
     }
 
     pub fn update_app_summary(&mut self, app_summary: AppInstanceSummary) {
-        self.app_summary = app_summary;
+        self.node_status.app_summary = app_summary;
     }
 
     pub fn update_network_status(&mut self, net_status: DeviceNetworkStatus) {
@@ -203,7 +202,6 @@ impl Default for MonitorModel {
             downloader: None,
             node_status: NodeStatus::default(),
             apps: HashMap::new(),
-            app_summary: AppInstanceSummary::default(),
             vault_status: VaultStatus::Unknown,
         }
     }

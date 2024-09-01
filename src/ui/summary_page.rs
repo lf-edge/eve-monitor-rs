@@ -244,6 +244,14 @@ fn render_vault_status(model: &Rc<Model>, frame: &mut Frame<'_>, onboarding_stat
                 Span::styled("Error: ", Style::default().fg(Color::Red)),
                 Span::styled(&err.error, Style::default().fg(Color::White)),
             ]));
+            text.push(Line::from(vec![
+                Span::styled("Affected PCRs: ", Style::default().fg(Color::White)),
+                if let Some(pcr) = pcr {
+                    Span::styled(format!("{:?}", pcr), Style::default().fg(Color::Green))
+                } else {
+                    Span::styled("N/A", Style::default().fg(Color::Yellow))
+                },
+            ]));
         }
     }
 

@@ -19,7 +19,10 @@ use crate::{
     traits::{IEventHandler, IPresenter, IWindow},
 };
 
-use super::action::{Action, UiActions};
+use super::{
+    action::{Action, UiActions},
+    traits::ISelector,
+};
 
 const MAC_LENGTH: u16 = 17;
 const LINK_STATE_LENGTH: u16 = 4;
@@ -300,14 +303,6 @@ impl IEventHandler for NetworkPage {
         }
         None
     }
-}
-
-trait ISelector {
-    fn select_next(&mut self);
-    fn select_previous(&mut self);
-    fn select_first(&mut self);
-    fn select_last(&mut self);
-    fn selected(&self) -> Option<String>;
 }
 
 impl ISelector for NetworkPage {

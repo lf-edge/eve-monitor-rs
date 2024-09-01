@@ -1,8 +1,9 @@
 use std::rc::Rc;
 
+use crate::events::Event;
+use crate::model::model::Model;
 use crate::ui::action::{Action, UiActions};
 use crate::ui::activity::Activity;
-use crate::{events::Event, model::Model};
 use log::info;
 use ratatui::{layout::Rect, Frame};
 

@@ -1,5 +1,5 @@
 use crate::events;
-use crate::model::Model;
+use crate::model::model::Model;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::{fmt::Debug, rc::Rc};

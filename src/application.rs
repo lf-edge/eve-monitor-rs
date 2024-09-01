@@ -1,5 +1,6 @@
 use crate::events::Event;
-use crate::model::{Model, MonitorModel};
+use crate::model::model::Model;
+use crate::model::model::MonitorModel;
 use crate::raw_model::RawModel;
 use crate::ui::ui::Ui;
 use core::fmt::Debug;

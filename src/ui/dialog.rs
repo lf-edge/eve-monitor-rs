@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use crate::events;
-use crate::model::Model;
+use crate::model::model::Model;
 use crate::traits::IElementEventHandler;
 use crate::ui::activity::Activity;
 use log::debug;

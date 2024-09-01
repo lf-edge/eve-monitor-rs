@@ -1,10 +1,11 @@
 use std::cell::RefCell;
 
 use crate::{
-    device::network::NetworkInterfaceStatus,
     ipc::{eve_types::DownloaderStatus, message::IpcMessage},
     raw_model::RawModel,
 };
+
+use super::device::network::NetworkInterfaceStatus;
 
 pub type Model = RefCell<MonitorModel>;
 #[derive(Debug)]

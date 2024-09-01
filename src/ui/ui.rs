@@ -1,5 +1,5 @@
 use crate::{
-    device::network::NetworkInterfaceStatus,
+    model::device::network::NetworkInterfaceStatus,
     traits::{IPresenter, IWindow},
     ui::ipdialog::create_ip_dialog,
 };
@@ -21,9 +21,9 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     actions::{MainWndState, MonActions},
-    device::dmesg::DmesgViewer,
     events::Event,
-    model::Model,
+    model::device::dmesg::DmesgViewer,
+    model::model::Model,
     terminal::TerminalWrapper,
     traits::IEventHandler,
     ui::action::UiActions,

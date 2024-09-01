@@ -13,9 +13,9 @@ use ratatui::{
 };
 
 use crate::{
-    device::network::{NetworkInterfaceStatus, NetworkType},
     events::Event,
-    model::{Model, MonitorModel},
+    model::device::network::{NetworkInterfaceStatus, NetworkType},
+    model::model::{Model, MonitorModel},
     traits::{IEventHandler, IPresenter, IWindow},
 };
 

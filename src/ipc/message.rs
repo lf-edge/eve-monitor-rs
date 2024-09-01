@@ -8,16 +8,20 @@ use bytes::BytesMut;
 use log::error;
 use serde::Deserialize;
 use serde::Serialize;
+use uuid::Uuid;
 
 use super::eve_types::AppInstanceStatus;
 use super::eve_types::AppInstanceSummary;
+use super::eve_types::AppsList;
 use super::eve_types::DeviceNetworkStatus;
 use super::eve_types::DevicePortConfig;
 use super::eve_types::DevicePortConfigList;
 use super::eve_types::DownloaderStatus;
-use super::eve_types::OnboardingStatus;
+use super::eve_types::EveNodeStatus;
+use super::eve_types::EveOnboardingStatus;
+use super::eve_types::EveVaultStatus;
+use super::eve_types::LedBlinkCounter;
 use super::eve_types::PhysicalIOAdapterList;
-use super::eve_types::VaultStatus;
 
 /// WindowId is a unique identifier for a window that is incremented sequentially.
 pub type RequestId = u64;
@@ -49,8 +53,11 @@ pub enum IpcMessage {
     IOAdapters(PhysicalIOAdapterList),
     AppStatus(AppInstanceStatus),
     AppSummary(AppInstanceSummary),
-    VaultStatus(VaultStatus),
-    OnboardingStatus(OnboardingStatus),
+    VaultStatus(EveVaultStatus),
+    OnboardingStatus(EveOnboardingStatus),
+    LedBlinkCounter(LedBlinkCounter),
+    NodeStatus(EveNodeStatus),
+    AppsList(AppsList),
     Response {
         #[serde(flatten)]
         result: core::result::Result<String, String>,

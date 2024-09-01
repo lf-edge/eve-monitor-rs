@@ -348,8 +348,6 @@ impl Application {
     }
 
     pub async fn run(&mut self) -> Result<()> {
-        println!("Running application");
-
         let (ipc_task, ipc_cancellation_token, mut ipc_rx) = self.create_ipc_task();
 
         // TODO: handle suspend/resume for the case when we give away /dev/tty

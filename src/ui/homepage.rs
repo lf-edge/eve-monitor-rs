@@ -1,5 +1,5 @@
-use crate::device::summary::DeviceSummary;
 use crate::ipc::eve_types::DownloaderStatus;
+use crate::model::device::summary::DeviceSummary;
 use ratatui::text::Line;
 use ratatui::text::Text;
 use ratatui::widgets::Block;
@@ -9,7 +9,7 @@ use std::borrow;
 use std::rc::Rc;
 
 use crate::events;
-use crate::model::Model;
+use crate::model::model::Model;
 use crate::traits::{IEventHandler, IPresenter, IWindow};
 use crate::ui::action::Action;
 use crate::ui::window::LayoutMap;

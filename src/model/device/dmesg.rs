@@ -1,4 +1,4 @@
-use crate::model::Model;
+use crate::model::model::Model;
 use crate::ui::action::Action;
 use crate::ui::activity::Activity;
 use crate::ui::traits::IntoRatatuiStyle;

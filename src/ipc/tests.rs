@@ -2,14 +2,19 @@ use std::net::IpAddr;
 use std::str::FromStr;
 
 use super::*;
+use async_inotify::app::parse;
+use chrono::DateTime;
+use chrono::Utc;
 use eve_types::deserialize_mac;
 use eve_types::AppInstanceStatus;
 use eve_types::BondConfig;
 use eve_types::BondMode;
 use eve_types::DPCState;
+use eve_types::DataSecAtRestStatus;
 use eve_types::DeviceNetworkStatus;
 use eve_types::DevicePortConfigList;
 use eve_types::DhcpType;
+use eve_types::ErrorSeverity;
 use eve_types::GoIpNetwork;
 use eve_types::LacpRate;
 use eve_types::MIIMonitor;
@@ -3046,7 +3051,7 @@ fn test_network_port_status_dns() {
 }
 
 #[test]
-fn test_app_data_full() {
+fn test_app_status_full() {
     let json_data = r#"
         {
             "type": "AppStatus",
@@ -3140,5 +3145,253 @@ fn test_app_data_full() {
             }
         }
         "#;
-    let a: IpcMessage = serde_json::from_str(json_data).unwrap();
+    let _: IpcMessage = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_onboarding_status() {
+    let json_data = r#"
+        {
+          "type": "OnboardingStatus",
+          "message": {
+            "DeviceUUID": "584a643c-c8b1-45d5-a287-84fc81e0d39c",
+            "HardwareModel": "QEMU.Standard PC (Q35 + ICH9, 2009)"
+          }
+        }
+        "#;
+    let _: IpcMessage = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_vault_status() {
+    let json_data = r#"
+        {
+          "type": "VaultStatus",
+          "message": {
+            "Name": "Application Data Store",
+            "Status": 1,
+            "PCRStatus": 2,
+            "ConversionComplete": true,
+            "Error": "TPM is either absent or not in use",
+            "ErrorTime": "2024-08-28T20:15:08.246947098Z",
+            "ErrorSeverity": 3,
+            "ErrorRetryCondition": "",
+            "ErrorEntities": null
+          }
+        }
+        "#;
+    let _: IpcMessage = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_vault_status_error() {
+    let json_data = r#"
+        {
+          "type": "VaultStatus",
+          "message": {
+            "Name": "Application Data Store",
+            "Status": 4,
+            "PCRStatus": 1,
+            "ConversionComplete": false,
+            "MissmatchingPCRs": [8, 13],
+            "Error": "Vault key unavailable",
+            "ErrorTime": "2024-08-31T18:54:42.220924775Z",
+            "ErrorSeverity": 3,
+            "ErrorRetryCondition": "",
+            "ErrorEntities": null
+          }
+        }
+        "#;
+    let msg: IpcMessage = serde_json::from_str(json_data).unwrap();
+    match msg {
+        IpcMessage::VaultStatus(eve_status) => {
+            assert_eq!(eve_status.status, DataSecAtRestStatus::DataSecAtRestError);
+            assert_eq!(
+                eve_status.error_and_time.error_description.error,
+                "Vault key unavailable"
+            );
+            // assert_eq!(
+            //     eve_status.error_and_time.error_description.error_time,
+            //     DateTime::parse::<Utc>("2024-08-31T18:54:42.220924775Z").unwrap()
+            // );
+            assert_eq!(
+                eve_status.error_and_time.error_description.error_severity,
+                ErrorSeverity::Error
+            );
+        }
+        _ => panic!("unexpected message type"),
+    }
+}
+
+#[test]
+fn test_app_summary() {
+    let json_data = r#"
+        {
+          "type": "AppSummary",
+          "message": {
+            "UUIDandVersion": {
+              "UUID": "00000000-0000-0000-0000-000000000000",
+              "Version": ""
+            },
+            "TotalStarting": 1,
+            "TotalRunning": 0,
+            "TotalStopping": 0,
+            "TotalError": 0
+          }
+        }
+        "#;
+    let _: IpcMessage = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_node_status_not_onboarded() {
+    let json_data = r#"
+        {
+          "type": "NodeStatus",
+          "message": {
+            "server": "zedcloud.alpha.zededa.net",
+            "node_uuid": "00000000-0000-0000-0000-000000000000",
+            "onboarded": false
+          }
+        }
+        "#;
+    let msg: IpcMessage = serde_json::from_str(json_data).unwrap();
+    match msg {
+        IpcMessage::NodeStatus(message) => {
+            assert_eq!(message.onboarded, false);
+            assert_eq!(message.node_uuid, None);
+            assert_eq!(
+                message.server,
+                Some("zedcloud.alpha.zededa.net".to_string())
+            )
+        }
+        _ => panic!("unexpected message type"),
+    }
+}
+
+#[test]
+fn test_node_status_not_onboarded_emty_server() {
+    let json_data = r#"
+        {
+          "type": "NodeStatus",
+          "message": {
+            "node_uuid": "00000000-0000-0000-0000-000000000000",
+            "onboarded": false
+          }
+        }
+        "#;
+    let msg: IpcMessage = serde_json::from_str(json_data).unwrap();
+    match msg {
+        IpcMessage::NodeStatus(message) => {
+            assert_eq!(message.onboarded, false);
+            assert_eq!(message.node_uuid, None);
+            assert_eq!(message.server, None)
+        }
+        _ => panic!("unexpected message type"),
+    }
+}
+
+#[test]
+fn test_app_status_with_error() {
+    let json_data = r#"
+        {
+          "type": "AppStatus",
+          "message": {
+            "UUIDandVersion": {
+              "UUID": "68cec03f-3c11-4dbe-8089-5d6f3dc3c872",
+              "Version": "1"
+            },
+            "DisplayName": "cs_nginx-qemu-1",
+            "DomainName": "",
+            "Activated": false,
+            "ActivateInprogress": false,
+            "FixedResources": {
+              "Kernel": "",
+              "Ramdisk": "",
+              "Memory": 524288,
+              "MaxMem": 524288,
+              "VCpus": 1,
+              "MaxCpus": 0,
+              "RootDev": "/dev/xvda1",
+              "ExtraArgs": "",
+              "BootLoader": "/usr/bin/pygrub",
+              "CPUs": "",
+              "DeviceTree": "",
+              "DtDev": null,
+              "IRQs": null,
+              "IOMem": null,
+              "VirtualizationMode": 0,
+              "EnableVnc": true,
+              "VncDisplay": 0,
+              "VncPasswd": "",
+              "CPUsPinned": false,
+              "VMMMaxMem": 0,
+              "EnableVncShimVM": false
+            },
+            "VolumeRefStatusList": [
+              {
+                "VolumeID": "245238bd-9cb6-4601-a77a-43d21a0f1c2f",
+                "GenerationCounter": 0,
+                "LocalGenerationCounter": 0,
+                "AppUUID": "68cec03f-3c11-4dbe-8089-5d6f3dc3c872",
+                "State": 101,
+                "ActiveFileLocation": "",
+                "ContentFormat": 0,
+                "ReadOnly": false,
+                "DisplayName": "cs_nginx-qemu-1_0_m_0",
+                "MaxVolSize": 0,
+                "PendingAdd": false,
+                "WWN": "",
+                "VerifyOnly": true,
+                "Target": 0,
+                "CustomMeta": "",
+                "ReferenceName": "",
+                "ErrorSourceType": "types.VolumeStatus",
+                "Error": "Found error in content tree cs_nginx_image attached to volume cs_nginx-qemu-1_0_m_0: lookupDatastoreConfig(c1b0cb8a-9b39-4b9a-82ff-b5409757ecc2) error: Get(zedagent/DatastoreConfig) unknown key c1b0cb8a-9b39-4b9a-82ff-b5409757ecc2",
+                "ErrorTime": "2024-08-31T10:17:58.660422709Z",
+                "ErrorSeverity": 1,
+                "ErrorRetryCondition": "Will retry when datastore available",
+                "ErrorEntities": [
+                  {
+                    "EntityType": 11,
+                    "EntityID": "245238bd-9cb6-4601-a77a-43d21a0f1c2f"
+                  }
+                ]
+              }
+            ],
+            "AppNetAdapters": null,
+            "BootTime": "0001-01-01T00:00:00Z",
+            "IoAdapterList": null,
+            "RestartInprogress": 0,
+            "RestartStartedAt": "0001-01-01T00:00:00Z",
+            "PurgeInprogress": 0,
+            "PurgeStartedAt": "0001-01-01T00:00:00Z",
+            "State": 101,
+            "MissingNetwork": false,
+            "MissingMemory": false,
+            "ErrorSourceType": "types.VolumeStatus",
+            "Error": "Found error in content tree cs_nginx_image attached to volume cs_nginx-qemu-1_0_m_0: lookupDatastoreConfig(c1b0cb8a-9b39-4b9a-82ff-b5409757ecc2) error: Get(zedagent/DatastoreConfig) unknown key c1b0cb8a-9b39-4b9a-82ff-b5409757ecc2\n\n",
+            "ErrorTime": "2024-08-31T10:17:58.660422709Z",
+            "ErrorSeverity": 1,
+            "ErrorRetryCondition": "Will retry when datastore available",
+            "ErrorEntities": [
+              { "EntityType": 11, "EntityID": "245238bd-9cb6-4601-a77a-43d21a0f1c2f" }
+            ],
+            "StartTime": "2024-08-31T10:17:51.591626391Z",
+            "SnapStatus": {
+              "MaxSnapshots": 1,
+              "RequestedSnapshots": null,
+              "AvailableSnapshots": null,
+              "SnapshotsToBeDeleted": null,
+              "PreparedVolumesSnapshotConfigs": null,
+              "SnapshotOnUpgrade": false,
+              "HasRollbackRequest": false,
+              "ActiveSnapshot": "",
+              "RollbackInProgress": false
+            },
+            "MemOverhead": 0
+          }
+        }
+        "#;
+    let _msg: IpcMessage = serde_json::from_str(json_data).unwrap();
 }

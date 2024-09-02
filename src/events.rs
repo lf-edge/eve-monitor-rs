@@ -1,6 +1,6 @@
 use crossterm::event::KeyEvent;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Event {
     Key(KeyEvent),
     Tick,

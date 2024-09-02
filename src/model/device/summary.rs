@@ -1,7 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
 
-use crate::device::network;
 use std::process::Command;
 
 use super::network::NetworkInterfaceStatus;

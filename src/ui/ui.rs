@@ -1,5 +1,5 @@
 use crate::{
-    device::network::NetworkInterfaceStatus,
+    model::device::network::NetworkInterfaceStatus,
     traits::{IPresenter, IWindow},
     ui::ipdialog::create_ip_dialog,
 };
@@ -21,9 +21,9 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
     actions::{MainWndState, MonActions},
-    device::dmesg::DmesgViewer,
     events::Event,
-    model::Model,
+    model::device::dmesg::DmesgViewer,
+    model::model::Model,
     terminal::TerminalWrapper,
     traits::IEventHandler,
     ui::action::UiActions,
@@ -31,10 +31,12 @@ use crate::{
 
 use super::{
     action::Action,
+    app_page::ApplicationsPage,
     homepage::HomePage,
     layer_stack::LayerStack,
     networkpage::create_network_page,
     statusbar::{create_status_bar, StatusBarState},
+    summary_page::SummaryPage,
     widgets::{
         button::ButtonElement,
         input_field::{InputFieldElement, InputModifiers},
@@ -55,15 +57,17 @@ pub struct Ui {
     pub views: Vec<LayerStack>,
     pub selected_tab: UiTabs,
     pub status_bar: Window<StatusBarState>,
+    first_frame: bool,
 }
 
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
 pub enum UiTabs {
     #[default]
     //Debug,
+    Summary,
     Home,
     Network,
-    // Applications,
+    Applications,
     Dmesg,
 }
 
@@ -81,6 +85,7 @@ impl Ui {
             views: vec![LayerStack::new(); UiTabs::COUNT],
             selected_tab: UiTabs::default(),
             status_bar: create_status_bar(),
+            first_frame: true,
         })
     }
 
@@ -218,12 +223,14 @@ impl Ui {
         //     MonActions::NetworkInterfaceUpdated(s),
         // );
 
+        self.views[UiTabs::Summary as usize].push(Box::new(SummaryPage::new()));
         self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
 
         // self.views[UiTabs::Home as usize].push(Box::new(d));
 
         self.views[UiTabs::Network as usize].push(Box::new(create_network_page()));
 
+        self.views[UiTabs::Applications as usize].push(Box::new(ApplicationsPage::new()));
         self.views[UiTabs::Dmesg as usize].push(Box::new(DmesgViewer::new()));
     }
 
@@ -236,11 +243,14 @@ impl Ui {
             let area = frame.size();
             let [tabs, body, statusbar_rect] = screen_layout.areas(area);
 
+            if self.first_frame {
+                self.first_frame = false;
+                frame.render_widget(Clear, area);
+            }
             tabs_widget
                 .select(self.selected_tab as usize)
                 .render(tabs, frame.buffer_mut());
 
-            Clear.render(body, frame.buffer_mut());
 
             // redraw from the bottom up
             let stack = &mut self.views[self.selected_tab as usize];
@@ -261,12 +271,14 @@ impl Ui {
     }
 
     pub fn handle_event(&mut self, event: Event) -> Option<Action> {
-        debug!("Ui handle_event {:?}", event);
+        if event != Event::Tick {
+            debug!("Ui handle_event {:?}", event);
+        }
 
         match event {
             // only fo debugging purposes
             Event::Key(key)
-                if (key.code == KeyCode::Char('q')) && (key.modifiers == KeyModifiers::CONTROL) =>
+                if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {
                 debug!("CTRL+q: application Quit requested");
                 self.action_tx
@@ -313,20 +325,20 @@ impl Ui {
             // }
 
             // show network edit dialog on ctrl+e
-            Event::Key(key)
-                if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
-            {
-                debug!("CTRL+e: show dialog");
+            // Event::Key(key)
+            //     if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
+            // {
+            //     debug!("CTRL+e: show dialog");
 
-                // let s = IpDialogState {
-                //     ip: "10.208.13.10".to_string(),
-                //     mode: "DHCP".to_string(),
-                //     gw: "1.1.1.1".to_string(),
-                // };
+            //     // let s = IpDialogState {
+            //     //     ip: "10.208.13.10".to_string(),
+            //     //     mode: "DHCP".to_string(),
+            //     //     gw: "1.1.1.1".to_string(),
+            //     // };
 
-                // let d: NetworkDialog = NetworkDialog::new();
-                // self.views[self.selected_tab as usize].push(Box::new(d));
-            }
+            //     // let d: NetworkDialog = NetworkDialog::new();
+            //     // self.views[self.selected_tab as usize].push(Box::new(d));
+            // }
 
             // handle Tab switching
             // Event::Key(key)

@@ -11,8 +11,10 @@ use ratatui::{
 
 use crate::{
     actions::MonActions,
-    device::network::{NetworkInterfaceStatus, ProxyConfig},
-    model::Model,
+    model::{
+        device::network::{NetworkInterfaceStatus, ProxyConfig},
+        model::Model,
+    },
     traits::IWindow,
 };
 

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::ipc::eve_types::{
     AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
     DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
-    EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState,
+    EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, ZedAgentStatus,
 };
 
 use super::device::network::NetworkInterfaceStatus;
@@ -75,6 +75,7 @@ pub struct MonitorModel {
     pub vault_status: VaultStatus,
     pub dpc_list: Option<DevicePortConfigList>,
     pub dpc_key: Option<String>,
+    pub z_status: Option<ZedAgentStatus>,
 }
 
 impl From<EveVaultStatus> for VaultStatus {
@@ -208,6 +209,10 @@ impl MonitorModel {
         let key = self.dpc_key.clone()?;
         self.get_dpc_list()?.get_dpc_by_key(&key)
     }
+
+    pub fn update_zed_agent_status(&mut self, status: ZedAgentStatus) {
+        self.z_status = Some(status);
+    }
 }
 
 impl Default for MonitorModel {
@@ -221,6 +226,7 @@ impl Default for MonitorModel {
             vault_status: VaultStatus::Unknown,
             dpc_list: None,
             dpc_key: None,
+            z_status: None,
         }
     }
 }

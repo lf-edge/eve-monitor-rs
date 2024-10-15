@@ -1396,3 +1396,84 @@ where
 pub struct AppsList {
     pub apps: Vec<AppInstanceStatus>,
 }
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ZedAgentStatus {
+    pub name: String,
+    pub config_get_status: ConfigGetStatus,
+    pub reboot_cmd: bool,
+    pub shutdown_cmd: bool,
+    pub poweroff_cmd: bool,
+    pub requested_reboot_reason: String,
+    pub requested_boot_reason: BootReason,
+    pub maintenance_mode: bool,
+    pub force_fallback_counter: i32,
+    pub current_profile: String,
+    pub radio_silence: RadioSilence,
+    pub device_state: DeviceState,
+    pub attest_state: AttestState,
+    pub attest_error: String,
+    pub vault_status: DataSecAtRestStatus,
+    #[serde(rename = "PCRStatus")]
+    pub pcr_status: PCRStatus,
+    pub vault_err: String,
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum BootReason {
+    BootReasonNone = 0,
+    BootReasonFirst = 1,         // Normal - was not yet onboarded
+    BootReasonRebootCmd = 2,     // Normal - result of a reboot command in the API
+    BootReasonUpdate = 3,        // Normal - from an EVE image update in the API
+    BootReasonFallback = 4,      // Fallback from a failed EVE image update
+    BootReasonDisconnect = 5,    // Disconnected from controller for too long
+    BootReasonFatal = 6,         // Fatal error causing log.Fatal
+    BootReasonOom = 7,           // OOM causing process to be killed
+    BootReasonWatchdogHung = 8,  // Software watchdog due to stuck agent
+    BootReasonWatchdogPid = 9,   // Software watchdog due to e.g., golang panic
+    BootReasonKernel = 10,       // Set by dump-capture kernel
+    BootReasonPowerFail = 11, // Known power failure e.g., from disk controller S.M.A.R.T counter increase
+    BootReasonUnknown = 12,   // Could be power failure, kernel panic, or hardware watchdog
+    BootReasonVaultFailure = 13, // Vault was not ready within the expected time
+    BootReasonPoweroffCmd = 14, // Start after Local Profile Server poweroff
+    BootReasonParseFail = 255, // BootReasonFromString didn't find match
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(i32)]
+pub enum AttestState {
+    StateNone = 0,           // State when (Re)Starting attestation
+    StateNonceWait,          // Waiting for response from Controller for Nonce request
+    StateInternalQuoteWait,  // Waiting for internal PCR quote to be published
+    StateInternalEscrowWait, // Waiting for internal Escrow data to be published
+    StateAttestWait,         // Waiting for response from Controller for PCR quote
+    StateAttestEscrowWait,   // Waiting for response from Controller for Escrow data
+    StateRestartWait,        // Waiting for restart timer to expire, to start all over again
+    StateComplete,           // Everything w.r.t attestation is complete
+    StateAny,                // Not a real state per se. helps defining wildcard transitions(below)
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum DeviceState {
+    Unspecified = 0,       // DEVICE_STATE_UNSPECIFIED
+    Online = 1,            // DEVICE_STATE_ONLINE
+    Rebooting = 2,         // DEVICE_STATE_REBOOTING
+    MaintenanceMode = 3,   // DEVICE_STATE_MAINTENANCE_MODE
+    BaseOsUpdating = 4,    // DEVICE_STATE_BASEOS_UPDATING
+    Booting = 5,           // DEVICE_STATE_BOOTING
+    PreparingPowerOff = 6, // DEVICE_STATE_PREPARING_POWEROFF
+    PoweringOff = 7,       // DEVICE_STATE_POWERING_OFF
+    PreparedPowerOff = 8,  // DEVICE_STATE_PREPARED_POWEROFF
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum ConfigGetStatus {
+    Success = 1,       // ConfigGetSuccess
+    Fail = 2,          // ConfigGetFail
+    TemporaryFail = 3, // ConfigGetTemporaryFail
+    ReadSaved = 4,     // ConfigGetReadSaved
+}

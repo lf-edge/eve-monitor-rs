@@ -12,6 +12,7 @@ use eve_types::BondMode;
 use eve_types::DPCState;
 use eve_types::DataSecAtRestStatus;
 use eve_types::DeviceNetworkStatus;
+use eve_types::DevicePortConfig;
 use eve_types::DevicePortConfigList;
 use eve_types::DhcpType;
 use eve_types::ErrorSeverity;
@@ -24,6 +25,7 @@ use eve_types::RadioSilence;
 use eve_types::ResultData;
 use eve_types::WirelessCfg;
 use eve_types::WirelessType;
+use eve_types::ZedAgentStatus;
 use macaddr::MacAddr;
 use message::IpcMessage;
 use serde::Deserialize;
@@ -378,143 +380,136 @@ fn test_bond_config_deserialization() {
 #[test]
 fn test_device_network_status_full() {
     let json_data = r#"
-    {
-        "DPCKey": "lastresort",
-        "Version": 1,
-        "Testing": false,
-        "State": 3,
-        "CurrentIndex": 0,
-        "RadioSilence": {
-            "Imposed": false,
-            "ChangeInProgress": false,
-            "ChangeRequestedAt": "2024-07-22T06:27:09.366225129Z",
-            "ConfigError": ""
-        },
-        "Ports": [
-            {
+        {
+            "DPCKey": "lastresort",
+            "Version": 1,
+            "Testing": true,
+            "State": 3,
+            "CurrentIndex": 0,
+            "RadioSilence": {
+              "Imposed": false,
+              "ChangeInProgress": false,
+              "ChangeRequestedAt": "2024-10-07T14:52:37.481822702Z",
+              "ConfigError": ""
+            },
+            "Ports": [
+              {
                 "IfName": "eth0",
                 "Phylabel": "eth0",
                 "Logicallabel": "eth0",
+                "SharedLabels": ["all", "uplink", "freeuplink"],
                 "Alias": "",
                 "IsMgmt": true,
                 "IsL3Port": true,
+                "InvalidConfig": false,
                 "Cost": 0,
                 "Dhcp": 4,
                 "Type": 0,
-                "Subnet": {
-                    "IP": "192.168.1.0",
-                    "Mask": "////AA=="
-                },
+                "Subnet": { "IP": "192.168.1.0", "Mask": "////AA==" },
                 "NtpServer": "",
                 "DomainName": "",
-                "DNSServers": [
-                    "192.168.1.3"
-                ],
+                "DNSServers": ["192.168.1.3"],
                 "NtpServers": null,
                 "AddrInfoList": [
-                    {
-                        "Addr": "192.168.1.10",
-                        "Geo": {
-                            "ip": "",
-                            "hostname": "",
-                            "city": "",
-                            "region": "",
-                            "country": "",
-                            "loc": "",
-                            "org": "",
-                            "postal": ""
-                        },
-                        "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                  {
+                    "Addr": "192.168.1.10",
+                    "Geo": {
+                      "ip": "",
+                      "hostname": "",
+                      "city": "",
+                      "region": "",
+                      "country": "",
+                      "loc": "",
+                      "org": "",
+                      "postal": ""
                     },
-                    {
-                        "Addr": "fec0::6e70:6edc:1bd3:4119",
-                        "Geo": {
-                            "ip": "",
-                            "hostname": "",
-                            "city": "",
-                            "region": "",
-                            "country": "",
-                            "loc": "",
-                            "org": "",
-                            "postal": ""
-                        },
-                        "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                  },
+                  {
+                    "Addr": "fec0::332e:b943:d981:fcb0",
+                    "Geo": {
+                      "ip": "",
+                      "hostname": "",
+                      "city": "",
+                      "region": "",
+                      "country": "",
+                      "loc": "",
+                      "org": "",
+                      "postal": ""
                     },
-                    {
-                        "Addr": "fe80::ac64:4852:7b50:dc95",
-                        "Geo": {
-                            "ip": "",
-                            "hostname": "",
-                            "city": "",
-                            "region": "",
-                            "country": "",
-                            "loc": "",
-                            "org": "",
-                            "postal": ""
-                        },
-                        "LastGeoTimestamp": "0001-01-01T00:00:00Z"
-                    }
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                  },
+                  {
+                    "Addr": "fe80::e4c4:b42f:1ea6:35b8",
+                    "Geo": {
+                      "ip": "",
+                      "hostname": "",
+                      "city": "",
+                      "region": "",
+                      "country": "",
+                      "loc": "",
+                      "org": "",
+                      "postal": ""
+                    },
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                  }
                 ],
                 "Up": true,
                 "MacAddr": "UlQAEjRW",
-                "DefaultRouters": [
-                    "192.168.1.2",
-                    "fe80::2"
-                ],
+                "DefaultRouters": ["192.168.1.2", "fe80::2"],
                 "MTU": 1500,
                 "WirelessCfg": {
-                    "WType": 0,
-                    "CellularV2": {
-                        "AccessPoints": null,
-                        "Probe": {
-                            "Disable": false,
-                            "Address": ""
-                        },
-                        "LocationTracking": false
+                  "WType": 0,
+                  "CellularV2": {
+                    "AccessPoints": null,
+                    "Probe": {
+                      "Disable": false,
+                      "UserDefinedProbe": {
+                        "Method": 0,
+                        "ProbeHost": "",
+                        "ProbePort": 0
+                      }
                     },
-                    "Wifi": null,
-                    "Cellular": null
+                    "LocationTracking": false
+                  },
+                  "Wifi": null,
+                  "Cellular": null
                 },
                 "WirelessStatus": {
-                    "WType": 0,
-                    "Cellular": {
-                        "LogicalLabel": "",
-                        "PhysAddrs": {
-                            "Interface": "",
-                            "USB": "",
-                            "PCI": "",
-                            "Dev": ""
-                        },
-                        "Module": {
-                            "Name": "",
-                            "IMEI": "",
-                            "Model": "",
-                            "Manufacturer": "",
-                            "Revision": "",
-                            "ControlProtocol": "",
-                            "OpMode": ""
-                        },
-                        "SimCards": null,
-                        "ConfigError": "",
-                        "ProbeError": "",
-                        "CurrentProvider": {
-                            "PLMN": "",
-                            "Description": "",
-                            "CurrentServing": false,
-                            "Roaming": false,
-                            "Forbidden": false
-                        },
-                        "VisibleProviders": null,
-                        "CurrentRATs": null,
-                        "ConnectedAt": 0,
-                        "IPSettings": {
-                            "Address": null,
-                            "Gateway": "",
-                            "DNSServers": null,
-                            "MTU": 0
-                        },
-                        "LocationTracking": false
-                    }
+                  "WType": 0,
+                  "Cellular": {
+                    "LogicalLabel": "",
+                    "PhysAddrs": { "Interface": "", "USB": "", "PCI": "", "Dev": "" },
+                    "Module": {
+                      "Name": "",
+                      "IMEI": "",
+                      "Model": "",
+                      "Manufacturer": "",
+                      "Revision": "",
+                      "ControlProtocol": "",
+                      "OpMode": ""
+                    },
+                    "SimCards": null,
+                    "ConfigError": "",
+                    "ProbeError": "",
+                    "CurrentProvider": {
+                      "PLMN": "",
+                      "Description": "",
+                      "CurrentServing": false,
+                      "Roaming": false,
+                      "Forbidden": false
+                    },
+                    "VisibleProviders": null,
+                    "CurrentRATs": null,
+                    "ConnectedAt": 0,
+                    "IPSettings": {
+                      "Address": null,
+                      "Gateway": "",
+                      "DNSServers": null,
+                      "MTU": 0
+                    },
+                    "LocationTracking": false
+                  }
                 },
                 "Proxies": null,
                 "Exceptions": "",
@@ -524,154 +519,141 @@ fn test_device_network_status_full() {
                 "WpadURL": "",
                 "pubsub-large-ProxyCertPEM": null,
                 "L2Type": 0,
-                "VLAN": {
-                    "ParentPort": "",
-                    "ID": 0
-                },
+                "VLAN": { "ParentPort": "", "ID": 0 },
                 "Bond": {
-                    "AggregatedPorts": null,
-                    "Mode": 0,
-                    "LacpRate": 0,
-                    "MIIMonitor": {
-                        "Enabled": false,
-                        "Interval": 0,
-                        "UpDelay": 0,
-                        "DownDelay": 0
-                    },
-                    "ARPMonitor": {
-                        "Enabled": false,
-                        "Interval": 0,
-                        "IPTargets": null
-                    }
+                  "AggregatedPorts": null,
+                  "Mode": 0,
+                  "LacpRate": 0,
+                  "MIIMonitor": {
+                    "Enabled": false,
+                    "Interval": 0,
+                    "UpDelay": 0,
+                    "DownDelay": 0
+                  },
+                  "ARPMonitor": { "Enabled": false, "Interval": 0, "IPTargets": null }
                 },
                 "LastFailed": "0001-01-01T00:00:00Z",
-                "LastSucceeded": "2024-07-22T06:27:18.593306585Z",
-                "LastError": ""
-            },
-            {
+                "LastSucceeded": "0001-01-01T00:00:00Z",
+                "LastError": "",
+                "LastWarning": ""
+              },
+              {
                 "IfName": "eth1",
                 "Phylabel": "eth1",
                 "Logicallabel": "eth1",
+                "SharedLabels": ["all", "uplink", "freeuplink"],
                 "Alias": "",
                 "IsMgmt": true,
                 "IsL3Port": true,
+                "InvalidConfig": false,
                 "Cost": 0,
                 "Dhcp": 4,
                 "Type": 0,
-                "Subnet": {
-                    "IP": "192.168.2.0",
-                    "Mask": "////AA=="
-                },
+                "Subnet": { "IP": "192.168.2.0", "Mask": "////AA==" },
                 "NtpServer": "",
                 "DomainName": "",
-                "DNSServers": [
-                    "192.168.2.3"
-                ],
+                "DNSServers": ["192.168.2.3"],
                 "NtpServers": null,
                 "AddrInfoList": [
-                    {
-                        "Addr": "192.168.2.10",
-                        "Geo": {
-                            "ip": "",
-                            "hostname": "",
-                            "city": "",
-                            "region": "",
-                            "country": "",
-                            "loc": "",
-                            "org": "",
-                            "postal": ""
-                        },
-                        "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                  {
+                    "Addr": "192.168.2.10",
+                    "Geo": {
+                      "ip": "",
+                      "hostname": "",
+                      "city": "",
+                      "region": "",
+                      "country": "",
+                      "loc": "",
+                      "org": "",
+                      "postal": ""
                     },
-                    {
-                        "Addr": "fec0::21b8:b579:8b9c:3cda",
-                        "Geo": {
-                            "ip": "",
-                            "hostname": "",
-                            "city": "",
-                            "region": "",
-                            "country": "",
-                            "loc": "",
-                            "org": "",
-                            "postal": ""
-                        },
-                        "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                  },
+                  {
+                    "Addr": "fec0::29ae:3a2b:f599:9c3e",
+                    "Geo": {
+                      "ip": "",
+                      "hostname": "",
+                      "city": "",
+                      "region": "",
+                      "country": "",
+                      "loc": "",
+                      "org": "",
+                      "postal": ""
                     },
-                    {
-                        "Addr": "fe80::6f27:5660:de21:d553",
-                        "Geo": {
-                            "ip": "",
-                            "hostname": "",
-                            "city": "",
-                            "region": "",
-                            "country": "",
-                            "loc": "",
-                            "org": "",
-                            "postal": ""
-                        },
-                        "LastGeoTimestamp": "0001-01-01T00:00:00Z"
-                    }
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                  },
+                  {
+                    "Addr": "fe80::c6e2:69a7:2ebc:baa9",
+                    "Geo": {
+                      "ip": "",
+                      "hostname": "",
+                      "city": "",
+                      "region": "",
+                      "country": "",
+                      "loc": "",
+                      "org": "",
+                      "postal": ""
+                    },
+                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
+                  }
                 ],
                 "Up": true,
                 "MacAddr": "UlQAEjRX",
-                "DefaultRouters": [
-                    "192.168.2.2",
-                    "fe80::2"
-                ],
+                "DefaultRouters": ["192.168.2.2", "fe80::2"],
                 "MTU": 1500,
                 "WirelessCfg": {
-                    "WType": 0,
-                    "CellularV2": {
-                        "AccessPoints": null,
-                        "Probe": {
-                            "Disable": false,
-                            "Address": ""
-                        },
-                        "LocationTracking": false
+                  "WType": 0,
+                  "CellularV2": {
+                    "AccessPoints": null,
+                    "Probe": {
+                      "Disable": false,
+                      "UserDefinedProbe": {
+                        "Method": 0,
+                        "ProbeHost": "",
+                        "ProbePort": 0
+                      }
                     },
-                    "Wifi": null,
-                    "Cellular": null
+                    "LocationTracking": false
+                  },
+                  "Wifi": null,
+                  "Cellular": null
                 },
                 "WirelessStatus": {
-                    "WType": 0,
-                    "Cellular": {
-                        "LogicalLabel": "",
-                        "PhysAddrs": {
-                            "Interface": "",
-                            "USB": "",
-                            "PCI": "",
-                            "Dev": ""
-                        },
-                        "Module": {
-                            "Name": "",
-                            "IMEI": "",
-                            "Model": "",
-                            "Manufacturer": "",
-                            "Revision": "",
-                            "ControlProtocol": "",
-                            "OpMode": ""
-                        },
-                        "SimCards": null,
-                        "ConfigError": "",
-                        "ProbeError": "",
-                        "CurrentProvider": {
-                            "PLMN": "",
-                            "Description": "",
-                            "CurrentServing": false,
-                            "Roaming": false,
-                            "Forbidden": false
-                        },
-                        "VisibleProviders": null,
-                        "CurrentRATs": null,
-                        "ConnectedAt": 0,
-                        "IPSettings": {
-                            "Address": null,
-                            "Gateway": "",
-                            "DNSServers": null,
-                            "MTU": 0
-                        },
-                        "LocationTracking": false
-                    }
+                  "WType": 0,
+                  "Cellular": {
+                    "LogicalLabel": "",
+                    "PhysAddrs": { "Interface": "", "USB": "", "PCI": "", "Dev": "" },
+                    "Module": {
+                      "Name": "",
+                      "IMEI": "",
+                      "Model": "",
+                      "Manufacturer": "",
+                      "Revision": "",
+                      "ControlProtocol": "",
+                      "OpMode": ""
+                    },
+                    "SimCards": null,
+                    "ConfigError": "",
+                    "ProbeError": "",
+                    "CurrentProvider": {
+                      "PLMN": "",
+                      "Description": "",
+                      "CurrentServing": false,
+                      "Roaming": false,
+                      "Forbidden": false
+                    },
+                    "VisibleProviders": null,
+                    "CurrentRATs": null,
+                    "ConnectedAt": 0,
+                    "IPSettings": {
+                      "Address": null,
+                      "Gateway": "",
+                      "DNSServers": null,
+                      "MTU": 0
+                    },
+                    "LocationTracking": false
+                  }
                 },
                 "Proxies": null,
                 "Exceptions": "",
@@ -681,38 +663,32 @@ fn test_device_network_status_full() {
                 "WpadURL": "",
                 "pubsub-large-ProxyCertPEM": null,
                 "L2Type": 0,
-                "VLAN": {
-                    "ParentPort": "",
-                    "ID": 0
-                },
+                "VLAN": { "ParentPort": "", "ID": 0 },
                 "Bond": {
-                    "AggregatedPorts": null,
-                    "Mode": 0,
-                    "LacpRate": 0,
-                    "MIIMonitor": {
-                        "Enabled": false,
-                        "Interval": 0,
-                        "UpDelay": 0,
-                        "DownDelay": 0
-                    },
-                    "ARPMonitor": {
-                        "Enabled": false,
-                        "Interval": 0,
-                        "IPTargets": null
-                    }
+                  "AggregatedPorts": null,
+                  "Mode": 0,
+                  "LacpRate": 0,
+                  "MIIMonitor": {
+                    "Enabled": false,
+                    "Interval": 0,
+                    "UpDelay": 0,
+                    "DownDelay": 0
+                  },
+                  "ARPMonitor": { "Enabled": false, "Interval": 0, "IPTargets": null }
                 },
-                "LastFailed": "2024-07-22T06:27:12.052879635Z",
-                "LastSucceeded": "0001-01-01T00:00:00Z",
-                "LastError": "All attempts to connect to https://zedcloud.alpha.zededa.net/api/v2/edgedevice/ping failed: interface eth1: no DNS server available"
-            }
-        ]
-    }
+                "LastFailed": "0001-01-01T00:00:00Z",
+                "LastSucceeded": "2024-10-07T14:52:41.149885872Z",
+                "LastError": "",
+                "LastWarning": ""
+              }
+            ]
+        }
     "#;
 
     let result: DeviceNetworkStatus = serde_json::from_str(json_data).unwrap();
     assert_eq!(result.dpc_key, "lastresort");
     assert_eq!(result.state, DPCState::Success);
-    assert_eq!(result.testing, false);
+    assert_eq!(result.testing, true);
     assert_eq!(result.ports.is_some(), true);
 
     let ports = result.ports.unwrap();
@@ -3390,6 +3366,480 @@ fn test_app_status_with_error() {
               "RollbackInProgress": false
             },
             "MemOverhead": 0
+          }
+        }
+        "#;
+    let _msg: IpcMessage = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_manual_dpc() {
+    let json_data = r#"
+        {
+          "Version": 1,
+          "Key": "manual",
+          "TimePriority": "2024-09-02T14:38:39.250405373Z",
+          "State": 0,
+          "ShaFile": "",
+          "ShaValue": null,
+          "LastFailed": "1970-01-01T00:00:00Z",
+          "LastSucceeded": "1970-01-01T00:00:00Z",
+          "LastError": "",
+          "LastIPAndDNS": "1970-01-01T00:00:00Z",
+          "Ports": [
+            {
+              "IfName": "eth0",
+              "USBAddr": "",
+              "PCIAddr": "0000:01:00.0",
+              "Phylabel": "eth0",
+              "Logicallabel": "eth0",
+              "SharedLabels": ["all", "uplink", "freeuplink"],
+              "Alias": "",
+              "NetworkUUID": "2e6038c1-ece6-4ffd-b95b-a7302c219d59",
+              "IsMgmt": true,
+              "IsL3Port": true,
+              "InvalidConfig": false,
+              "Cost": 0,
+              "MTU": 0,
+              "Dhcp": 4,
+              "AddrSubnet": "",
+              "Gateway": "",
+              "DomainName": "",
+              "NTPServer": "",
+              "DNSServers": null,
+              "Type": 4,
+              "Proxies": null,
+              "Exceptions": "",
+              "Pacfile": "",
+              "NetworkProxyEnable": false,
+              "NetworkProxyURL": "",
+              "WpadURL": "",
+              "pubsub-large-ProxyCertPEM": null,
+              "L2Type": 0,
+              "VLAN": { "ParentPort": "", "ID": 0 },
+              "Bond": {
+                "AggregatedPorts": null,
+                "Mode": 0,
+                "LacpRate": 0,
+                "MIIMonitor": {
+                  "DownDelay": 0,
+                  "Enabled": false,
+                  "Interval": 0,
+                  "UpDelay": 0
+                },
+                "ARPMonitor": { "Enabled": false, "IPTargets": null, "Interval": 0 }
+              },
+              "WirelessCfg": {
+                "WType": 0,
+                "CellularV2": {
+                  "AccessPoints": null,
+                  "Probe": { "Disable": false, "Address": "" },
+                  "LocationTracking": false
+                },
+                "Wifi": null,
+                "Cellular": null
+              },
+              "LastFailed": "2024-09-02T14:24:34.420440939Z",
+              "LastSucceeded": "2024-09-02T14:35:08.024125661Z",
+              "LastError": ""
+            },
+            {
+              "IfName": "eth1",
+              "USBAddr": "",
+              "PCIAddr": "0000:03:00.0",
+              "Phylabel": "eth1",
+              "Logicallabel": "eth1",
+              "SharedLabels": ["all", "uplink", "freeuplink"],
+              "Alias": "",
+              "NetworkUUID": "19028107-7f53-4e6e-b06d-dca35fe24fec",
+              "IsMgmt": true,
+              "IsL3Port": true,
+              "InvalidConfig": false,
+              "Cost": 0,
+              "MTU": 0,
+              "Dhcp": 4,
+              "AddrSubnet": "",
+              "Gateway": "",
+              "DomainName": "",
+              "NTPServer": "",
+              "DNSServers": null,
+              "Type": 4,
+              "Proxies": null,
+              "Exceptions": "",
+              "Pacfile": "",
+              "NetworkProxyEnable": false,
+              "NetworkProxyURL": "",
+              "WpadURL": "",
+              "pubsub-large-ProxyCertPEM": null,
+              "L2Type": 0,
+              "VLAN": { "ParentPort": "", "ID": 0 },
+              "Bond": {
+                "AggregatedPorts": null,
+                "Mode": 0,
+                "LacpRate": 0,
+                "MIIMonitor": {
+                  "DownDelay": 0,
+                  "Enabled": false,
+                  "Interval": 0,
+                  "UpDelay": 0
+                },
+                "ARPMonitor": { "Enabled": false, "IPTargets": null, "Interval": 0 }
+              },
+              "WirelessCfg": {
+                "WType": 0,
+                "CellularV2": {
+                  "AccessPoints": null,
+                  "Probe": { "Disable": false, "Address": "" },
+                  "LocationTracking": false
+                },
+                "Wifi": null,
+                "Cellular": null
+              },
+              "LastFailed": "2024-09-02T14:25:05.400467305Z",
+              "LastSucceeded": "0001-01-01T00:00:00Z",
+              "LastError": "All attempts to connect to https://zedcloud.alpha.zededa.net/api/v2/edgedevice/ping failed: send via eth1 with src IP 10.208.100.10: Get \"https://zedcloud.alpha.zededa.net/api/v2/edgedevice/ping\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)"
+            },
+            {
+              "IfName": "wlan0",
+              "USBAddr": "",
+              "PCIAddr": "0000:02:00.0",
+              "Phylabel": "wlan0",
+              "Logicallabel": "wlan0",
+              "SharedLabels": ["all", "uplink", "freeuplink"],
+              "Alias": "",
+              "NetworkUUID": "6af1e6cb-dac2-4ff3-a265-daa9adda9b82",
+              "IsMgmt": true,
+              "IsL3Port": true,
+              "InvalidConfig": false,
+              "Cost": 0,
+              "MTU": 0,
+              "Dhcp": 4,
+              "AddrSubnet": "",
+              "Gateway": "",
+              "DomainName": "",
+              "NTPServer": "",
+              "DNSServers": null,
+              "Type": 4,
+              "Proxies": null,
+              "Exceptions": "",
+              "Pacfile": "",
+              "NetworkProxyEnable": false,
+              "NetworkProxyURL": "",
+              "WpadURL": "",
+              "pubsub-large-ProxyCertPEM": null,
+              "L2Type": 0,
+              "VLAN": { "ParentPort": "", "ID": 0 },
+              "Bond": {
+                "AggregatedPorts": null,
+                "Mode": 0,
+                "LacpRate": 0,
+                "MIIMonitor": {
+                  "DownDelay": 0,
+                  "Enabled": false,
+                  "Interval": 0,
+                  "UpDelay": 0
+                },
+                "ARPMonitor": { "Enabled": false, "IPTargets": null, "Interval": 0 }
+              },
+              "WirelessCfg": {
+                "WType": 2,
+                "CellularV2": {
+                  "AccessPoints": null,
+                  "Probe": { "Disable": false, "Address": "" },
+                  "LocationTracking": false
+                },
+                "Wifi": [
+                  {
+                    "SSID": "zededa",
+                    "KeyScheme": 1,
+                    "Identity": "",
+                    "Password": "",
+                    "Priority": 0,
+                    "CipherBlockID": "6af1e6cb-dac2-4ff3-a265-daa9adda9b82-zededa",
+                    "CipherContextID": "41e0b7e6-73a3-5670-88a2-7c2c295ddf48",
+                    "InitialValue": "N49SI/CUNK5XTk8QkIzm6g==",
+                    "pubsub-large-CipherData": "apv9TvCQhBxd5GPZ5yykuUDSQGR/EM4p/V4xc+AHOSn+pXA5hOngrJBQVOKmrzNMQ/f79scHYhjOCuiUc2B7me1F",
+                    "ClearTextHash": "0CfV4fFOjvxykliWgFv55U95zmBRTZRZOeRBpZKvRVc=",
+                    "IsCipher": true,
+                    "CipherContext": {},
+                    "Error": "",
+                    "ErrorTime": "0001-01-01T00:00:00Z",
+                    "ErrorSeverity": 0,
+                    "ErrorRetryCondition": "",
+                    "ErrorEntities": null
+                  }
+                ],
+                "Cellular": null
+              },
+              "LastFailed": "2024-09-02T14:35:08.024850450Z",
+              "LastSucceeded": "0001-01-01T00:00:00Z",
+              "LastError": "link not up for interface wlan0 (down)"
+            }
+          ]
+        }
+        "#;
+    let _msg: DevicePortConfig = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_zed_agent_status_message() {
+    let json_data = r#"
+        {
+          "type": "ZedAgentStatus",
+          "message": {
+            "Name": "zedagent",
+            "ConfigGetStatus": 4,
+            "RebootCmd": false,
+            "ShutdownCmd": false,
+            "PoweroffCmd": false,
+            "RequestedRebootReason": "",
+            "RequestedBootReason": 0,
+            "MaintenanceMode": false,
+            "ForceFallbackCounter": 0,
+            "CurrentProfile": "",
+            "RadioSilence": {
+              "Imposed": false,
+              "ChangeInProgress": true,
+              "ChangeRequestedAt": "2024-09-02T19:34:10.072403241Z",
+              "ConfigError": ""
+            },
+            "DeviceState": 4,
+            "AttestState": 1,
+            "AttestError": "[ATTEST] Error All attempts to connect to zedcloud.alpha.zededa.net/api/v2/edgedevice/id/571efd21-2cdc-47f0-a577-c11aad2eb7a8/attest failed: interface eth1: no suitable IP address available; send via wlan0: link not up for interface wlan0 (down); interface eth0: no suitable IP address available, senderStatus SenderStatusNone",
+            "VaultStatus": 4,
+            "PCRStatus": 1,
+            "VaultErr": "Vault key unavailable"
+          }
+        }
+        "#;
+    let _msg: IpcMessage = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_zed_agent_status_message_2() {
+    let json_data = r#"
+        {
+          "type": "ZedAgentStatus",
+          "message": {
+            "Name": "zedagent",
+            "ConfigGetStatus": 0,
+            "RebootCmd": false,
+            "ShutdownCmd": false,
+            "PoweroffCmd": false,
+            "RequestedRebootReason": "",
+            "RequestedBootReason": 0,
+            "MaintenanceMode": false,
+            "ForceFallbackCounter": 0,
+            "CurrentProfile": "",
+            "RadioSilence": {
+              "Imposed": false,
+              "ChangeInProgress": true,
+              "ChangeRequestedAt": "2024-09-02T20:16:40.270446047Z",
+              "ConfigError": ""
+            },
+            "DeviceState": 0,
+            "AttestState": 0,
+            "AttestError": "",
+            "VaultStatus": 0,
+            "PCRStatus": 0,
+            "VaultErr": ""
+          }
+        }
+        "#;
+    let _msg: IpcMessage = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_zed_agent_status() {
+    let json_data = r#"
+        {
+        "Name": "zedagent",
+        "ConfigGetStatus": 4,
+        "RebootCmd": false,
+        "ShutdownCmd": false,
+        "PoweroffCmd": false,
+        "RequestedRebootReason": "",
+        "RequestedBootReason": 0,
+        "MaintenanceMode": false,
+        "ForceFallbackCounter": 0,
+        "CurrentProfile": "",
+        "RadioSilence": {
+            "Imposed": false,
+            "ChangeInProgress": true,
+            "ChangeRequestedAt": "2024-09-02T19:34:10.072403241Z",
+            "ConfigError": ""
+        },
+        "DeviceState": 4,
+        "AttestState": 1,
+        "AttestError": "[ATTEST] Error All attempts to connect to zedcloud.alpha.zededa.net/api/v2/edgedevice/id/571efd21-2cdc-47f0-a577-c11aad2eb7a8/attest failed: interface eth1: no suitable IP address available; send via wlan0: link not up for interface wlan0 (down); interface eth0: no suitable IP address available, senderStatus SenderStatusNone",
+        "VaultStatus": 4,
+        "PCRStatus": 1,
+        "VaultErr": "Vault key unavailable"
+        }
+        "#;
+    let _msg: ZedAgentStatus = serde_json::from_str(json_data).unwrap();
+}
+
+#[test]
+fn test_dpc_new() {
+    let json_data = r#"
+        {
+          "type": "DPCList",
+          "message": {
+            "CurrentIndex": 0,
+            "PortConfigList": [
+              {
+                "Version": 1,
+                "Key": "lastresort",
+                "TimePriority": "1975-01-01T00:00:00Z",
+                "State": 3,
+                "ShaFile": "",
+                "ShaValue": null,
+                "LastFailed": "0001-01-01T00:00:00Z",
+                "LastSucceeded": "2024-10-07T14:52:41.149924714Z",
+                "LastError": "",
+                "LastWarning": "",
+                "LastIPAndDNS": "2024-10-07T14:52:41.1499244Z",
+                "Ports": [
+                  {
+                    "IfName": "eth0",
+                    "USBAddr": "",
+                    "PCIAddr": "",
+                    "Phylabel": "eth0",
+                    "Logicallabel": "eth0",
+                    "SharedLabels": ["all", "uplink", "freeuplink"],
+                    "Alias": "",
+                    "NetworkUUID": "00000000-0000-0000-0000-000000000000",
+                    "IsMgmt": true,
+                    "IsL3Port": true,
+                    "InvalidConfig": false,
+                    "Cost": 0,
+                    "MTU": 0,
+                    "Dhcp": 4,
+                    "AddrSubnet": "",
+                    "Gateway": "",
+                    "DomainName": "",
+                    "NTPServer": "",
+                    "DNSServers": null,
+                    "Type": 0,
+                    "Proxies": null,
+                    "Exceptions": "",
+                    "Pacfile": "",
+                    "NetworkProxyEnable": false,
+                    "NetworkProxyURL": "",
+                    "WpadURL": "",
+                    "pubsub-large-ProxyCertPEM": null,
+                    "L2Type": 0,
+                    "VLAN": { "ParentPort": "", "ID": 0 },
+                    "Bond": {
+                      "AggregatedPorts": null,
+                      "Mode": 0,
+                      "LacpRate": 0,
+                      "MIIMonitor": {
+                        "Enabled": false,
+                        "Interval": 0,
+                        "UpDelay": 0,
+                        "DownDelay": 0
+                      },
+                      "ARPMonitor": {
+                        "Enabled": false,
+                        "Interval": 0,
+                        "IPTargets": null
+                      }
+                    },
+                    "WirelessCfg": {
+                      "WType": 0,
+                      "CellularV2": {
+                        "AccessPoints": null,
+                        "Probe": {
+                          "Disable": false,
+                          "UserDefinedProbe": {
+                            "Method": 0,
+                            "ProbeHost": "",
+                            "ProbePort": 0
+                          }
+                        },
+                        "LocationTracking": false
+                      },
+                      "Wifi": null,
+                      "Cellular": null
+                    },
+                    "LastFailed": "0001-01-01T00:00:00Z",
+                    "LastSucceeded": "0001-01-01T00:00:00Z",
+                    "LastError": "",
+                    "LastWarning": ""
+                  },
+                  {
+                    "IfName": "eth1",
+                    "USBAddr": "",
+                    "PCIAddr": "",
+                    "Phylabel": "eth1",
+                    "Logicallabel": "eth1",
+                    "SharedLabels": ["all", "uplink", "freeuplink"],
+                    "Alias": "",
+                    "NetworkUUID": "00000000-0000-0000-0000-000000000000",
+                    "IsMgmt": true,
+                    "IsL3Port": true,
+                    "InvalidConfig": false,
+                    "Cost": 0,
+                    "MTU": 0,
+                    "Dhcp": 4,
+                    "AddrSubnet": "",
+                    "Gateway": "",
+                    "DomainName": "",
+                    "NTPServer": "",
+                    "DNSServers": null,
+                    "Type": 0,
+                    "Proxies": null,
+                    "Exceptions": "",
+                    "Pacfile": "",
+                    "NetworkProxyEnable": false,
+                    "NetworkProxyURL": "",
+                    "WpadURL": "",
+                    "pubsub-large-ProxyCertPEM": null,
+                    "L2Type": 0,
+                    "VLAN": { "ParentPort": "", "ID": 0 },
+                    "Bond": {
+                      "AggregatedPorts": null,
+                      "Mode": 0,
+                      "LacpRate": 0,
+                      "MIIMonitor": {
+                        "Enabled": false,
+                        "Interval": 0,
+                        "UpDelay": 0,
+                        "DownDelay": 0
+                      },
+                      "ARPMonitor": {
+                        "Enabled": false,
+                        "Interval": 0,
+                        "IPTargets": null
+                      }
+                    },
+                    "WirelessCfg": {
+                      "WType": 0,
+                      "CellularV2": {
+                        "AccessPoints": null,
+                        "Probe": {
+                          "Disable": false,
+                          "UserDefinedProbe": {
+                            "Method": 0,
+                            "ProbeHost": "",
+                            "ProbePort": 0
+                          }
+                        },
+                        "LocationTracking": false
+                      },
+                      "Wifi": null,
+                      "Cellular": null
+                    },
+                    "LastFailed": "0001-01-01T00:00:00Z",
+                    "LastSucceeded": "2024-10-07T14:52:41.149885872Z",
+                    "LastError": "",
+                    "LastWarning": ""
+                  }
+                ]
+              }
+            ]
           }
         }
         "#;

@@ -148,6 +148,11 @@ impl Application {
                 self.model.borrow_mut().update_app_list(app_list);
             }
 
+            IpcMessage::ZedAgentStatus(status) => {
+                debug!("Got ZedAgentStatus");
+                self.model.borrow_mut().update_zed_agent_status(status);
+            }
+
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
             }

@@ -22,6 +22,7 @@ use super::eve_types::EveOnboardingStatus;
 use super::eve_types::EveVaultStatus;
 use super::eve_types::LedBlinkCounter;
 use super::eve_types::PhysicalIOAdapterList;
+use super::eve_types::ZedAgentStatus;
 
 /// WindowId is a unique identifier for a window that is incremented sequentially.
 pub type RequestId = u64;
@@ -58,6 +59,7 @@ pub enum IpcMessage {
     LedBlinkCounter(LedBlinkCounter),
     NodeStatus(EveNodeStatus),
     AppsList(AppsList),
+    ZedAgentStatus(ZedAgentStatus),
     Response {
         #[serde(flatten)]
         result: core::result::Result<String, String>,

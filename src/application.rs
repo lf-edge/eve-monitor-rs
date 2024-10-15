@@ -1,7 +1,7 @@
+use crate::actions::MonActions;
 use crate::events::Event;
 use crate::model::model::Model;
 use crate::model::model::MonitorModel;
-use crate::raw_model::RawModel;
 use crate::ui::ui::Ui;
 use core::fmt::Debug;
 
@@ -10,6 +10,7 @@ use std::rc::Rc;
 use std::result::Result::Ok;
 
 use anyhow::Result;
+use log::error;
 use log::{debug, info, trace, warn};
 
 use tokio::sync::mpsc;
@@ -38,7 +39,6 @@ pub struct Application {
     ui: Ui,
     // this is our model :)
     model: Rc<Model>,
-    raw_model: RawModel,
 }
 
 impl Application {
@@ -59,7 +59,6 @@ impl Application {
             ui,
             ipc_tx: None,
             model,
-            raw_model: RawModel::new(),
         })
     }
 
@@ -86,9 +85,21 @@ impl Application {
 
     pub fn handle_ipc_message(&mut self, msg: IpcMessage) {
         match msg {
+            IpcMessage::Response { result, id } => {
+                debug!("Got response: {:?}", result);
+                match result {
+                    Ok(_) => {
+                        debug!("Response OK");
+                    }
+                    Err(e) => {
+                        error!("Response error: {:?}", e);
+                    }
+                }
+            }
+
             IpcMessage::DPCList(cfg) => {
                 debug!("Got DPC list");
-                self.raw_model.set_dpc_list(cfg);
+                self.model.borrow_mut().set_dpc_list(cfg);
             }
             IpcMessage::NetworkStatus(cfg) => {
                 debug!("Got Network status");
@@ -140,17 +151,6 @@ impl Application {
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
             }
-        }
-    }
-
-    pub fn send_dpc(&self) {
-        if let Some(current_dpc) = self.raw_model.get_current_dpc() {
-            let mut dpc = current_dpc.clone();
-
-            dpc.key = "manual".to_string();
-            dpc.time_priority = chrono::Utc::now();
-
-            self.send_ipc_message(IpcMessage::new_request(Request::SetDPC(dpc)));
         }
     }
 
@@ -394,12 +394,6 @@ impl Application {
                 event = self.terminal_rx.recv() => {
                     match event {
                         Some(Event::Key(key)) => {
-                            if (key.code == KeyCode::Char('s')) && (key.modifiers == KeyModifiers::CONTROL)
-                            {
-                                debug!("CTRL+s: sending IPC message");
-                                self.send_dpc();
-                            }
-
                             let action = self.ui.handle_event(Event::Key(key));
                             if let Some(action) = action {
                                 info!("Event loop got action: {:?}", action);

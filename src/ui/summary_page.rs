@@ -195,7 +195,7 @@ fn render_vault_status(model: &Rc<Model>, frame: &mut Frame<'_>, onboarding_stat
     spans.push(Span::styled("Status: ", Style::default().fg(Color::White)));
     spans.push(match vault_status {
         VaultStatus::Unknown => Span::styled("Unknown", Style::default().fg(Color::Yellow)),
-        VaultStatus::EncriptionDisabled(_, _) => {
+        VaultStatus::EncryptionDisabled(_, _) => {
             Span::styled("Encription disabled", Style::default().fg(Color::Yellow))
         }
         VaultStatus::Unlocked(_) => Span::styled("Unlocked", Style::default().fg(Color::Green)),
@@ -211,7 +211,7 @@ fn render_vault_status(model: &Rc<Model>, frame: &mut Frame<'_>, onboarding_stat
                 Span::styled("N/A", Style::default().fg(Color::Green)),
             ]));
         }
-        VaultStatus::EncriptionDisabled(reason, tpm_used) => {
+        VaultStatus::EncryptionDisabled(reason, tpm_used) => {
             text.push(Line::from(vec![
                 Span::styled("TPM used: ", Style::default().fg(Color::White)),
                 if *tpm_used {

@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::ipc::eve_types::{
     AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
-    DownloaderStatus, ErrorAndTime, EveNodeStatus, EveOnboardingStatus, EveVaultStatus, PCRStatus,
-    SwState,
+    DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
+    EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState,
 };
 
 use super::device::network::NetworkInterfaceStatus;
@@ -59,7 +59,7 @@ impl From<ErrorAndTime> for EveError {
 #[derive(Debug)]
 pub enum VaultStatus {
     Unknown,
-    EncriptionDisabled(EveError, bool),
+    EncryptionDisabled(EveError, bool),
     Unlocked(bool),
     Locked(EveError, Option<Vec<i32>>),
 }
@@ -73,6 +73,8 @@ pub struct MonitorModel {
     pub node_status: NodeStatus,
     pub apps: HashMap<Uuid, AppInstance>,
     pub vault_status: VaultStatus,
+    pub dpc_list: Option<DevicePortConfigList>,
+    pub dpc_key: Option<String>,
 }
 
 impl From<EveVaultStatus> for VaultStatus {
@@ -82,7 +84,7 @@ impl From<EveVaultStatus> for VaultStatus {
             DataSecAtRestStatus::DataSecAtRestUnknown => Self::Unknown,
             DataSecAtRestStatus::DataSecAtRestDisabled => {
                 let reason = EveError::from(vault_status.error_and_time);
-                Self::EncriptionDisabled(reason, tpm_used)
+                Self::EncryptionDisabled(reason, tpm_used)
             }
             DataSecAtRestStatus::DataSecAtRestEnabled => Self::Unlocked(tpm_used),
             DataSecAtRestStatus::DataSecAtRestError => {
@@ -182,6 +184,7 @@ impl MonitorModel {
     }
 
     pub fn update_network_status(&mut self, net_status: DeviceNetworkStatus) {
+        self.dpc_key = Some(net_status.dpc_key.clone());
         self.network = self.get_network_settings(net_status).unwrap_or_default();
     }
 
@@ -191,6 +194,19 @@ impl MonitorModel {
 
     pub fn update_onboarding_status(&mut self, status: EveOnboardingStatus) {
         self.node_status.onboarding_status = OnboardingStatus::Onboarded(status.device_uuid);
+    }
+
+    pub fn set_dpc_list(&mut self, dpc_list: DevicePortConfigList) {
+        self.dpc_list = Some(dpc_list);
+    }
+
+    pub fn get_dpc_list(&self) -> Option<&DevicePortConfigList> {
+        self.dpc_list.as_ref()
+    }
+
+    pub fn get_current_dpc(&self) -> Option<&DevicePortConfig> {
+        let key = self.dpc_key.clone()?;
+        self.get_dpc_list()?.get_dpc_by_key(&key)
     }
 }
 
@@ -203,6 +219,8 @@ impl Default for MonitorModel {
             node_status: NodeStatus::default(),
             apps: HashMap::new(),
             vault_status: VaultStatus::Unknown,
+            dpc_list: None,
+            dpc_key: None,
         }
     }
 }

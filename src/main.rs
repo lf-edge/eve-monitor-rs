@@ -4,7 +4,6 @@ mod events;
 mod ipc;
 mod mainwnd;
 mod model;
-mod raw_model;
 mod terminal;
 mod traits;
 mod ui;

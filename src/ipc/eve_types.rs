@@ -461,7 +461,26 @@ pub struct CellNetPortConfig {
 pub struct WwanProbe {
     disable: bool,
     // IP/FQDN address to periodically probe to determine connection status.
-    address: String,
+    user_defined_probe: ConnectivityProbe,
+}
+
+#[repr(u8)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum ConnectivityProbeMethod {
+    ConnectivityProbeMethodNone = 0,
+    ConnectivityProbeMethodICMP = 1,
+    ConnectivityProbeMethodTCP = 2,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct ConnectivityProbe {
+    // Method to use to determine the connectivity status.
+    pub method: ConnectivityProbeMethod,
+    // ProbeHost is either IP or hostname.
+    pub probe_host: String,
+    // ProbePort is required for L4 probing methods (e.g. ConnectivityProbeMethodTCP).
+    pub probe_port: u16,
 }
 
 #[derive(Debug, PartialEq, Clone)]

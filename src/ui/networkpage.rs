@@ -26,7 +26,7 @@ use super::{
 
 const MAC_LENGTH: u16 = 17;
 const LINK_STATE_LENGTH: u16 = 4;
-const IPV6_AVARAGE_LENGTH: u16 = 25;
+const IPV6_AVERAGE_LENGTH: u16 = 25;
 const IFACE_LABEL_LENGTH: u16 = 10;
 
 #[derive(Default)]
@@ -175,7 +175,7 @@ fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Ro
 impl IPresenter for NetworkPage {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
         let estimated_width =
-            IFACE_LABEL_LENGTH + LINK_STATE_LENGTH + IPV6_AVARAGE_LENGTH + MAC_LENGTH + 3 + 2 + 2; // for spacers and borders and selector
+            IFACE_LABEL_LENGTH + LINK_STATE_LENGTH + IPV6_AVERAGE_LENGTH + MAC_LENGTH + 3 + 2 + 2; // for spacers and borders and selector
         let [top_rect, details_rect] =
             Layout::vertical([Constraint::Percentage(40), Constraint::Fill(1)]).areas(*area);
         let [list_rect, _unused_rect] =

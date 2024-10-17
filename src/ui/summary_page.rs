@@ -74,11 +74,11 @@ fn render_onboarding_status(
     frame: &mut Frame<'_>,
     onboarding_status_rect: Rect,
 ) {
-    let onboarding_staus = model.borrow().node_status.onboarding_status.clone();
+    let onboarding_status = model.borrow().node_status.onboarding_status.clone();
     let mut text = Vec::new();
     let mut spans = vec![];
     spans.push(Span::styled("status: ", Style::default().fg(Color::White)));
-    spans.push(match onboarding_staus {
+    spans.push(match onboarding_status {
         OnboardingStatus::Unknown => Span::styled("Unknown", Style::default().fg(Color::Yellow)),
         OnboardingStatus::Onboarding => {
             Span::styled("Onboarding...", Style::default().fg(Color::Yellow))
@@ -91,7 +91,7 @@ fn render_onboarding_status(
 
     text.push(Line::from(spans));
 
-    match onboarding_staus {
+    match onboarding_status {
         OnboardingStatus::Unknown => {
             text.push(Line::from(vec![
                 Span::styled("GUID: ", Style::default().fg(Color::White)),

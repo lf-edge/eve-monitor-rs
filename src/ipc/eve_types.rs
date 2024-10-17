@@ -1312,8 +1312,8 @@ pub struct EveVaultStatus {
     #[serde(rename = "PCRStatus")]
     pub pcr_status: PCRStatus,
     pub conversion_complete: bool,
-    #[serde(rename = "MissmatchingPCRs")]
-    pub missmatching_pcrs: Option<Vec<i32>>,
+    #[serde(rename = "MismatchingPCRs")]
+    pub mismatching_pcrs: Option<Vec<i32>>,
     #[serde(flatten)]
     pub error_and_time: ErrorAndTime, // Unknown type, skipped
 }

@@ -92,7 +92,7 @@ impl From<EveVaultStatus> for VaultStatus {
                 let err = EveError::from(vault_status.error_and_time);
 
                 let pcrs = if err.error.contains("Vault key unavailable") {
-                    vault_status.missmatching_pcrs
+                    vault_status.mismatching_pcrs
                 } else {
                     None
                 };

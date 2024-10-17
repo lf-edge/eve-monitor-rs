@@ -453,7 +453,7 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
         let ipv4 = iface
             .ipv4
             .as_ref()
-            .map(|ipv4: &Vec<std::net::IpAddr>| ipv4.first().cloned())
+            .map(|ipv4: &Vec<std::net::Ipv4Addr>| ipv4.first().cloned())
             .flatten()
             .map(|addr| addr.to_string())
             .unwrap_or_default();
@@ -461,7 +461,7 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
         let ipv6 = iface
             .ipv6
             .as_ref()
-            .map(|ipv6: &Vec<std::net::IpAddr>| ipv6.first().cloned())
+            .map(|ipv6: &Vec<std::net::Ipv6Addr>| ipv6.first().cloned())
             .flatten()
             .map(|addr| addr.to_string())
             .unwrap_or_default();

@@ -1,4 +1,7 @@
-use std::{clone, net::IpAddr};
+use std::{
+    clone,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+};
 
 use crate::ipc::eve_types::{
     DhcpType, NetworkPortConfig, NetworkPortStatus, NetworkProxyType, ProxyEntry, WirelessType,
@@ -186,8 +189,8 @@ pub struct InterfaceConfig {
 pub struct NetworkInterfaceStatus {
     pub name: String,
     pub is_mgmt: bool,
-    pub ipv4: Option<Vec<IpAddr>>,
-    pub ipv6: Option<Vec<IpAddr>>,
+    pub ipv4: Option<Vec<Ipv4Addr>>,
+    pub ipv6: Option<Vec<Ipv6Addr>>,
     pub routes: Option<Vec<IpAddr>>,
     pub mac: MacAddr,
     pub ntp_servers: Option<Vec<IpAddr>>,
@@ -201,6 +204,37 @@ pub struct NetworkInterfaceStatus {
     pub cost: u8,
 }
 
+pub trait ToInnerIpAddr {
+    fn to_ipv4(&self) -> Option<Ipv4Addr>;
+    fn to_ipv6(&self) -> Option<Ipv6Addr>;
+}
+
+pub trait IpV6LinikLocal {
+    fn is_link_local(&self) -> bool;
+}
+
+impl IpV6LinikLocal for Ipv6Addr {
+    fn is_link_local(&self) -> bool {
+        self.segments()[0] == 0xfe80
+    }
+}
+
+impl ToInnerIpAddr for IpAddr {
+    fn to_ipv4(&self) -> Option<Ipv4Addr> {
+        match self {
+            IpAddr::V4(ipv4) => Some(*ipv4),
+            _ => None,
+        }
+    }
+
+    fn to_ipv6(&self) -> Option<Ipv6Addr> {
+        match self {
+            IpAddr::V6(ipv6) => Some(*ipv6),
+            _ => None,
+        }
+    }
+}
+
 impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
     fn from(port: &NetworkPortStatus) -> Self {
         // parse address list
@@ -208,7 +242,7 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             addr_info_list
                 .iter()
                 .filter(|addr_info| addr_info.addr.is_ipv4())
-                .map(|addr_info| addr_info.addr)
+                .map(|addr_info| addr_info.addr.to_ipv4().unwrap())
                 .collect()
         });
 
@@ -216,7 +250,9 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             addr_info_list
                 .iter()
                 .filter(|addr_info| addr_info.addr.is_ipv6())
-                .map(|addr_info| addr_info.addr)
+                .map(|addr_info| addr_info.addr.to_ipv6().unwrap())
+                // interfaces in EVE always have link local address which are not useful for the en user
+                .filter(|addr| !addr.is_link_local())
                 .collect()
         });
 
@@ -272,8 +308,8 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
 
         NetworkInterfaceStatus {
             name: port.if_name.clone(),
-            ipv4: ipv4,
-            ipv6: ipv6,
+            ipv4,
+            ipv6,
             is_mgmt: port.is_mgmt,
             routes: port.default_routers.clone(),
             mac: port.mac_addr,

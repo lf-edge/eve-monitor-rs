@@ -68,18 +68,24 @@ fn info_row_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Row<'b> {
 
     let height = (ipv4_len + ipv6_len).max(1);
 
-    // join both ipv4 and ipv6 addresses and separate by newline
+    // join Ipv4 and Ipv6 addresses and separate by newline
     let combined_ip_list_iter = iface
         .ipv4
         .iter()
-        .chain(iface.ipv6.iter())
-        .flat_map(|v| v.iter().cloned())
+        .flat_map(|v| v.iter())
         .map(|ip| ip.to_string())
+        .chain(
+            iface
+                .ipv6
+                .iter()
+                .flat_map(|v| v.iter())
+                .map(|ip| ip.to_string()),
+        )
         .collect::<Vec<_>>()
         .join("\n");
 
     // cell #3 IP address list
-    if height > 1 {
+    if height > 0 {
         cells.push(Cell::from(combined_ip_list_iter).style(Style::new().white()));
     } else {
         cells.push(Cell::from("N/A").style(Style::new().red()));

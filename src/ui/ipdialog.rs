@@ -531,7 +531,10 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
             ipv4: ipv4.clone(),
             ipv6: ipv6.clone(),
             proxy_type,
-            mask: "255.255.255.0".to_string(),
+            mask: iface
+                .subnet
+                .map(|ip| ip.netmask().to_string())
+                .unwrap_or_default(),
             gw: iface.gw.map(|ip| ip.to_string()).unwrap_or_default(),
             proxy_url,
             proxy_certificate: "".to_string(),

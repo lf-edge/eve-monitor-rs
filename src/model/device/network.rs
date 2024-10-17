@@ -6,6 +6,7 @@ use std::{
 use crate::ipc::eve_types::{
     DhcpType, NetworkPortConfig, NetworkPortStatus, NetworkProxyType, ProxyEntry, WirelessType,
 };
+use ipnet::IpNet;
 use macaddr::MacAddr;
 
 pub struct NetworkStatus {
@@ -198,6 +199,7 @@ pub struct NetworkInterfaceStatus {
     pub media: NetworkType,
     pub dns: Option<Vec<IpAddr>>,
     pub gw: Option<IpAddr>,
+    pub subnet: Option<IpNet>,
     pub is_dhcp: bool,
     pub proxy_config: ProxyConfig,
     pub domain: Option<String>,
@@ -306,6 +308,18 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             .as_ref()
             .and_then(|routers| routers.first().cloned());
 
+        let ntp_servers = if port.dhcp == DhcpType::Client {
+            port.ntp_servers.clone()
+        } else {
+            port.ntp_server.map(|ntp_server| vec![ntp_server])
+        };
+
+        let subnet = if port.subnet.addr() == IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)) {
+            None
+        } else {
+            Some(port.subnet.clone())
+        };
+
         NetworkInterfaceStatus {
             name: port.if_name.clone(),
             ipv4,
@@ -313,11 +327,12 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             is_mgmt: port.is_mgmt,
             routes: port.default_routers.clone(),
             mac: port.mac_addr,
-            ntp_servers: port.ntp_servers.clone(),
+            ntp_servers,
             up: port.up,
             media,
             dns,
             gw,
+            subnet,
             is_dhcp,
             cost: port.cost,
             domain: if port.domain_name.is_empty() {

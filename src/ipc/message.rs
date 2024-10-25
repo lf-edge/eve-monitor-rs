@@ -8,7 +8,6 @@ use bytes::BytesMut;
 use log::error;
 use serde::Deserialize;
 use serde::Serialize;
-use uuid::Uuid;
 
 use super::eve_types::AppInstanceStatus;
 use super::eve_types::AppInstanceSummary;

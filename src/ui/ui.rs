@@ -20,10 +20,8 @@ use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::{
-    actions::{MainWndState, MonActions},
     events::Event,
-    model::device::dmesg::DmesgViewer,
-    model::model::Model,
+    model::{device::dmesg::DmesgViewer, model::Model},
     terminal::TerminalWrapper,
     traits::IEventHandler,
     ui::action::UiActions,
@@ -37,13 +35,6 @@ use super::{
     networkpage::create_network_page,
     statusbar::{create_status_bar, StatusBarState},
     summary_page::SummaryPage,
-    widgets::{
-        button::ButtonElement,
-        input_field::{InputFieldElement, InputModifiers},
-        label::LabelElement,
-        radiogroup::RadioGroupElement,
-        spin_box::{SpinBoxElement, SpinBoxLayout},
-    },
     window::Window,
 };
 
@@ -87,111 +78,6 @@ impl Ui {
             status_bar: create_status_bar(),
             first_frame: true,
         })
-    }
-
-    pub fn create_main_wnd(&self) -> Window<MainWndState> {
-        let do_layout = |w: &mut Window<MainWndState>, area: &Rect, _model: &Rc<Model>| {
-            let cols = Layout::horizontal([Constraint::Ratio(1, 4); 4]).split(*area);
-            for (i, col) in cols.iter().enumerate() {
-                let rows = Layout::vertical([Constraint::Ratio(1, 4); 4]).split(*col);
-                for (j, row) in rows.iter().enumerate() {
-                    let area_name = format!("{}-{}", i, j);
-                    w.update_layout(area_name, *row);
-                }
-            }
-        };
-
-        let input = InputFieldElement::new("Gateway", Some("delete me"))
-            .on_char(|c: &char| {
-                info!("Char: {:?}", c);
-
-                if c.is_digit(10) || *c == '.' {
-                    return Some(*c);
-                }
-                None
-            })
-            .with_modifiers(vec![
-                InputModifiers::DisplayMode,
-                InputModifiers::DisplayCaption,
-            ])
-            .with_size_hint((19, 3).into())
-            .with_text_hint("192.168.0.1");
-        let button = ButtonElement::new("Button");
-        let radiogroup =
-            RadioGroupElement::new(vec!["Option 1", "Option 2", "Option 3"], "Radio Group");
-
-        let clock = LabelElement::new("Clock").on_tick(|label| {
-            let now = chrono::Local::now();
-            let time = now.format("%H:%M:%S").to_string();
-            label.set_text(time);
-        });
-
-        let spinner = SpinBoxElement::new(vec!["Option 1", "Option 2", "Option 3"])
-            .selected(1)
-            .layout(SpinBoxLayout::Vertical)
-            .size_hint(16);
-
-        let spinner_2 = SpinBoxElement::new(vec!["DHCP", "Static", "Option 3"])
-            .selected(1)
-            .layout(SpinBoxLayout::Horizontal)
-            .size_hint(16);
-
-        let wnd = Window::builder("MainWnd")
-            .with_state(MainWndState {
-                a: 42,
-                ip: "10.208.13.5".to_string(),
-            })
-            .widget("3-1", button)
-            .widget("0-3", input)
-            .widget("1-1", radiogroup)
-            .widget("2-2", clock)
-            .widget("3-3", spinner)
-            .widget("3-2", spinner_2)
-            .with_layout(do_layout)
-            .with_focused_view("0-3")
-            .with_on_child_ui_action(|w: &mut Window<MainWndState>, _source, action| {
-                debug!("on_action Action: {:?}", action);
-                match action {
-                    UiActions::RadioGroup { selected } => {
-                        info!("RadioGroup updated: {}", selected);
-                    }
-                    UiActions::Input { text } => {
-                        info!("Input updated: {}", text);
-                        w.state.ip = text.clone();
-                    }
-                    UiActions::ButtonClicked(_) => {
-                        w.state.a += 1;
-                        info!("Button clicked: counter {}", w.state.a);
-                        // Send user action to indicate that the state was updated
-                        return Some(Action::new(
-                            "",
-                            UiActions::AppAction(MonActions::MainWndStateUpdated(w.state.clone())),
-                        ));
-                    }
-                    _ => {
-                        if *action != UiActions::Redraw {
-                            warn!("Unhandled action: {:?}", action);
-                        }
-                    }
-                }
-                // match action.action {
-                //     MonActions::ButtonClicked(label) => {
-                //         state.a += 1;
-                //         info!("Button clicked: {} counter {}", label, state.a);
-                //         return Some(MonActions::MainWndStateUpdated(state.clone()));
-                //     }
-                //     MonActions::InputUpdated(input) => {
-                //         info!("Input updated: {}", input);
-                //         return Some(MonActions::MainWndStateUpdated(state.clone()));
-                //     }
-                //     _ => {}
-                // }
-                None
-            })
-            .build()
-            .unwrap();
-
-        wnd
     }
 
     fn tabs() -> Tabs<'static> {
@@ -275,7 +161,7 @@ impl Ui {
         }
 
         match event {
-            // only fo debugging purposes
+            // only for debugging purposes
             Event::Key(key)
                 if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
             {

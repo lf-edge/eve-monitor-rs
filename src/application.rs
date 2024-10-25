@@ -315,7 +315,7 @@ impl Application {
     }
 
     fn create_terminal_task(&mut self) -> (JoinHandle<()>, CancellationToken) {
-        let mut terminal_event_stream = self.ui.terminal.get_stream();
+        let mut terminal_event_stream = TerminalWrapper::get_stream();
         let terminal_tx_clone = self.terminal_tx.clone();
         let terminal_cancel_token = CancellationToken::new();
         let terminal_cancel_token_child = terminal_cancel_token.clone();

@@ -251,7 +251,6 @@ impl Ui {
                 .select(self.selected_tab as usize)
                 .render(tabs, frame.buffer_mut());
 
-
             // redraw from the bottom up
             let stack = &mut self.views[self.selected_tab as usize];
             let last_index = stack.len().saturating_sub(1);
@@ -300,6 +299,14 @@ impl Ui {
                 self.pop_layer();
             }
 
+            Event::Key(key)
+                if (key.code == KeyCode::Char('a'))
+                    && (key.modifiers == KeyModifiers::CONTROL)
+                    && cfg!(debug_assertions) =>
+            {
+                debug!("CTRL+a: manual panic requested");
+                panic!("Manual panic requested");
+            }
             // show dialog on ctrl+d
             // Event::Key(key)
             //     if (key.code == KeyCode::Char('d')) && (key.modifiers == KeyModifiers::CONTROL) =>

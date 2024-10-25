@@ -2,15 +2,14 @@ use anyhow::Result;
 use crossterm::{
     cursor, execute,
     terminal::{
-        disable_raw_mode, enable_raw_mode, is_raw_mode_enabled, EnterAlternateScreen,
+        disable_raw_mode, enable_raw_mode, is_raw_mode_enabled, Clear, EnterAlternateScreen,
         LeaveAlternateScreen,
     },
 };
+
 use std::{
     fs::{self, File},
-    io::stdout,
     ops::{Deref, DerefMut},
-    os::fd::{AsRawFd, FromRawFd, IntoRawFd, RawFd},
 };
 
 use ratatui::{backend::CrosstermBackend, Terminal};
@@ -18,7 +17,6 @@ use ratatui::{backend::CrosstermBackend, Terminal};
 #[derive(Debug)]
 pub struct TerminalWrapper {
     terminal: Terminal<CrosstermBackend<File>>,
-    fd: RawFd,
 }
 
 impl TerminalWrapper {
@@ -41,37 +39,31 @@ impl TerminalWrapper {
 
     pub fn open_terminal() -> Result<Self> {
         let file = Self::tty_fd()?;
-        let raw_fd = file.as_raw_fd();
-
         let terminal = Self::init_terminal(file)?;
-        Ok(Self {
-            terminal,
-            fd: raw_fd,
-        })
+        Ok(Self { terminal })
     }
 
-    fn close_terminal(&mut self) -> Result<()> {
-        self.terminal.clear()?;
+    pub fn close_terminal() -> Result<()> {
         if is_raw_mode_enabled()? {
-            // get file from raw fd
-            let mut file = unsafe { File::from_raw_fd(self.fd) };
+            let mut file = Self::tty_fd()?;
             execute!(file, LeaveAlternateScreen, cursor::Show)?;
+            execute!(file, Clear(crossterm::terminal::ClearType::All))?;
             disable_raw_mode()?;
         }
         // No stdout before this point
         println!("Terminal should be now closed");
-
         Ok(())
     }
 
-    pub fn get_stream(&self) -> crossterm::event::EventStream {
+    pub fn get_stream() -> crossterm::event::EventStream {
         crossterm::event::EventStream::new()
     }
 }
 
 impl Drop for TerminalWrapper {
     fn drop(&mut self) {
-        self.close_terminal().unwrap();
+        let _ = self.terminal.clear();
+        let _ = Self::close_terminal();
     }
 }
 

@@ -2,7 +2,6 @@ mod actions;
 mod application;
 mod events;
 mod ipc;
-mod mainwnd;
 mod model;
 mod terminal;
 mod traits;
@@ -13,6 +12,7 @@ use std::path::PathBuf;
 use anyhow::Result;
 use application::Application;
 use log::{info, LevelFilter};
+use terminal::TerminalWrapper;
 
 fn init_logging() -> log2::Handle {
     let log_dir = if let Ok(_dir) = std::env::var("XDG_RUNTIME_DIR") {
@@ -49,6 +49,54 @@ fn init_logging() -> log2::Handle {
     handle
 }
 
+pub fn initialize_panic_handler() -> Result<()> {
+    let (panic_hook, eyre_hook) = color_eyre::config::HookBuilder::default()
+        .panic_section(format!(
+            "This is a bug. Consider reporting it at {}",
+            env!("CARGO_PKG_REPOSITORY")
+        ))
+        .display_location_section(true)
+        .display_env_section(true)
+        .into_hooks();
+    eyre_hook.install()?;
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let _ = TerminalWrapper::close_terminal();
+
+        let msg = format!("{}", panic_hook.panic_report(panic_info));
+        #[cfg(not(debug_assertions))]
+        {
+            eprintln!("{msg}");
+            use human_panic::{handle_dump, print_msg, Metadata};
+            let author = format!("authored by {}", env!("CARGO_PKG_AUTHORS"));
+            let support = format!(
+                "You can open a support request at {}",
+                env!("CARGO_PKG_REPOSITORY")
+            );
+            let meta = Metadata::new(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"))
+                .authors(author)
+                .support(support);
+
+            let file_path = handle_dump(&meta, panic_info);
+            print_msg(file_path, &meta)
+                .expect("human-panic: printing error message to console failed");
+        }
+        log::error!("Error: {}", strip_ansi_escapes::strip_str(msg));
+
+        #[cfg(debug_assertions)]
+        {
+            // Better Panic stacktrace that is only enabled when debugging.
+            better_panic::Settings::auto()
+                .most_recent_first(false)
+                .lineno_suffix(true)
+                .verbosity(better_panic::Verbosity::Full)
+                .create_panic_handler()(panic_info);
+        }
+
+        std::process::exit(1);
+    }));
+    Ok(())
+}
+
 fn log_system_info() {
     // get current user UID and GID
     use std::os::unix::fs::MetadataExt;
@@ -65,10 +113,17 @@ fn log_system_info() {
 #[tokio::main]
 async fn main() -> Result<()> {
     let _log2 = init_logging();
-
+    initialize_panic_handler()?;
     log_system_info();
 
     let mut app = Application::new()?;
-    app.run().await?;
-    Ok(())
+    let result = app.run().await;
+    if let Err(e) = &result {
+        log::error!("Application error: {}", e);
+    }
+    // FIXME: this is a workaround for malfunctioning terminal event stream
+    // Terminal must be dropped and restored automatically but one of the threads doesn't exit
+    // and await? on a mina function never finishes. Drops are executed later.
+    TerminalWrapper::close_terminal()?;
+    std::process::exit(0);
 }

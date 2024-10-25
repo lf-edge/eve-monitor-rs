@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::{
     traits::{IElementEventHandler, IWidget, IWidgetPresenter},
-    ui::{action::UiActions, activity::Activity},
+    ui::activity::Activity,
 };
 
 pub struct LabelElement {

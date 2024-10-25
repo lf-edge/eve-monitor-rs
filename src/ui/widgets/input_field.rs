@@ -1,4 +1,3 @@
-use crate::ui::activity::Activity;
 use crossterm::event::{KeyCode, KeyEvent};
 use log::trace;
 use ratatui::{

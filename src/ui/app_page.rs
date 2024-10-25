@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Alignment, Constraint, Rect},
     style::{Color, Style, Stylize},
-    text::{Text, ToText},
+    text::Text,
     widgets::{
         Block, BorderType, Borders, Cell, HighlightSpacing, Padding, Row, StatefulWidget, Table,
         TableState,
@@ -15,7 +15,7 @@ use ratatui::{
 use crate::{
     events::Event,
     model::model::{AppInstance, AppInstanceState, Model},
-    traits::{IEventHandler, IPresenter, IWidget, IWindow},
+    traits::{IEventHandler, IPresenter, IWindow},
 };
 
 use super::traits::ISelector;

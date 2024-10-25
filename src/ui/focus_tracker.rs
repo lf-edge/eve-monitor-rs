@@ -1,11 +1,8 @@
-use crate::traits::IElementEventHandler;
 use crate::ui::action::UiActions;
-use crate::ui::activity::Activity;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use log::debug;
 
-use super::action::Action;
 use super::window::WidgetMap;
 
 // use crate::traits::ViewComposer;

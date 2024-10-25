@@ -6,7 +6,7 @@ use std::{fmt::Debug, rc::Rc};
 
 use crossterm::event::KeyEvent;
 use indexmap::IndexMap;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use ratatui::layout::Rect;
 
 use crate::traits::{IEventHandler, IPresenter, IVisible, IWidget, IWindow};

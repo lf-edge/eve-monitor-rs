@@ -8,9 +8,11 @@ use macaddr::MacAddr8;
 use serde::de;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+use serde_with::base64::Base64;
 use serde_with::serde_as;
-use serde_with::DeserializeAs;
-use serde_with::SerializeAs;
+use serde_with::DefaultOnNull;
+use serde_with::FromInto;
+use serde_with::NoneAsEmptyString;
 use std::net::IpAddr;
 use strum::Display;
 use uuid::Uuid;
@@ -140,32 +142,6 @@ pub struct RadioSilence {
     pub config_error: String,
 }
 
-fn deserialize_ipaddr<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    // if string is empty, return None
-    let s: String = Deserialize::deserialize(deserializer)?;
-    if s.is_empty() {
-        return Ok(None);
-
-    // if string is not empty, parse it as an IP address
-    } else {
-        let ip = s.parse().map_err(serde::de::Error::custom)?;
-        Ok(Some(ip))
-    }
-}
-
-fn serialize_ipaddr<S>(ip: &Option<IpAddr>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    match ip {
-        Some(ip) => ip.to_string().serialize(serializer),
-        None => "".serialize(serializer),
-    }
-}
-
 pub fn deserialize_mac<'de, D>(deserializer: D) -> Result<MacAddr, D::Error>
 where
     D: Deserializer<'de>,
@@ -198,125 +174,49 @@ where
 //     "IP": "192.168.1.0",
 //     "Mask": "////AA=="
 // },
-struct GoIpNetwork;
-
-impl SerializeAs<IpNet> for GoIpNetwork {
-    fn serialize_as<S>(source: &IpNet, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        as_go_ip_net::serialize(source, serializer)
-    }
+#[serde_as]
+#[derive(Debug, Deserialize, Serialize)]
+struct GoIpNetwork {
+    #[serde_as(as = "NoneAsEmptyString")]
+    #[serde(rename = "IP")]
+    ip: Option<IpAddr>,
+    #[serde_as(as = "Option<Base64>")]
+    #[serde(rename = "Mask")]
+    mask: Option<Vec<u8>>,
 }
 
-impl<'de> DeserializeAs<'de, IpNet> for GoIpNetwork {
-    fn deserialize_as<D>(deserializer: D) -> Result<IpNet, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        as_go_ip_net::deserialize(deserializer)
-    }
-}
-
-mod as_go_ip_net {
-    use core::fmt;
-    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-
-    use ipnet::IpNet;
-    use serde::{
-        self,
-        de::{self, MapAccess, Visitor},
-        ser::SerializeStruct,
-        Deserializer, Serializer,
-    };
-
-    pub fn serialize<S>(source: &IpNet, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let ip = source.addr();
-        let mask = source.netmask();
-
-        let mask_bytes = match mask {
-            IpAddr::V4(mask) => mask.octets().to_vec(),
-            IpAddr::V6(mask) => mask.octets().to_vec(),
-        };
-
-        // encode to base64
-        let mask_base64 = base64::encode(mask_bytes);
-
-        let mut subnet = serializer.serialize_struct("subnet", 3)?;
-        subnet.serialize_field("IP", &ip.to_string())?;
-        subnet.serialize_field("Mask", &mask_base64)?;
-        subnet.end()
-    }
-
-    pub fn deserialize<'de, D>(deserializer: D) -> Result<IpNet, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        struct IpNetVisitor;
-
-        impl<'de> Visitor<'de> for IpNetVisitor {
-            type Value = IpNet;
-
-            fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-                formatter.write_str("a struct with IP and Mask fields")
+impl From<GoIpNetwork> for Option<IpNet> {
+    fn from(gip: GoIpNetwork) -> Self {
+        match (gip.ip, gip.mask) {
+            (Some(ip), Some(mask)) => {
+                let prefix_len = mask.iter().fold(0, |acc, &byte| acc + byte.count_ones()) as u8;
+                IpNet::new(ip, prefix_len).ok()
             }
-
-            fn visit_map<V>(self, mut map: V) -> Result<IpNet, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                let mut ip: Option<String> = None;
-                let mut mask: Option<String> = None;
-
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        "IP" => {
-                            if ip.is_some() {
-                                return Err(de::Error::duplicate_field("IP"));
-                            }
-                            ip = Some(map.next_value()?);
-                        }
-                        "Mask" => {
-                            if mask.is_some() {
-                                return Err(de::Error::duplicate_field("Mask"));
-                            }
-                            mask = Some(map.next_value()?);
-                        }
-                        _ => {
-                            return Err(de::Error::unknown_field(key, FIELDS));
-                        }
-                    }
-                }
-
-                let mut ip = ip.ok_or_else(|| de::Error::missing_field("IP"))?;
-                let mask = mask.ok_or_else(|| de::Error::missing_field("Mask"))?;
-
-                if ip.is_empty() {
-                    ip = "0.0.0.0".to_string();
-                }
-
-                let ip = ip.parse().map_err(serde::de::Error::custom)?;
-                let mask_bytes = base64::decode(mask).map_err(serde::de::Error::custom)?;
-
-                let mask = match mask_bytes.len() {
-                    4 => IpAddr::V4(Ipv4Addr::from(
-                        TryInto::<[u8; 4]>::try_into(mask_bytes).unwrap(),
-                    )),
-                    16 => IpAddr::V6(Ipv6Addr::from(
-                        TryInto::<[u8; 16]>::try_into(mask_bytes).unwrap(),
-                    )),
-                    _ => return Err(serde::de::Error::custom("invalid mask length")),
-                };
-
-                Ok(IpNet::with_netmask(ip, mask).map_err(serde::de::Error::custom)?)
-            }
+            _ => None,
         }
+    }
+}
 
-        const FIELDS: &[&str] = &["IP", "Mask"];
-        deserializer.deserialize_struct("Subnet", FIELDS, IpNetVisitor)
+impl From<Option<IpNet>> for GoIpNetwork {
+    fn from(ip_net: Option<IpNet>) -> Self {
+        match ip_net {
+            Some(net) => {
+                let ip = net.addr();
+                let prefix_len = net.prefix_len();
+                let mut mask = vec![0u8; 16];
+                for i in 0..prefix_len {
+                    mask[i as usize / 8] |= 1 << (7 - i % 8);
+                }
+                GoIpNetwork {
+                    ip: Some(ip),
+                    mask: Some(mask),
+                }
+            }
+            None => GoIpNetwork {
+                ip: None,
+                mask: None,
+            },
+        }
     }
 }
 
@@ -336,9 +236,9 @@ pub struct NetworkPortStatus {
     pub dhcp: DhcpType,
     #[serde(rename = "Type")]
     pub network_type: NetworkType,
-    #[serde_as(as = "GoIpNetwork")]
-    pub subnet: IpNet,
-    #[serde(deserialize_with = "deserialize_ipaddr")]
+    #[serde_as(as = "FromInto<GoIpNetwork>")]
+    pub subnet: Option<IpNet>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub ntp_server: Option<IpAddr>,
     pub domain_name: String,
     #[serde(rename = "DNSServers")]
@@ -523,7 +423,7 @@ where
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WwanIPSettings {
-    #[serde_as(as = "Option<GoIpNetwork>")]
+    #[serde_as(as = "DefaultOnNull")]
     pub address: Option<IpNet>,
     #[serde(deserialize_with = "ip_empty_string_as_none")]
     pub gateway: Option<IpAddr>,
@@ -966,7 +866,7 @@ impl NetworkPortConfig {
     pub fn into_dhcp(mut self) -> Self {
         self.dhcp_config.dhcp = DhcpType::Client;
         // clean static ip fields
-        self.dhcp_config.addr_subnet = String::new();
+        self.dhcp_config.addr_subnet = None;
         self.dhcp_config.gateway = String::new();
         self.dhcp_config.domain_name = String::new();
         self.dhcp_config.ntp_server = None;
@@ -977,14 +877,14 @@ impl NetworkPortConfig {
 
     pub fn into_static(
         mut self,
-        addr_subnet: String,
+        addr_subnet: IpNet,
         gateway: String,
         domain_name: String,
         ntp_server: Option<IpAddr>,
         dns_servers: Option<Vec<IpAddr>>,
     ) -> Self {
         self.dhcp_config.dhcp = DhcpType::Static;
-        self.dhcp_config.addr_subnet = addr_subnet;
+        self.dhcp_config.addr_subnet = Some(addr_subnet);
         self.dhcp_config.gateway = gateway;
         self.dhcp_config.domain_name = domain_name;
         self.dhcp_config.ntp_server = ntp_server;
@@ -995,7 +895,7 @@ impl NetworkPortConfig {
     pub fn to_dhcp(&mut self) {
         self.dhcp_config.dhcp = DhcpType::Client;
         // clean static ip fields
-        self.dhcp_config.addr_subnet = String::new();
+        self.dhcp_config.addr_subnet = None;
         self.dhcp_config.gateway = String::new();
         self.dhcp_config.domain_name = String::new();
         self.dhcp_config.ntp_server = None;
@@ -1004,14 +904,14 @@ impl NetworkPortConfig {
 
     pub fn to_static(
         &mut self,
-        addr_subnet: String,
+        addr_subnet: IpNet,
         gateway: String,
         domain_name: String,
         ntp_server: Option<IpAddr>,
         dns_servers: Option<Vec<IpAddr>>,
     ) {
         self.dhcp_config.dhcp = DhcpType::Static;
-        self.dhcp_config.addr_subnet = addr_subnet;
+        self.dhcp_config.addr_subnet = Some(addr_subnet);
         self.dhcp_config.gateway = gateway;
         self.dhcp_config.domain_name = domain_name;
         self.dhcp_config.ntp_server = ntp_server;
@@ -1020,17 +920,18 @@ impl NetworkPortConfig {
 }
 
 // DhcpConfig struct
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct DhcpConfig {
     pub dhcp: DhcpType,
-    pub addr_subnet: String,
+    #[serde_as(as = "NoneAsEmptyString")]
+    pub addr_subnet: Option<IpNet>,
     pub gateway: String,
     pub domain_name: String,
+    #[serde_as(as = "NoneAsEmptyString")]
     #[serde(
         rename = "NTPServer",
-        deserialize_with = "deserialize_ipaddr",
-        serialize_with = "serialize_ipaddr"
     )]
     pub ntp_server: Option<IpAddr>,
     #[serde(rename = "DNSServers")]

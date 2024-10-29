@@ -40,6 +40,7 @@ static REQ_ID: RequestIdGenerator = RequestIdGenerator(AtomicU64::new(1));
 #[serde(tag = "RequestType", content = "RequestData")]
 pub enum Request {
     SetDPC(DevicePortConfig),
+    SetServer(String),
 }
 
 #[derive(Debug, Serialize, Deserialize)]

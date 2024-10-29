@@ -587,6 +587,16 @@ impl Application {
                     self.ui.show_ip_dialog(iface_data);
                 }
             }
+            UiActions::ChangeServer => {
+                let url = self
+                    .model
+                    .borrow()
+                    .node_status
+                    .server
+                    .clone()
+                    .unwrap_or_default();
+                self.ui.show_server_url_dialog(&url);
+            }
             UiActions::AppAction(app_action) => match app_action {
                 MonActions::NetworkInterfaceUpdated(old, new) => {
                     debug!("Setting DPC for {}", &old.iface_name);
@@ -597,6 +607,11 @@ impl Application {
                     } else {
                         self.send_dpc(old, new);
                     }
+                    self.ui.pop_layer();
+                }
+                MonActions::ServerUpdated(url) => {
+                    debug!("Setting server URL to: {}", &url);
+                    self.send_ipc_message(IpcMessage::new_request(Request::SetServer(url)));
                     self.ui.pop_layer();
                 }
                 _ => {}

@@ -1,7 +1,7 @@
 use crate::{
     model::device::network::NetworkInterfaceStatus,
     traits::{IPresenter, IWindow},
-    ui::ipdialog::create_ip_dialog,
+    ui::{input_dialog::create_input_dialog, ipdialog::create_ip_dialog},
 };
 use core::fmt::Debug;
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -312,6 +312,17 @@ impl Ui {
 
     pub fn show_ip_dialog(&mut self, iface: NetworkInterfaceStatus) {
         let d = create_ip_dialog(&iface);
+        self.push_layer(d);
+    }
+
+    pub fn show_server_url_dialog(&mut self, url: &str) {
+        let d = create_input_dialog(
+            "Change server URL",
+            "Server URL",
+            "id",
+            url,
+            "https://prod.zedcontrol.zededa.net",
+        );
         self.push_layer(d);
     }
 }

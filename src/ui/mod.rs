@@ -4,6 +4,7 @@ pub mod app_page;
 pub mod dialog;
 pub mod focus_tracker;
 pub mod homepage;
+pub mod input_dialog;
 pub mod ipdialog;
 pub mod layer_stack;
 pub mod networkpage;

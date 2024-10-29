@@ -1,6 +1,6 @@
-use crate::ui::ipdialog::IpDialogState;
+use crate::ui::ipdialog::InterfaceState;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum MonActions {
-    NetworkInterfaceUpdated(IpDialogState),
+    NetworkInterfaceUpdated(InterfaceState, InterfaceState),
 }

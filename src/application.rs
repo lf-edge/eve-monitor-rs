@@ -2,14 +2,17 @@ use crate::actions::MonActions;
 use crate::events::Event;
 use crate::model::model::Model;
 use crate::model::model::MonitorModel;
+use crate::ui::ipdialog::InterfaceState;
 use crate::ui::ui::Ui;
 use core::fmt::Debug;
 
 use std::cell::RefCell;
+use std::net::IpAddr;
 use std::rc::Rc;
 use std::result::Result::Ok;
 
 use anyhow::Result;
+use ipnet::IpNet;
 use log::error;
 use log::{debug, info, trace, warn};
 
@@ -19,8 +22,6 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use futures::{FutureExt, SinkExt, StreamExt};
 
-use crossterm::event::KeyCode;
-use crossterm::event::KeyModifiers;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -64,7 +65,14 @@ impl Application {
 
     pub fn send_ipc_message(&self, msg: IpcMessage) {
         if let Some(ipc_tx) = &self.ipc_tx {
-            ipc_tx.send(msg).unwrap();
+            match ipc_tx.send(msg) {
+                Ok(_) => {
+                    debug!("Sent IPC message");
+                }
+                Err(e) => {
+                    error!("Error sending IPC message: {:?}", e);
+                }
+            }
         }
     }
 
@@ -156,6 +164,70 @@ impl Application {
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
             }
+        }
+    }
+
+    pub fn send_dpc(&self, old: InterfaceState, new: InterfaceState) {
+        if let Some(current_dpc) = self.model.borrow().get_current_dpc() {
+            info!("send_dpc: Sending DPC for iface {}", &new.iface_name);
+            let dpc = current_dpc.clone();
+            let mut new_dpc = dpc.to_new_dpc_with_key("manual");
+            // there are 3 cases:
+            // 1. iface is switched DHCP -> Static
+            // 2. iface is switched Static -> DHCP
+            // 3. iface is switched Static -> Static with different IP
+            //
+            match (old.is_dhcp(), new.is_dhcp()) {
+                (false, true) => {
+                    // case 2
+                    new_dpc
+                        .get_port_by_name_mut(&new.iface_name)
+                        .unwrap()
+                        .to_dhcp();
+                }
+                (_, false) => {
+                    let ip: IpAddr = new.ipv4.parse().unwrap();
+                    let mask: IpAddr = new.mask.parse().unwrap();
+
+                    // parse DNS server string and convert to Option<Vec<IpAddr>>
+                    let dns_servers = new
+                        .dns
+                        .split(',')
+                        .map(|s| s.parse::<IpAddr>().ok())
+                        .flatten()
+                        .collect::<Vec<IpAddr>>();
+
+                    // same for NTP
+                    let ntp_servers = new
+                        .ntp
+                        .split(',')
+                        .map(|s| s.parse::<IpAddr>().ok())
+                        .flatten()
+                        .collect::<Vec<IpAddr>>();
+
+                    // case 1,3
+                    new_dpc
+                        .get_port_by_name_mut(&new.iface_name)
+                        .unwrap()
+                        .to_static(
+                            IpNet::with_netmask(ip, mask).unwrap(),
+                            new.gw.parse().unwrap(),
+                            new.domain,
+                            if ntp_servers.is_empty() {
+                                None
+                            } else {
+                                Some(ntp_servers[0])
+                            },
+                            if dns_servers.is_empty() {
+                                None
+                            } else {
+                                Some(dns_servers)
+                            },
+                        );
+                }
+                _ => {} // do nothing
+            }
+            self.send_ipc_message(IpcMessage::new_request(Request::SetDPC(new_dpc)));
         }
     }
 
@@ -515,6 +587,20 @@ impl Application {
                     self.ui.show_ip_dialog(iface_data);
                 }
             }
+            UiActions::AppAction(app_action) => match app_action {
+                MonActions::NetworkInterfaceUpdated(old, new) => {
+                    debug!("Setting DPC for {}", &old.iface_name);
+                    debug!("OLD DPC: {:#?}", &old);
+                    debug!("NEW DPC: {:#?}", &new);
+                    if old == new {
+                        debug!("Not changed, not sending DPC");
+                    } else {
+                        self.send_dpc(old, new);
+                    }
+                    self.ui.pop_layer();
+                }
+                _ => {}
+            },
             _ => {}
         }
     }

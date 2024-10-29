@@ -29,7 +29,7 @@ use super::{
 };
 
 #[derive(Clone, Debug, PartialEq)]
-enum ProxyType {
+pub enum ProxyType {
     None,
     Manual,
     Pac,
@@ -50,11 +50,18 @@ pub struct InterfaceState {
     pub pac_file: String,
     pub domain: String,
     pub dns: String,
+    pub ntp: String,
     // manual proxies
     pub proxy_http: String,
     pub proxy_https: String,
     pub proxy_ftp: String,
     pub proxy_socks: String,
+}
+
+impl InterfaceState {
+    pub fn is_dhcp(&self) -> bool {
+        self.ip_dhcp
+    }
 }
 
 // here we deal with Strings because we update them from InputFiled
@@ -76,7 +83,16 @@ impl IpDialogState {
                 if self.new_iface_state.ip_dhcp {
                     vec!["ip_spinner"]
                 } else {
-                    vec!["ip_spinner", "ipv4", "ipv6", "mask", "gw", "domain", "dns"]
+                    vec![
+                        "ip_spinner",
+                        "ipv4",
+                        "ipv6",
+                        "mask",
+                        "gw",
+                        "domain",
+                        "dns",
+                        "ntp",
+                    ]
                 }
             }
             "Proxy" => match self.new_iface_state.proxy_type {
@@ -180,6 +196,11 @@ fn create_widgets(w: &mut Window<IpDialogState>) {
         InputFieldElement::new("Domain", Some(w.state.new_iface_state.domain.as_str()))
             .with_text_hint("e.g. example.com"),
     );
+    w.add_widget(
+        "ntp",
+        InputFieldElement::new("NTP", Some(w.state.new_iface_state.ntp.as_str()))
+            .with_text_hint("e.g. 94.130.23.46, pool.ntp.org"),
+    );
 
     // proxy widgets
     w.add_widget(
@@ -227,7 +248,8 @@ fn update_ip_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
     w.update_layout("ip_spinner", spinner_rect);
 
     if !w.state.new_iface_state.ip_dhcp {
-        let [ip, ipv6, mask, gw, domain, dns] = Layout::vertical(vec![
+        let [ip, ipv6, mask, gw, domain, dns, ntp] = Layout::vertical(vec![
+            Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
@@ -243,6 +265,7 @@ fn update_ip_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
         w.update_layout("ipv6", ipv6);
         w.update_layout("domain", domain);
         w.update_layout("dns", dns);
+        w.update_layout("ntp", ntp);
     }
 }
 fn update_proxy_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
@@ -403,7 +426,10 @@ fn on_child_ui_action(
             "cancel" => Some(Action::new(&w.name, UiActions::DismissDialog)),
             "ok" => Some(Action::new(
                 &w.name,
-                UiActions::AppAction(MonActions::NetworkInterfaceUpdated(w.state.clone())),
+                UiActions::AppAction(MonActions::NetworkInterfaceUpdated(
+                    w.state.old_iface_state.clone(),
+                    w.state.new_iface_state.clone(),
+                )),
             )),
             _ => None,
         },
@@ -419,6 +445,7 @@ fn on_child_ui_action(
                 "https" => w.state.new_iface_state.proxy_https = text.clone(),
                 "ftp" => w.state.new_iface_state.proxy_ftp = text.clone(),
                 "socks" => w.state.new_iface_state.proxy_socks = text.clone(),
+                "ntp" => w.state.new_iface_state.ntp = text.clone(),
                 _ => {}
             }
             None
@@ -515,8 +542,18 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
             proxy_socks = socks.as_ref().map(|p| p.to_url()).unwrap_or_default();
         }
 
+        // convert to comma separated string
         let dns = iface
             .dns
+            .iter()
+            .flatten()
+            .map(|ip| ip.to_string())
+            .collect::<Vec<String>>()
+            .join(",");
+
+        // same for NTP
+        let ntp = iface
+            .ntp_servers
             .iter()
             .flatten()
             .map(|ip| ip.to_string())
@@ -541,6 +578,7 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
             pac_file,
             domain,
             dns,
+            ntp,
             proxy_ftp,
             proxy_http,
             proxy_https,

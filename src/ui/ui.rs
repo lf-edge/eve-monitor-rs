@@ -5,11 +5,11 @@ use crate::{
 };
 use core::fmt::Debug;
 use crossterm::event::{KeyCode, KeyModifiers};
-use log::{debug, info, warn};
+use log::debug;
 use ratatui::{
     layout::{
-        Constraint::{self, Fill, Length},
-        Layout, Rect,
+        Constraint::{Fill, Length},
+        Layout,
     },
     style::{Color, Modifier, Stylize},
     text::Line,
@@ -306,7 +306,7 @@ impl Ui {
         self.views[self.selected_tab as usize].push(Box::new(d))
     }
 
-    fn pop_layer(&mut self) -> Option<Box<dyn IWindow>> {
+    pub fn pop_layer(&mut self) -> Option<Box<dyn IWindow>> {
         self.views[self.selected_tab as usize].pop()
     }
 

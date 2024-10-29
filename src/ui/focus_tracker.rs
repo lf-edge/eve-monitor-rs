@@ -121,7 +121,7 @@ impl FocusTracker {
     }
 
     pub fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
-        debug!("focuse_tracker handle_event {:?}", key);
+        debug!("focus_tracker handle_event {:?}", key);
 
         match key.code {
             // handle Tab key

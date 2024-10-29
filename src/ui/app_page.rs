@@ -127,7 +127,7 @@ impl IEventHandler for ApplicationsPage {
 fn info_row_from_app<'a, 'b>(app: &'a AppInstance) -> Row<'b> {
     let height = 1;
     // cells #1,2 IFace name and Link status
-    let mut cells = vec![
+    let cells = vec![
         Cell::from(app.name.clone()),
         Cell::from(app.uuid.to_string()),
         match &app.state {

@@ -1,4 +1,4 @@
-use crate::{events::Event, ui::action::UiActions};
+use crate::ui::action::UiActions;
 use crossterm::event::KeyEvent;
 
 use super::action::Action;

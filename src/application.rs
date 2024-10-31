@@ -7,6 +7,7 @@ use crate::ui::ui::Ui;
 use core::fmt::Debug;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::net::IpAddr;
 use std::rc::Rc;
 use std::result::Result::Ok;
@@ -30,7 +31,6 @@ use crate::ipc::message::{IpcMessage, Request};
 use crate::terminal::TerminalWrapper;
 use crate::ui::action::{Action, UiActions};
 
-#[derive(Debug)]
 pub struct Application {
     terminal_rx: UnboundedReceiver<Event>,
     terminal_tx: UnboundedSender<Event>,
@@ -40,6 +40,8 @@ pub struct Application {
     ui: Ui,
     // this is our model :)
     model: Rc<Model>,
+    // pending requests
+    pending_requests: HashMap<u64, Rc<dyn Fn(&mut Application)>>,
 }
 
 impl Application {
@@ -49,6 +51,7 @@ impl Application {
         let terminal = TerminalWrapper::open_terminal()?;
         let mut ui = Ui::new(action_tx.clone(), terminal)?;
         let model = Rc::new(RefCell::new(MonitorModel::default()));
+        let pending_requests = HashMap::new();
 
         ui.init();
 
@@ -60,11 +63,22 @@ impl Application {
             ui,
             ipc_tx: None,
             model,
+            pending_requests,
         })
     }
-
-    pub fn send_ipc_message(&self, msg: IpcMessage) {
+    pub fn send_ipc_message<F>(&mut self, msg: IpcMessage, handle_response: F)
+    where
+        F: Fn(&mut Application) -> () + 'static,
+    {
         if let Some(ipc_tx) = &self.ipc_tx {
+            match &msg {
+                IpcMessage::Request { request, id } => {
+                    debug!("Pending response for: {:?}", request);
+                    self.pending_requests.insert(*id, Rc::new(handle_response));
+                }
+                _ => {}
+            }
+
             match ipc_tx.send(msg) {
                 Ok(_) => {
                     debug!("Sent IPC message");
@@ -98,9 +112,14 @@ impl Application {
                 match result {
                     Ok(_) => {
                         debug!("Response OK");
+                        if let Some(handle_response) = self.pending_requests.remove(&id) {
+                            handle_response(self);
+                        }
                     }
                     Err(e) => {
                         error!("Response error: {:?}", e);
+                        // remove pending request
+                        self.pending_requests.remove(&id);
                     }
                 }
             }
@@ -167,8 +186,9 @@ impl Application {
         }
     }
 
-    pub fn send_dpc(&self, old: InterfaceState, new: InterfaceState) {
-        if let Some(current_dpc) = self.model.borrow().get_current_dpc() {
+    pub fn send_dpc(&mut self, old: InterfaceState, new: InterfaceState) {
+        let current_dpc = self.model.borrow().get_current_dpc().cloned();
+        if let Some(current_dpc) = current_dpc {
             info!("send_dpc: Sending DPC for iface {}", &new.iface_name);
             let dpc = current_dpc.clone();
             let mut new_dpc = dpc.to_new_dpc_with_key("manual");
@@ -227,7 +247,7 @@ impl Application {
                 }
                 _ => {} // do nothing
             }
-            self.send_ipc_message(IpcMessage::new_request(Request::SetDPC(new_dpc)));
+            self.send_ipc_message(IpcMessage::new_request(Request::SetDPC(new_dpc)), |_| {});
         }
     }
 
@@ -611,7 +631,12 @@ impl Application {
                 }
                 MonActions::ServerUpdated(url) => {
                     debug!("Setting server URL to: {}", &url);
-                    self.send_ipc_message(IpcMessage::new_request(Request::SetServer(url)));
+                    self.send_ipc_message(
+                        IpcMessage::new_request(Request::SetServer(url.clone())),
+                        move |app| {
+                            app.model.borrow_mut().node_status.server = Some(url.clone());
+                        },
+                    );
                     self.ui.pop_layer();
                 }
                 _ => {}

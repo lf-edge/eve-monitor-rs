@@ -272,7 +272,7 @@ impl NetworkPage {
             ],
         )
         .block(block)
-        .highlight_style(Style::new().bg(Color::DarkGray))
+        .row_highlight_style(Style::new().bg(Color::DarkGray))
         // .highlight_symbol(">")
         .highlight_symbol(Text::from(vec![
             // "".into(),

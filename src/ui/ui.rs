@@ -126,7 +126,7 @@ impl Ui {
 
         //TODO: handle terminal event
         let _ = self.terminal.draw(|frame| {
-            let area = frame.size();
+            let area = frame.area();
             let [tabs, body, statusbar_rect] = screen_layout.areas(area);
 
             if self.first_frame {

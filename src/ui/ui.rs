@@ -91,24 +91,6 @@ impl Ui {
     }
 
     pub fn init(&mut self) {
-        // let w = self.create_main_wnd();
-
-        //self.views[UiTabs::Debug as usize].push(Box::new(w));
-
-        // let s = IpDialogState {
-        //     ip: "10.208.13.10".to_string(),
-        //     mode: "DHCP".to_string(),
-        //     gw: "1.1.1.1".to_string(),
-        // };
-
-        // let d: Dialog<MonActions> = Dialog::new(
-        //     (50, 20),
-        //     "confirm",
-        //     vec!["Ok", "Cancel"],
-        //     "Cancel",
-        //     MonActions::NetworkInterfaceUpdated(s),
-        // );
-
         self.views[UiTabs::Summary as usize].push(Box::new(SummaryPage::new()));
         self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
 
@@ -163,7 +145,9 @@ impl Ui {
         match event {
             // only for debugging purposes
             Event::Key(key)
-                if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
+                if (key.code == KeyCode::Char('e'))
+                    && (key.modifiers == KeyModifiers::CONTROL)
+                    && cfg!(debug_assertions) =>
             {
                 debug!("CTRL+q: application Quit requested");
                 self.action_tx
@@ -172,19 +156,24 @@ impl Ui {
             }
             // For debugging purposes
             Event::Key(key)
-                if (key.code == KeyCode::Char('r')) && (key.modifiers == KeyModifiers::CONTROL) =>
+                if (key.code == KeyCode::Char('r'))
+                    && (key.modifiers == KeyModifiers::CONTROL)
+                    && cfg!(debug_assertions) =>
             {
                 debug!("CTRL+r: manual Redraw requested");
                 self.invalidate();
             }
             // For debugging purposes
             Event::Key(key)
-                if (key.code == KeyCode::Char('p')) && (key.modifiers == KeyModifiers::CONTROL) =>
+                if (key.code == KeyCode::Char('p'))
+                    && (key.modifiers == KeyModifiers::CONTROL)
+                    && cfg!(debug_assertions) =>
             {
                 debug!("CTRL+p: manual layer.pop() requested");
                 self.pop_layer();
             }
 
+            // For debugging purposes
             Event::Key(key)
                 if (key.code == KeyCode::Char('a'))
                     && (key.modifiers == KeyModifiers::CONTROL)
@@ -193,59 +182,6 @@ impl Ui {
                 debug!("CTRL+a: manual panic requested");
                 panic!("Manual panic requested");
             }
-            // show dialog on ctrl+d
-            // Event::Key(key)
-            //     if (key.code == KeyCode::Char('d')) && (key.modifiers == KeyModifiers::CONTROL) =>
-            // {
-            //     debug!("CTRL+d: show dialog");
-
-            //     // let s = IpDialogState {
-            //     //     ip: "10.208.13.10".to_string(),
-            //     //     mode: "DHCP".to_string(),
-            //     //     gw: "1.1.1.1".to_string(),
-            //     // };
-
-            //     // let d: Dialog<MonActions> = Dialog::new(
-            //     //     (50, 30),
-            //     //     "confirm".to_string(),
-            //     //     vec!["Ok".to_string(), "Cancel".to_string()],
-            //     //     "Cancel",
-            //     //     MonActions::NetworkInterfaceUpdated(s),
-            //     // );
-
-            //     let d = create_ip_dialog();
-            //     self.push_layer(d);
-            // }
-
-            // show network edit dialog on ctrl+e
-            // Event::Key(key)
-            //     if (key.code == KeyCode::Char('e')) && (key.modifiers == KeyModifiers::CONTROL) =>
-            // {
-            //     debug!("CTRL+e: show dialog");
-
-            //     // let s = IpDialogState {
-            //     //     ip: "10.208.13.10".to_string(),
-            //     //     mode: "DHCP".to_string(),
-            //     //     gw: "1.1.1.1".to_string(),
-            //     // };
-
-            //     // let d: NetworkDialog = NetworkDialog::new();
-            //     // self.views[self.selected_tab as usize].push(Box::new(d));
-            // }
-
-            // handle Tab switching
-            // Event::Key(key)
-            //     if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Left) =>
-            // {
-            //     debug!("CTRL+Left: switching tab view");
-            //     self.selected_tab = self.selected_tab.previous();
-            // }
-            // Event::Key(key)
-            //     if (key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Right) =>
-            // {
-            //     debug!("CTRL+Right: switching tab view");
-            //     self.selected_tab = self.selected_tab.next();
-            // }
 
             // forward all other key events to the top layer
             Event::Key(key) => {

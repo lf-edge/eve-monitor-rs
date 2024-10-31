@@ -4,9 +4,12 @@ version = "0.1.0"
 edition = "2021"
 
 [profile.release]
-strip = true    # Automatically strip symbols from the binary.
-opt-level = "z" # Optimize for size.
-lto = true      # Enable link-time optimization.
+strip = "debuginfo" # Automatically strip symbols from the binary.
+opt-level = "z"     # Optimize for size.
+lto = true          # Enable link-time optimization.
+# keep it here for reference. not easy to find the info
+# debug = "line-tables-only"
+# debuginfo = "packed"
 
 [dependencies]
 crossterm = { version = "0.28.1", default-features = false, features = [

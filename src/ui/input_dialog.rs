@@ -127,7 +127,6 @@ fn on_child_ui_action(
 pub fn create_input_dialog(
     window_caption: &str,
     caption: &str,
-    id: &str,
     content: &str,
     hint: &str,
 ) -> impl IWindow {

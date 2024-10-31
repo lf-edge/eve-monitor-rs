@@ -173,7 +173,7 @@ impl IPresenter for ApplicationsPage {
         area: &ratatui::prelude::Rect,
         frame: &mut ratatui::Frame<'_>,
         model: &std::rc::Rc<Model>,
-        focused: bool,
+        _focused: bool,
     ) {
         self.render_app_list(model, *area, frame);
     }

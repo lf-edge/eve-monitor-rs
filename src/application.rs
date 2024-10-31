@@ -461,6 +461,7 @@ impl Application {
         // send initial redraw event
         self.invalidate();
 
+        #[allow(unused_assignments)]
         let mut do_redraw = true;
         let app_cancel_token = CancellationToken::new();
 
@@ -649,7 +650,6 @@ impl Application {
                     );
                     self.ui.pop_layer();
                 }
-                _ => {}
             },
             _ => {}
         }

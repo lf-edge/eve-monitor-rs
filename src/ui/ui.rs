@@ -255,7 +255,6 @@ impl Ui {
         let d = create_input_dialog(
             "Change server URL",
             "Server URL",
-            "id",
             url,
             "https://prod.zedcontrol.zededa.net",
         );

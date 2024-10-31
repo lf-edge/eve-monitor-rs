@@ -324,7 +324,7 @@ fn update_current_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
     }
 }
 
-fn ip_dialog_layout(w: &mut Window<IpDialogState>, rect: &Rect, model: &Rc<Model>) {
+fn ip_dialog_layout(w: &mut Window<IpDialogState>, rect: &Rect, _model: &Rc<Model>) {
     debug!("ip_dialog_layout. selected tab: {}", w.state.selected_tab);
     w.clear_layout();
 

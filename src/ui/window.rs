@@ -90,11 +90,13 @@ impl<D> WindowBuilder<D> {
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_taborder(mut self, tab_order: Vec<String>) -> Self {
         self.tab_order = Some(tab_order);
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_focused_view<S: Into<String>>(mut self, name: S) -> Self {
         self.focused_view = Some(name.into());
         self

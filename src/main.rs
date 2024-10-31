@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use application::Application;
+use libc::{EXIT_FAILURE, EXIT_SUCCESS};
 use log::{info, LevelFilter};
 use terminal::TerminalWrapper;
 
@@ -92,7 +93,7 @@ pub fn initialize_panic_handler() -> Result<()> {
                 .create_panic_handler()(panic_info);
         }
 
-        std::process::exit(1);
+        std::process::exit(EXIT_FAILURE);
     }));
     Ok(())
 }
@@ -125,5 +126,5 @@ async fn main() -> Result<()> {
     // Terminal must be dropped and restored automatically but one of the threads doesn't exit
     // and await? on a mina function never finishes. Drops are executed later.
     TerminalWrapper::close_terminal()?;
-    std::process::exit(0);
+    std::process::exit(EXIT_SUCCESS);
 }

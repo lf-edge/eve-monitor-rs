@@ -46,5 +46,5 @@ ipnet = { version = "2.10.1", features = ["serde", "json"] }
 better-panic = "0.3.0"
 color-eyre = "0.6.3"
 human-panic = "2.0.2"
-# libc = "0.2.161"
+libc = "0.2.161"
 strip-ansi-escapes = "0.2.0"

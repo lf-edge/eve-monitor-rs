@@ -27,6 +27,13 @@ pub struct NodeStatus {
     pub onboarding_status: OnboardingStatus,
 }
 
+impl NodeStatus {
+    pub fn is_onboarded(&self) -> bool {
+        matches!(self.onboarding_status, OnboardingStatus::Onboarding)
+            || matches!(self.onboarding_status, OnboardingStatus::Onboarded(_))
+    }
+}
+
 #[derive(Debug)]
 pub enum AppInstanceState {
     Normal(SwState),

@@ -3,6 +3,7 @@ use crate::events::Event;
 use crate::model::model::Model;
 use crate::model::model::MonitorModel;
 use crate::ui::ipdialog::InterfaceState;
+use crate::ui::message_box::create_message_box;
 use crate::ui::ui::Ui;
 use core::fmt::Debug;
 
@@ -608,14 +609,23 @@ impl Application {
                 }
             }
             UiActions::ChangeServer => {
-                let url = self
-                    .model
-                    .borrow()
-                    .node_status
-                    .server
-                    .clone()
-                    .unwrap_or_default();
-                self.ui.show_server_url_dialog(&url);
+                let is_onboarded = self.model.borrow().node_status.is_onboarded();
+
+                if is_onboarded {
+                    self.ui.message_box(
+                        "WARNING",
+                        "The node is onboarded and the server URL cannot be changed.",
+                    );
+                } else {
+                    let url = self
+                        .model
+                        .borrow()
+                        .node_status
+                        .server
+                        .clone()
+                        .unwrap_or_default();
+                    self.ui.show_server_url_dialog(&url);
+                }
             }
             UiActions::AppAction(app_action) => match app_action {
                 MonActions::NetworkInterfaceUpdated(old, new) => {

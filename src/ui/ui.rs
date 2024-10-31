@@ -325,6 +325,11 @@ impl Ui {
         );
         self.push_layer(d);
     }
+
+    pub fn message_box(&mut self, title: &str, message: &str) {
+        let d = super::message_box::create_message_box(title, message);
+        self.push_layer(d);
+    }
 }
 
 impl UiTabs {

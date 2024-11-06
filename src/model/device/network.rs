@@ -284,7 +284,6 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
                     })
                     .unwrap(),
             }),
-            _ => NetworkType::Ethernet,
         };
 
         let is_dhcp = port.dhcp == DhcpType::Client;

@@ -3,6 +3,7 @@ pub mod activity;
 pub mod app_page;
 pub mod dialog;
 pub mod focus_tracker;
+#[cfg(debug_assertions)]
 pub mod homepage;
 pub mod input_dialog;
 pub mod ipdialog;

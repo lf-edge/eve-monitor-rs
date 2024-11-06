@@ -3,9 +3,7 @@ use crate::events::Event;
 use crate::model::model::Model;
 use crate::model::model::MonitorModel;
 use crate::ui::ipdialog::InterfaceState;
-use crate::ui::message_box::create_message_box;
 use crate::ui::ui::Ui;
-use core::fmt::Debug;
 
 use std::cell::RefCell;
 use std::collections::HashMap;

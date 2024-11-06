@@ -30,13 +30,15 @@ use crate::{
 use super::{
     action::Action,
     app_page::ApplicationsPage,
-    homepage::HomePage,
     layer_stack::LayerStack,
     networkpage::create_network_page,
     statusbar::{create_status_bar, StatusBarState},
     summary_page::SummaryPage,
     window::Window,
 };
+
+#[cfg(debug_assertions)]
+use super::homepage::HomePage;
 
 use std::result::Result::Ok;
 
@@ -54,8 +56,8 @@ pub struct Ui {
 #[derive(Default, Copy, Clone, Display, EnumIter, Debug, FromRepr, EnumCount)]
 pub enum UiTabs {
     #[default]
-    //Debug,
     Summary,
+    #[cfg(debug_assertions)]
     Home,
     Network,
     Applications,
@@ -92,9 +94,10 @@ impl Ui {
 
     pub fn init(&mut self) {
         self.views[UiTabs::Summary as usize].push(Box::new(SummaryPage::new()));
-        self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
-
-        // self.views[UiTabs::Home as usize].push(Box::new(d));
+        #[cfg(debug_assertions)]
+        {
+            self.views[UiTabs::Home as usize].push(Box::new(HomePage::new()));
+        }
 
         self.views[UiTabs::Network as usize].push(Box::new(create_network_page()));
 

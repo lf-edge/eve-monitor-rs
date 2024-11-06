@@ -244,7 +244,13 @@ impl Application {
                             },
                         );
                 }
-                _ => {} // do nothing
+                (true, true) => {
+                    // this may actually happen if we add support for DHCP with some static fields e.g. custom DNS
+                    // log an error for now
+                    error!(
+                        "send_dpc: DHCP -> DHCP transition with static fields is not supported yet but seems it is implemented in UI"
+                    );
+                } // do nothing
             }
             self.send_ipc_message(IpcMessage::new_request(Request::SetDPC(new_dpc)), |_| {});
         }

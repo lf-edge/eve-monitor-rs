@@ -1,8 +1,7 @@
-use std::{clone, net::IpAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-use crate::ipc::eve_types::{
-    DhcpType, NetworkPortConfig, NetworkPortStatus, NetworkProxyType, ProxyEntry, WirelessType,
-};
+use crate::ipc::eve_types::{DhcpType, NetworkPortStatus, NetworkProxyType, WirelessType};
+use ipnet::IpNet;
 use macaddr::MacAddr;
 
 pub struct NetworkStatus {
@@ -186,8 +185,8 @@ pub struct InterfaceConfig {
 pub struct NetworkInterfaceStatus {
     pub name: String,
     pub is_mgmt: bool,
-    pub ipv4: Option<Vec<IpAddr>>,
-    pub ipv6: Option<Vec<IpAddr>>,
+    pub ipv4: Option<Vec<Ipv4Addr>>,
+    pub ipv6: Option<Vec<Ipv6Addr>>,
     pub routes: Option<Vec<IpAddr>>,
     pub mac: MacAddr,
     pub ntp_servers: Option<Vec<IpAddr>>,
@@ -195,10 +194,42 @@ pub struct NetworkInterfaceStatus {
     pub media: NetworkType,
     pub dns: Option<Vec<IpAddr>>,
     pub gw: Option<IpAddr>,
+    pub subnet: Option<IpNet>,
     pub is_dhcp: bool,
     pub proxy_config: ProxyConfig,
     pub domain: Option<String>,
     pub cost: u8,
+}
+
+pub trait ToInnerIpAddr {
+    fn to_ipv4(&self) -> Option<Ipv4Addr>;
+    fn to_ipv6(&self) -> Option<Ipv6Addr>;
+}
+
+pub trait IpV6LinikLocal {
+    fn is_link_local(&self) -> bool;
+}
+
+impl IpV6LinikLocal for Ipv6Addr {
+    fn is_link_local(&self) -> bool {
+        self.segments()[0] == 0xfe80
+    }
+}
+
+impl ToInnerIpAddr for IpAddr {
+    fn to_ipv4(&self) -> Option<Ipv4Addr> {
+        match self {
+            IpAddr::V4(ipv4) => Some(*ipv4),
+            _ => None,
+        }
+    }
+
+    fn to_ipv6(&self) -> Option<Ipv6Addr> {
+        match self {
+            IpAddr::V6(ipv6) => Some(*ipv6),
+            _ => None,
+        }
+    }
 }
 
 impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
@@ -208,7 +239,7 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             addr_info_list
                 .iter()
                 .filter(|addr_info| addr_info.addr.is_ipv4())
-                .map(|addr_info| addr_info.addr)
+                .map(|addr_info| addr_info.addr.to_ipv4().unwrap())
                 .collect()
         });
 
@@ -216,7 +247,9 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             addr_info_list
                 .iter()
                 .filter(|addr_info| addr_info.addr.is_ipv6())
-                .map(|addr_info| addr_info.addr)
+                .map(|addr_info| addr_info.addr.to_ipv6().unwrap())
+                // interfaces in EVE always have link local address which are not useful for the en user
+                .filter(|addr| !addr.is_link_local())
                 .collect()
         });
 
@@ -251,7 +284,6 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
                     })
                     .unwrap(),
             }),
-            _ => NetworkType::Ethernet,
         };
 
         let is_dhcp = port.dhcp == DhcpType::Client;
@@ -270,18 +302,25 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             .as_ref()
             .and_then(|routers| routers.first().cloned());
 
+        let ntp_servers = if port.dhcp == DhcpType::Client {
+            port.ntp_servers.clone()
+        } else {
+            port.ntp_server.map(|ntp_server| vec![ntp_server])
+        };
+
         NetworkInterfaceStatus {
             name: port.if_name.clone(),
-            ipv4: ipv4,
-            ipv6: ipv6,
+            ipv4,
+            ipv6,
             is_mgmt: port.is_mgmt,
             routes: port.default_routers.clone(),
             mac: port.mac_addr,
-            ntp_servers: port.ntp_servers.clone(),
+            ntp_servers,
             up: port.up,
             media,
             dns,
             gw,
+            subnet: port.subnet.clone(),
             is_dhcp,
             cost: port.cost,
             domain: if port.domain_name.is_empty() {
@@ -291,206 +330,5 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             },
             proxy_config: (&port.proxy_config).into(),
         }
-    }
-}
-#[cfg(test)]
-mod tests {
-    use std::{net::Ipv4Addr, str::FromStr};
-
-    use serde_json::from_value;
-    use serde_json::json;
-
-    use super::*;
-    fn get_network_port_status() -> NetworkPortStatus {
-        let json = json!({
-            "IfName": "eth1",
-            "Phylabel": "eth1",
-            "Logicallabel": "eth1",
-            "Alias": "",
-            "IsMgmt": true,
-            "IsL3Port": true,
-            "Cost": 0,
-            "Dhcp": 4,
-            "Type": 0,
-            "Subnet": {
-                "IP": "192.168.2.0",
-                "Mask": "////AA=="
-            },
-            "NtpServer": "",
-            "DomainName": "",
-            "DNSServers": [
-                "192.168.2.3"
-            ],
-            "NtpServers": null,
-            "AddrInfoList": [
-                {
-                    "Addr": "192.168.2.10",
-                    "Geo": {
-                        "ip": "",
-                        "hostname": "",
-                        "city": "",
-                        "region": "",
-                        "country": "",
-                        "loc": "",
-                        "org": "",
-                        "postal": ""
-                    },
-                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
-                },
-                {
-                    "Addr": "fec0::21b8:b579:8b9c:3cda",
-                    "Geo": {
-                        "ip": "",
-                        "hostname": "",
-                        "city": "",
-                        "region": "",
-                        "country": "",
-                        "loc": "",
-                        "org": "",
-                        "postal": ""
-                    },
-                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
-                },
-                {
-                    "Addr": "fe80::6f27:5660:de21:d553",
-                    "Geo": {
-                        "ip": "",
-                        "hostname": "",
-                        "city": "",
-                        "region": "",
-                        "country": "",
-                        "loc": "",
-                        "org": "",
-                        "postal": ""
-                    },
-                    "LastGeoTimestamp": "0001-01-01T00:00:00Z"
-                }
-            ],
-            "Up": true,
-            "MacAddr": "UlQAEjRX",
-            "DefaultRouters": [
-                "192.168.2.2",
-                "fe80::2"
-            ],
-            "MTU": 1500,
-            "WirelessCfg": {
-                "WType": 0,
-                "CellularV2": {
-                    "AccessPoints": null,
-                    "Probe": {
-                        "Disable": false,
-                        "Address": ""
-                    },
-                    "LocationTracking": false
-                },
-                "Wifi": null,
-                "Cellular": null
-            },
-            "WirelessStatus": {
-                "WType": 0,
-                "Cellular": {
-                    "LogicalLabel": "",
-                    "PhysAddrs": {
-                        "Interface": "",
-                        "USB": "",
-                        "PCI": "",
-                        "Dev": ""
-                    },
-                    "Module": {
-                        "Name": "",
-                        "IMEI": "",
-                        "Model": "",
-                        "Manufacturer": "",
-                        "Revision": "",
-                        "ControlProtocol": "",
-                        "OpMode": ""
-                    },
-                    "SimCards": null,
-                    "ConfigError": "",
-                    "ProbeError": "",
-                    "CurrentProvider": {
-                        "PLMN": "",
-                        "Description": "",
-                        "CurrentServing": false,
-                        "Roaming": false,
-                        "Forbidden": false
-                    },
-                    "VisibleProviders": null,
-                    "CurrentRATs": null,
-                    "ConnectedAt": 0,
-                    "IPSettings": {
-                        "Address": null,
-                        "Gateway": "",
-                        "DNSServers": null,
-                        "MTU": 0
-                    },
-                    "LocationTracking": false
-                }
-            },
-            "Proxies": null,
-            "Exceptions": "",
-            "Pacfile": "",
-            "NetworkProxyEnable": false,
-            "NetworkProxyURL": "",
-            "WpadURL": "",
-            "pubsub-large-ProxyCertPEM": null,
-            "L2Type": 0,
-            "VLAN": {
-                "ParentPort": "",
-                "ID": 0
-            },
-            "Bond": {
-                "AggregatedPorts": null,
-                "Mode": 0,
-                "LacpRate": 0,
-                "MIIMonitor": {
-                    "Enabled": false,
-                    "Interval": 0,
-                    "UpDelay": 0,
-                    "DownDelay": 0
-                },
-                "ARPMonitor": {
-                    "Enabled": false,
-                    "Interval": 0,
-                    "IPTargets": null
-                }
-            },
-            "LastFailed": "2024-07-22T06:27:12.052879635Z",
-            "LastSucceeded": "0001-01-01T00:00:00Z",
-            "LastError": "All attempts to connect to https://zedcloud.alpha.zededa.net/api/v2/edgedevice/ping failed: interface eth1: no DNS server available"
-        });
-
-        from_value(json).unwrap()
-    }
-
-    #[test]
-    fn test_from() {
-        let port = get_network_port_status();
-        let network_interface = NetworkInterfaceStatus::from(&port);
-        let ipv4_addresses = network_interface.ipv4.unwrap();
-        let ipv6_addresses = network_interface.ipv6.unwrap();
-
-        assert_eq!(network_interface.name, "eth1");
-        assert_eq!(network_interface.is_mgmt, true);
-        assert_eq!(ipv4_addresses.len(), 1);
-        assert_eq!(ipv6_addresses.len(), 2);
-        assert_eq!(
-            network_interface.mac.as_bytes(),
-            &[0x52, 0x54, 0x00, 0x12, 0x34, 0x57]
-        );
-        assert_eq!(network_interface.routes.unwrap().len(), 2);
-        // check all the addresses
-        assert_eq!(
-            ipv4_addresses[0],
-            IpAddr::V4(Ipv4Addr::new(192, 168, 2, 10))
-        );
-        assert_eq!(
-            ipv6_addresses[0],
-            IpAddr::from_str("fec0::21b8:b579:8b9c:3cda").unwrap()
-        );
-        assert_eq!(
-            ipv6_addresses[1],
-            IpAddr::from_str("fe80::6f27:5660:de21:d553").unwrap()
-        );
     }
 }

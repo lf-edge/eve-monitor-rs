@@ -1,14 +1,18 @@
 use base64::Engine;
 use chrono::DateTime;
 use chrono::Utc;
+use ipnet::IpNet;
 use macaddr::MacAddr;
 use macaddr::MacAddr6;
 use macaddr::MacAddr8;
 use serde::de;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use std::collections::HashMap;
-use std::default;
+use serde_with::base64::Base64;
+use serde_with::serde_as;
+use serde_with::DefaultOnNull;
+use serde_with::FromInto;
+use serde_with::NoneAsEmptyString;
 use std::net::IpAddr;
 use strum::Display;
 use uuid::Uuid;
@@ -96,7 +100,7 @@ pub struct Vlan {
 pub struct WirelessCfg {
     pub cellular: Option<String>,
     #[serde(rename = "CellularV2")]
-    pub cellular_v2: CellularV2,
+    pub cellular_v2: CellNetPortConfig,
     pub w_type: WirelessType,
     pub wifi: Option<String>,
 }
@@ -138,45 +142,6 @@ pub struct RadioSilence {
     pub config_error: String,
 }
 
-// "subnet": {
-//     "IP": "192.168.1.0",
-//     "Mask": "////AA=="
-// },
-
-#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
-#[serde(rename_all = "PascalCase")]
-pub struct GoIpNetwork {
-    #[serde(rename = "IP")]
-    pub ip: String,
-    pub mask: Option<String>, // base64 encoded prefix
-}
-
-fn deserialize_ipaddr<'de, D>(deserializer: D) -> Result<Option<IpAddr>, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    // if string is empty, return None
-    let s: String = Deserialize::deserialize(deserializer)?;
-    if s.is_empty() {
-        return Ok(None);
-
-    // if string is not empty, parse it as an IP address
-    } else {
-        let ip = s.parse().map_err(serde::de::Error::custom)?;
-        Ok(Some(ip))
-    }
-}
-
-fn serialize_ipaddr<S>(ip: &Option<IpAddr>, serializer: S) -> Result<S::Ok, S::Error>
-where
-    S: Serializer,
-{
-    match ip {
-        Some(ip) => ip.to_string().serialize(serializer),
-        None => "".serialize(serializer),
-    }
-}
-
 pub fn deserialize_mac<'de, D>(deserializer: D) -> Result<MacAddr, D::Error>
 where
     D: Deserializer<'de>,
@@ -205,6 +170,57 @@ where
     }
 }
 
+// "subnet": {
+//     "IP": "192.168.1.0",
+//     "Mask": "////AA=="
+// },
+#[serde_as]
+#[derive(Debug, Deserialize, Serialize)]
+struct GoIpNetwork {
+    #[serde_as(as = "NoneAsEmptyString")]
+    #[serde(rename = "IP")]
+    ip: Option<IpAddr>,
+    #[serde_as(as = "Option<Base64>")]
+    #[serde(rename = "Mask")]
+    mask: Option<Vec<u8>>,
+}
+
+impl From<GoIpNetwork> for Option<IpNet> {
+    fn from(gip: GoIpNetwork) -> Self {
+        match (gip.ip, gip.mask) {
+            (Some(ip), Some(mask)) => {
+                let prefix_len = mask.iter().fold(0, |acc, &byte| acc + byte.count_ones()) as u8;
+                IpNet::new(ip, prefix_len).ok()
+            }
+            _ => None,
+        }
+    }
+}
+
+impl From<Option<IpNet>> for GoIpNetwork {
+    fn from(ip_net: Option<IpNet>) -> Self {
+        match ip_net {
+            Some(net) => {
+                let ip = net.addr();
+                let prefix_len = net.prefix_len();
+                let mut mask = vec![0u8; 16];
+                for i in 0..prefix_len {
+                    mask[i as usize / 8] |= 1 << (7 - i % 8);
+                }
+                GoIpNetwork {
+                    ip: Some(ip),
+                    mask: Some(mask),
+                }
+            }
+            None => GoIpNetwork {
+                ip: None,
+                mask: None,
+            },
+        }
+    }
+}
+
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "PascalCase")]
 pub struct NetworkPortStatus {
@@ -220,8 +236,9 @@ pub struct NetworkPortStatus {
     pub dhcp: DhcpType,
     #[serde(rename = "Type")]
     pub network_type: NetworkType,
-    pub subnet: GoIpNetwork,
-    #[serde(deserialize_with = "deserialize_ipaddr")]
+    #[serde_as(as = "FromInto<GoIpNetwork>")]
+    pub subnet: Option<IpNet>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub ntp_server: Option<IpAddr>,
     pub domain_name: String,
     #[serde(rename = "DNSServers")]
@@ -402,10 +419,12 @@ where
     }
 }
 
+#[serde_as]
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WwanIPSettings {
-    pub address: Option<GoIpNetwork>,
+    #[serde_as(as = "DefaultOnNull")]
+    pub address: Option<IpNet>,
     #[serde(deserialize_with = "ip_empty_string_as_none")]
     pub gateway: Option<IpAddr>,
     #[serde(rename = "DNSServers")]
@@ -461,7 +480,26 @@ pub struct CellNetPortConfig {
 pub struct WwanProbe {
     disable: bool,
     // IP/FQDN address to periodically probe to determine connection status.
-    address: String,
+    user_defined_probe: ConnectivityProbe,
+}
+
+#[repr(u8)]
+#[derive(Debug, Serialize_repr, Deserialize_repr, PartialEq, Clone)]
+pub enum ConnectivityProbeMethod {
+    ConnectivityProbeMethodNone = 0,
+    ConnectivityProbeMethodICMP = 1,
+    ConnectivityProbeMethodTCP = 2,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct ConnectivityProbe {
+    // Method to use to determine the connectivity status.
+    pub method: ConnectivityProbeMethod,
+    // ProbeHost is either IP or hostname.
+    pub probe_host: String,
+    // ProbePort is required for L4 probing methods (e.g. ConnectivityProbeMethodTCP).
+    pub probe_port: u16,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -828,7 +866,7 @@ impl NetworkPortConfig {
     pub fn into_dhcp(mut self) -> Self {
         self.dhcp_config.dhcp = DhcpType::Client;
         // clean static ip fields
-        self.dhcp_config.addr_subnet = String::new();
+        self.dhcp_config.addr_subnet = None;
         self.dhcp_config.gateway = String::new();
         self.dhcp_config.domain_name = String::new();
         self.dhcp_config.ntp_server = None;
@@ -839,14 +877,14 @@ impl NetworkPortConfig {
 
     pub fn into_static(
         mut self,
-        addr_subnet: String,
+        addr_subnet: IpNet,
         gateway: String,
         domain_name: String,
         ntp_server: Option<IpAddr>,
         dns_servers: Option<Vec<IpAddr>>,
     ) -> Self {
         self.dhcp_config.dhcp = DhcpType::Static;
-        self.dhcp_config.addr_subnet = addr_subnet;
+        self.dhcp_config.addr_subnet = Some(addr_subnet);
         self.dhcp_config.gateway = gateway;
         self.dhcp_config.domain_name = domain_name;
         self.dhcp_config.ntp_server = ntp_server;
@@ -857,7 +895,7 @@ impl NetworkPortConfig {
     pub fn to_dhcp(&mut self) {
         self.dhcp_config.dhcp = DhcpType::Client;
         // clean static ip fields
-        self.dhcp_config.addr_subnet = String::new();
+        self.dhcp_config.addr_subnet = None;
         self.dhcp_config.gateway = String::new();
         self.dhcp_config.domain_name = String::new();
         self.dhcp_config.ntp_server = None;
@@ -866,14 +904,14 @@ impl NetworkPortConfig {
 
     pub fn to_static(
         &mut self,
-        addr_subnet: String,
+        addr_subnet: IpNet,
         gateway: String,
         domain_name: String,
         ntp_server: Option<IpAddr>,
         dns_servers: Option<Vec<IpAddr>>,
     ) {
         self.dhcp_config.dhcp = DhcpType::Static;
-        self.dhcp_config.addr_subnet = addr_subnet;
+        self.dhcp_config.addr_subnet = Some(addr_subnet);
         self.dhcp_config.gateway = gateway;
         self.dhcp_config.domain_name = domain_name;
         self.dhcp_config.ntp_server = ntp_server;
@@ -882,17 +920,18 @@ impl NetworkPortConfig {
 }
 
 // DhcpConfig struct
+#[serde_as]
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct DhcpConfig {
     pub dhcp: DhcpType,
-    pub addr_subnet: String,
+    #[serde_as(as = "NoneAsEmptyString")]
+    pub addr_subnet: Option<IpNet>,
     pub gateway: String,
     pub domain_name: String,
+    #[serde_as(as = "NoneAsEmptyString")]
     #[serde(
         rename = "NTPServer",
-        deserialize_with = "deserialize_ipaddr",
-        serialize_with = "serialize_ipaddr"
     )]
     pub ntp_server: Option<IpAddr>,
     #[serde(rename = "DNSServers")]
@@ -1293,8 +1332,8 @@ pub struct EveVaultStatus {
     #[serde(rename = "PCRStatus")]
     pub pcr_status: PCRStatus,
     pub conversion_complete: bool,
-    #[serde(rename = "MissmatchingPCRs")]
-    pub missmatching_pcrs: Option<Vec<i32>>,
+    #[serde(rename = "MismatchingPCRs")]
+    pub mismatching_pcrs: Option<Vec<i32>>,
     #[serde(flatten)]
     pub error_and_time: ErrorAndTime, // Unknown type, skipped
 }
@@ -1376,4 +1415,85 @@ where
 #[derive(Debug, Serialize, Deserialize)]
 pub struct AppsList {
     pub apps: Vec<AppInstanceStatus>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub struct ZedAgentStatus {
+    pub name: String,
+    pub config_get_status: ConfigGetStatus,
+    pub reboot_cmd: bool,
+    pub shutdown_cmd: bool,
+    pub poweroff_cmd: bool,
+    pub requested_reboot_reason: String,
+    pub requested_boot_reason: BootReason,
+    pub maintenance_mode: bool,
+    pub force_fallback_counter: i32,
+    pub current_profile: String,
+    pub radio_silence: RadioSilence,
+    pub device_state: DeviceState,
+    pub attest_state: AttestState,
+    pub attest_error: String,
+    pub vault_status: DataSecAtRestStatus,
+    #[serde(rename = "PCRStatus")]
+    pub pcr_status: PCRStatus,
+    pub vault_err: String,
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum BootReason {
+    BootReasonNone = 0,
+    BootReasonFirst = 1,         // Normal - was not yet onboarded
+    BootReasonRebootCmd = 2,     // Normal - result of a reboot command in the API
+    BootReasonUpdate = 3,        // Normal - from an EVE image update in the API
+    BootReasonFallback = 4,      // Fallback from a failed EVE image update
+    BootReasonDisconnect = 5,    // Disconnected from controller for too long
+    BootReasonFatal = 6,         // Fatal error causing log.Fatal
+    BootReasonOom = 7,           // OOM causing process to be killed
+    BootReasonWatchdogHung = 8,  // Software watchdog due to stuck agent
+    BootReasonWatchdogPid = 9,   // Software watchdog due to e.g., golang panic
+    BootReasonKernel = 10,       // Set by dump-capture kernel
+    BootReasonPowerFail = 11, // Known power failure e.g., from disk controller S.M.A.R.T counter increase
+    BootReasonUnknown = 12,   // Could be power failure, kernel panic, or hardware watchdog
+    BootReasonVaultFailure = 13, // Vault was not ready within the expected time
+    BootReasonPoweroffCmd = 14, // Start after Local Profile Server poweroff
+    BootReasonParseFail = 255, // BootReasonFromString didn't find match
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(i32)]
+pub enum AttestState {
+    StateNone = 0,           // State when (Re)Starting attestation
+    StateNonceWait,          // Waiting for response from Controller for Nonce request
+    StateInternalQuoteWait,  // Waiting for internal PCR quote to be published
+    StateInternalEscrowWait, // Waiting for internal Escrow data to be published
+    StateAttestWait,         // Waiting for response from Controller for PCR quote
+    StateAttestEscrowWait,   // Waiting for response from Controller for Escrow data
+    StateRestartWait,        // Waiting for restart timer to expire, to start all over again
+    StateComplete,           // Everything w.r.t attestation is complete
+    StateAny,                // Not a real state per se. helps defining wildcard transitions(below)
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum DeviceState {
+    Unspecified = 0,       // DEVICE_STATE_UNSPECIFIED
+    Online = 1,            // DEVICE_STATE_ONLINE
+    Rebooting = 2,         // DEVICE_STATE_REBOOTING
+    MaintenanceMode = 3,   // DEVICE_STATE_MAINTENANCE_MODE
+    BaseOsUpdating = 4,    // DEVICE_STATE_BASEOS_UPDATING
+    Booting = 5,           // DEVICE_STATE_BOOTING
+    PreparingPowerOff = 6, // DEVICE_STATE_PREPARING_POWEROFF
+    PoweringOff = 7,       // DEVICE_STATE_POWERING_OFF
+    PreparedPowerOff = 8,  // DEVICE_STATE_PREPARED_POWEROFF
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum ConfigGetStatus {
+    Success = 1,       // ConfigGetSuccess
+    Fail = 2,          // ConfigGetFail
+    TemporaryFail = 3, // ConfigGetTemporaryFail
+    ReadSaved = 4,     // ConfigGetReadSaved
 }

@@ -5,7 +5,6 @@ use ratatui::text::Text;
 use ratatui::widgets::Block;
 use ratatui::widgets::Gauge;
 use ratatui::widgets::Wrap;
-use std::borrow;
 use std::rc::Rc;
 
 use crate::events;

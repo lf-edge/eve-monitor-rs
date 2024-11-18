@@ -26,7 +26,7 @@ use super::{
 
 const MAC_LENGTH: u16 = 17;
 const LINK_STATE_LENGTH: u16 = 4;
-const IPV6_AVARAGE_LENGTH: u16 = 25;
+const IPV6_AVERAGE_LENGTH: u16 = 25;
 const IFACE_LABEL_LENGTH: u16 = 10;
 
 #[derive(Default)]
@@ -68,18 +68,24 @@ fn info_row_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Row<'b> {
 
     let height = (ipv4_len + ipv6_len).max(1);
 
-    // join both ipv4 and ipv6 addresses and separate by newline
+    // join Ipv4 and Ipv6 addresses and separate by newline
     let combined_ip_list_iter = iface
         .ipv4
         .iter()
-        .chain(iface.ipv6.iter())
-        .flat_map(|v| v.iter().cloned())
+        .flat_map(|v| v.iter())
         .map(|ip| ip.to_string())
+        .chain(
+            iface
+                .ipv6
+                .iter()
+                .flat_map(|v| v.iter())
+                .map(|ip| ip.to_string()),
+        )
         .collect::<Vec<_>>()
         .join("\n");
 
     // cell #3 IP address list
-    if height > 1 {
+    if height > 0 {
         cells.push(Cell::from(combined_ip_list_iter).style(Style::new().white()));
     } else {
         cells.push(Cell::from("N/A").style(Style::new().red()));
@@ -175,7 +181,7 @@ fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Ro
 impl IPresenter for NetworkPage {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
         let estimated_width =
-            IFACE_LABEL_LENGTH + LINK_STATE_LENGTH + IPV6_AVARAGE_LENGTH + MAC_LENGTH + 3 + 2 + 2; // for spacers and borders and selector
+            IFACE_LABEL_LENGTH + LINK_STATE_LENGTH + IPV6_AVERAGE_LENGTH + MAC_LENGTH + 3 + 2 + 2; // for spacers and borders and selector
         let [top_rect, details_rect] =
             Layout::vertical([Constraint::Percentage(40), Constraint::Fill(1)]).areas(*area);
         let [list_rect, _unused_rect] =
@@ -266,7 +272,7 @@ impl NetworkPage {
             ],
         )
         .block(block)
-        .highlight_style(Style::new().bg(Color::DarkGray))
+        .row_highlight_style(Style::new().bg(Color::DarkGray))
         // .highlight_symbol(">")
         .highlight_symbol(Text::from(vec![
             // "".into(),

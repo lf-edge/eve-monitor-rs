@@ -5,8 +5,8 @@ use uuid::Uuid;
 
 use crate::ipc::eve_types::{
     AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
-    DownloaderStatus, ErrorAndTime, EveNodeStatus, EveOnboardingStatus, EveVaultStatus, PCRStatus,
-    SwState,
+    DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
+    EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, ZedAgentStatus,
 };
 
 use super::device::network::NetworkInterfaceStatus;
@@ -25,6 +25,13 @@ pub struct NodeStatus {
     pub server: Option<String>,
     pub app_summary: AppInstanceSummary,
     pub onboarding_status: OnboardingStatus,
+}
+
+impl NodeStatus {
+    pub fn is_onboarded(&self) -> bool {
+        matches!(self.onboarding_status, OnboardingStatus::Onboarding)
+            || matches!(self.onboarding_status, OnboardingStatus::Onboarded(_))
+    }
 }
 
 #[derive(Debug)]
@@ -59,7 +66,7 @@ impl From<ErrorAndTime> for EveError {
 #[derive(Debug)]
 pub enum VaultStatus {
     Unknown,
-    EncriptionDisabled(EveError, bool),
+    EncryptionDisabled(EveError, bool),
     Unlocked(bool),
     Locked(EveError, Option<Vec<i32>>),
 }
@@ -73,6 +80,9 @@ pub struct MonitorModel {
     pub node_status: NodeStatus,
     pub apps: HashMap<Uuid, AppInstance>,
     pub vault_status: VaultStatus,
+    pub dpc_list: Option<DevicePortConfigList>,
+    pub dpc_key: Option<String>,
+    pub z_status: Option<ZedAgentStatus>,
 }
 
 impl From<EveVaultStatus> for VaultStatus {
@@ -82,14 +92,14 @@ impl From<EveVaultStatus> for VaultStatus {
             DataSecAtRestStatus::DataSecAtRestUnknown => Self::Unknown,
             DataSecAtRestStatus::DataSecAtRestDisabled => {
                 let reason = EveError::from(vault_status.error_and_time);
-                Self::EncriptionDisabled(reason, tpm_used)
+                Self::EncryptionDisabled(reason, tpm_used)
             }
             DataSecAtRestStatus::DataSecAtRestEnabled => Self::Unlocked(tpm_used),
             DataSecAtRestStatus::DataSecAtRestError => {
                 let err = EveError::from(vault_status.error_and_time);
 
                 let pcrs = if err.error.contains("Vault key unavailable") {
-                    vault_status.missmatching_pcrs
+                    vault_status.mismatching_pcrs
                 } else {
                     None
                 };
@@ -152,7 +162,7 @@ impl From<EveNodeStatus> for NodeStatus {
 impl MonitorModel {
     fn get_network_settings(
         &self,
-        network_status: DeviceNetworkStatus,
+        network_status: &DeviceNetworkStatus,
     ) -> Option<Vec<NetworkInterfaceStatus>> {
         let ports = network_status.ports.as_ref()?;
         Some(ports.iter().map(|p| p.into()).collect())
@@ -182,7 +192,8 @@ impl MonitorModel {
     }
 
     pub fn update_network_status(&mut self, net_status: DeviceNetworkStatus) {
-        self.network = self.get_network_settings(net_status).unwrap_or_default();
+        self.network = self.get_network_settings(&net_status).unwrap_or_default();
+        self.dpc_key = Some(net_status.dpc_key);
     }
 
     pub fn update_vault_status(&mut self, vault_status: EveVaultStatus) {
@@ -191,6 +202,23 @@ impl MonitorModel {
 
     pub fn update_onboarding_status(&mut self, status: EveOnboardingStatus) {
         self.node_status.onboarding_status = OnboardingStatus::Onboarded(status.device_uuid);
+    }
+
+    pub fn set_dpc_list(&mut self, dpc_list: DevicePortConfigList) {
+        self.dpc_list = Some(dpc_list);
+    }
+
+    pub fn get_dpc_list(&self) -> Option<&DevicePortConfigList> {
+        self.dpc_list.as_ref()
+    }
+
+    pub fn get_current_dpc(&self) -> Option<&DevicePortConfig> {
+        let key = self.dpc_key.clone()?;
+        self.get_dpc_list()?.get_dpc_by_key(&key)
+    }
+
+    pub fn update_zed_agent_status(&mut self, status: ZedAgentStatus) {
+        self.z_status = Some(status);
     }
 }
 
@@ -203,6 +231,9 @@ impl Default for MonitorModel {
             node_status: NodeStatus::default(),
             apps: HashMap::new(),
             vault_status: VaultStatus::Unknown,
+            dpc_list: None,
+            dpc_key: None,
+            z_status: None,
         }
     }
 }

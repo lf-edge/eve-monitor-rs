@@ -1,4 +1,3 @@
-use crate::ui::activity::Activity;
 use crossterm::event::{KeyCode, KeyEvent};
 use log::trace;
 use ratatui::{
@@ -319,7 +318,7 @@ impl IWidgetPresenter for InputFieldElement {
         // set cursor position must be called every time to display the cursor
         // on the next redraw cycle
         if focused && self.is_enabled() {
-            frame.set_cursor(self.text_area.x + self.cursor_position, self.text_area.y);
+            frame.set_cursor_position((self.text_area.x + self.cursor_position, self.text_area.y));
         }
     }
 }

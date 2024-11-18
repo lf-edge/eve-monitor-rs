@@ -1,11 +1,8 @@
-use crate::traits::IElementEventHandler;
 use crate::ui::action::UiActions;
-use crate::ui::activity::Activity;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent;
 use log::debug;
 
-use super::action::Action;
 use super::window::WidgetMap;
 
 // use crate::traits::ViewComposer;
@@ -124,7 +121,7 @@ impl FocusTracker {
     }
 
     pub fn handle_key_event(&mut self, key: KeyEvent) -> Option<UiActions> {
-        debug!("focuse_tracker handle_event {:?}", key);
+        debug!("focus_tracker handle_event {:?}", key);
 
         match key.code {
             // handle Tab key

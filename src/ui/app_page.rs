@@ -4,7 +4,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Alignment, Constraint, Rect},
     style::{Color, Style, Stylize},
-    text::{Text, ToText},
+    text::Text,
     widgets::{
         Block, BorderType, Borders, Cell, HighlightSpacing, Padding, Row, StatefulWidget, Table,
         TableState,
@@ -15,7 +15,7 @@ use ratatui::{
 use crate::{
     events::Event,
     model::model::{AppInstance, AppInstanceState, Model},
-    traits::{IEventHandler, IPresenter, IWidget, IWindow},
+    traits::{IEventHandler, IPresenter, IWindow},
 };
 
 use super::traits::ISelector;
@@ -83,7 +83,7 @@ impl ApplicationsPage {
             ],
         )
         .block(block)
-        .highlight_style(Style::new().bg(Color::DarkGray))
+        .row_highlight_style(Style::new().bg(Color::DarkGray))
         // .highlight_symbol(">")
         .highlight_symbol(Text::from(vec![
             // "".into(),
@@ -127,7 +127,7 @@ impl IEventHandler for ApplicationsPage {
 fn info_row_from_app<'a, 'b>(app: &'a AppInstance) -> Row<'b> {
     let height = 1;
     // cells #1,2 IFace name and Link status
-    let mut cells = vec![
+    let cells = vec![
         Cell::from(app.name.clone()),
         Cell::from(app.uuid.to_string()),
         match &app.state {
@@ -173,7 +173,7 @@ impl IPresenter for ApplicationsPage {
         area: &ratatui::prelude::Rect,
         frame: &mut ratatui::Frame<'_>,
         model: &std::rc::Rc<Model>,
-        focused: bool,
+        _focused: bool,
     ) {
         self.render_app_list(model, *area, frame);
     }

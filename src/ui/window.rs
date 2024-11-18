@@ -6,7 +6,7 @@ use std::{fmt::Debug, rc::Rc};
 
 use crossterm::event::KeyEvent;
 use indexmap::IndexMap;
-use log::{debug, trace, warn};
+use log::{debug, trace};
 use ratatui::layout::Rect;
 
 use crate::traits::{IEventHandler, IPresenter, IVisible, IWidget, IWindow};
@@ -90,11 +90,13 @@ impl<D> WindowBuilder<D> {
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_taborder(mut self, tab_order: Vec<String>) -> Self {
         self.tab_order = Some(tab_order);
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_focused_view<S: Into<String>>(mut self, name: S) -> Self {
         self.focused_view = Some(name.into());
         self

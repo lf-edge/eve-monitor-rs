@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::{
     traits::{IElementEventHandler, IWidget, IWidgetPresenter},
-    ui::{action::UiActions, activity::Activity},
+    ui::action::UiActions,
 };
 
 pub struct RadioGroupElement {

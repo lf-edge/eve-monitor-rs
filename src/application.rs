@@ -1,15 +1,19 @@
+use crate::actions::MonActions;
 use crate::events::Event;
 use crate::model::model::Model;
 use crate::model::model::MonitorModel;
-use crate::raw_model::RawModel;
+use crate::ui::ipdialog::InterfaceState;
 use crate::ui::ui::Ui;
-use core::fmt::Debug;
 
 use std::cell::RefCell;
+use std::collections::HashMap;
+use std::net::IpAddr;
 use std::rc::Rc;
 use std::result::Result::Ok;
 
 use anyhow::Result;
+use ipnet::IpNet;
+use log::error;
 use log::{debug, info, trace, warn};
 
 use tokio::sync::mpsc;
@@ -18,8 +22,6 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use futures::{FutureExt, SinkExt, StreamExt};
 
-use crossterm::event::KeyCode;
-use crossterm::event::KeyModifiers;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 
@@ -28,7 +30,6 @@ use crate::ipc::message::{IpcMessage, Request};
 use crate::terminal::TerminalWrapper;
 use crate::ui::action::{Action, UiActions};
 
-#[derive(Debug)]
 pub struct Application {
     terminal_rx: UnboundedReceiver<Event>,
     terminal_tx: UnboundedSender<Event>,
@@ -38,7 +39,8 @@ pub struct Application {
     ui: Ui,
     // this is our model :)
     model: Rc<Model>,
-    raw_model: RawModel,
+    // pending requests
+    pending_requests: HashMap<u64, Rc<dyn Fn(&mut Application)>>,
 }
 
 impl Application {
@@ -48,6 +50,7 @@ impl Application {
         let terminal = TerminalWrapper::open_terminal()?;
         let mut ui = Ui::new(action_tx.clone(), terminal)?;
         let model = Rc::new(RefCell::new(MonitorModel::default()));
+        let pending_requests = HashMap::new();
 
         ui.init();
 
@@ -59,13 +62,30 @@ impl Application {
             ui,
             ipc_tx: None,
             model,
-            raw_model: RawModel::new(),
+            pending_requests,
         })
     }
-
-    pub fn send_ipc_message(&self, msg: IpcMessage) {
+    pub fn send_ipc_message<F>(&mut self, msg: IpcMessage, handle_response: F)
+    where
+        F: Fn(&mut Application) -> () + 'static,
+    {
         if let Some(ipc_tx) = &self.ipc_tx {
-            ipc_tx.send(msg).unwrap();
+            match &msg {
+                IpcMessage::Request { request, id } => {
+                    debug!("Pending response for: {:?}", request);
+                    self.pending_requests.insert(*id, Rc::new(handle_response));
+                }
+                _ => {}
+            }
+
+            match ipc_tx.send(msg) {
+                Ok(_) => {
+                    debug!("Sent IPC message");
+                }
+                Err(e) => {
+                    error!("Error sending IPC message: {:?}", e);
+                }
+            }
         }
     }
 
@@ -86,9 +106,26 @@ impl Application {
 
     pub fn handle_ipc_message(&mut self, msg: IpcMessage) {
         match msg {
+            IpcMessage::Response { result, id } => {
+                debug!("Got response: {:?}", result);
+                match result {
+                    Ok(_) => {
+                        debug!("Response OK");
+                        if let Some(handle_response) = self.pending_requests.remove(&id) {
+                            handle_response(self);
+                        }
+                    }
+                    Err(e) => {
+                        error!("Response error: {:?}", e);
+                        // remove pending request
+                        self.pending_requests.remove(&id);
+                    }
+                }
+            }
+
             IpcMessage::DPCList(cfg) => {
                 debug!("Got DPC list");
-                self.raw_model.set_dpc_list(cfg);
+                self.model.borrow_mut().set_dpc_list(cfg);
             }
             IpcMessage::NetworkStatus(cfg) => {
                 debug!("Got Network status");
@@ -126,8 +163,7 @@ impl Application {
                 self.model.borrow_mut().update_vault_status(status);
             }
 
-            IpcMessage::LedBlinkCounter(led) => {
-                // self.raw_model.set_led_blink_counter(led);
+            IpcMessage::LedBlinkCounter(_led) => {
                 debug!("Got LedBlinkCounter");
             }
 
@@ -137,20 +173,84 @@ impl Application {
                 self.model.borrow_mut().update_app_list(app_list);
             }
 
+            IpcMessage::ZedAgentStatus(status) => {
+                debug!("Got ZedAgentStatus");
+                self.model.borrow_mut().update_zed_agent_status(status);
+            }
+
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
             }
         }
     }
 
-    pub fn send_dpc(&self) {
-        if let Some(current_dpc) = self.raw_model.get_current_dpc() {
-            let mut dpc = current_dpc.clone();
+    pub fn send_dpc(&mut self, old: InterfaceState, new: InterfaceState) {
+        let current_dpc = self.model.borrow().get_current_dpc().cloned();
+        if let Some(current_dpc) = current_dpc {
+            info!("send_dpc: Sending DPC for iface {}", &new.iface_name);
+            let mut new_dpc = current_dpc.to_new_dpc_with_key("manual");
+            // there are 3 cases:
+            // 1. iface is switched DHCP -> Static
+            // 2. iface is switched Static -> DHCP
+            // 3. iface is switched Static -> Static with different IP
+            //
+            match (old.is_dhcp(), new.is_dhcp()) {
+                (false, true) => {
+                    // case 2
+                    new_dpc
+                        .get_port_by_name_mut(&new.iface_name)
+                        .unwrap()
+                        .to_dhcp();
+                }
+                (_, false) => {
+                    let ip: IpAddr = new.ipv4.parse().unwrap();
+                    let mask: IpAddr = new.mask.parse().unwrap();
 
-            dpc.key = "manual".to_string();
-            dpc.time_priority = chrono::Utc::now();
+                    // parse DNS server string and convert to Option<Vec<IpAddr>>
+                    let dns_servers = new
+                        .dns
+                        .split(',')
+                        .map(|s| s.parse::<IpAddr>().ok())
+                        .flatten()
+                        .collect::<Vec<IpAddr>>();
 
-            self.send_ipc_message(IpcMessage::new_request(Request::SetDPC(dpc)));
+                    // same for NTP
+                    let ntp_servers = new
+                        .ntp
+                        .split(',')
+                        .map(|s| s.parse::<IpAddr>().ok())
+                        .flatten()
+                        .collect::<Vec<IpAddr>>();
+
+                    // case 1,3
+                    new_dpc
+                        .get_port_by_name_mut(&new.iface_name)
+                        .unwrap()
+                        .to_static(
+                            IpNet::with_netmask(ip, mask).unwrap(),
+                            new.gw.parse().unwrap(),
+                            new.domain,
+                            if ntp_servers.is_empty() {
+                                None
+                            } else {
+                                Some(ntp_servers[0])
+                            },
+                            if dns_servers.is_empty() {
+                                None
+                            } else {
+                                Some(dns_servers)
+                            },
+                        );
+                }
+                (true, true) => {
+                    // this may actually happen if we add support for DHCP with some static fields e.g. custom DNS
+                    // log an error for now
+                    error!(
+                        "send_dpc: DHCP -> DHCP transition with static fields is not supported yet but seems it is implemented in UI"
+                    );
+                } // do nothing
+            }
+            self.send_ipc_message(IpcMessage::new_request(Request::SetDPC(new_dpc)), |_| {});
         }
     }
 
@@ -310,7 +410,7 @@ impl Application {
     }
 
     fn create_terminal_task(&mut self) -> (JoinHandle<()>, CancellationToken) {
-        let mut terminal_event_stream = self.ui.terminal.get_stream();
+        let mut terminal_event_stream = TerminalWrapper::get_stream();
         let terminal_tx_clone = self.terminal_tx.clone();
         let terminal_cancel_token = CancellationToken::new();
         let terminal_cancel_token_child = terminal_cancel_token.clone();
@@ -363,6 +463,7 @@ impl Application {
         // send initial redraw event
         self.invalidate();
 
+        #[allow(unused_assignments)]
         let mut do_redraw = true;
         let app_cancel_token = CancellationToken::new();
 
@@ -394,12 +495,6 @@ impl Application {
                 event = self.terminal_rx.recv() => {
                     match event {
                         Some(Event::Key(key)) => {
-                            if (key.code == KeyCode::Char('s')) && (key.modifiers == KeyModifiers::CONTROL)
-                            {
-                                debug!("CTRL+s: sending IPC message");
-                                self.send_dpc();
-                            }
-
                             let action = self.ui.handle_event(Event::Key(key));
                             if let Some(action) = action {
                                 info!("Event loop got action: {:?}", action);
@@ -506,16 +601,57 @@ impl Application {
         match action.action {
             UiActions::EditIfaceConfig(iface) => {
                 // get interface info by name
-                let model = self.model.borrow();
-                let iface_data = model
+                let iface_data = self
+                    .model
+                    .borrow()
                     .network
                     .iter()
                     .find(|e| e.name == iface)
-                    .map(|e| e.clone());
+                    .cloned();
                 if let Some(iface_data) = iface_data {
                     self.ui.show_ip_dialog(iface_data);
                 }
             }
+            UiActions::ChangeServer => {
+                if self.model.borrow().node_status.is_onboarded() {
+                    self.ui.message_box(
+                        "WARNING",
+                        "The node is onboarded and the server URL cannot be changed.",
+                    );
+                } else {
+                    let url = self
+                        .model
+                        .borrow()
+                        .node_status
+                        .server
+                        .clone()
+                        .unwrap_or_default();
+                    self.ui.show_server_url_dialog(&url);
+                }
+            }
+            UiActions::AppAction(app_action) => match app_action {
+                MonActions::NetworkInterfaceUpdated(old, new) => {
+                    debug!("Setting DPC for {}", &old.iface_name);
+                    debug!("OLD DPC: {:#?}", &old);
+                    debug!("NEW DPC: {:#?}", &new);
+                    if old == new {
+                        debug!("Not changed, not sending DPC");
+                    } else {
+                        self.send_dpc(old, new);
+                    }
+                    self.ui.pop_layer();
+                }
+                MonActions::ServerUpdated(url) => {
+                    debug!("Setting server URL to: {}", &url);
+                    self.send_ipc_message(
+                        IpcMessage::new_request(Request::SetServer(url.clone())),
+                        move |app| {
+                            app.model.borrow_mut().node_status.server = Some(url.clone());
+                        },
+                    );
+                    self.ui.pop_layer();
+                }
+            },
             _ => {}
         }
     }

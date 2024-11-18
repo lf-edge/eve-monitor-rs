@@ -10,7 +10,7 @@ use ratatui::{
 
 use crate::{
     traits::{IElementEventHandler, IWidget, IWidgetPresenter},
-    ui::{action::UiActions, activity::Activity},
+    ui::activity::Activity,
 };
 
 pub struct LabelElement {
@@ -54,7 +54,8 @@ impl IWidgetPresenter for LabelElement {
         let text = self.text.clone();
         trace!("LabelElement::render: {}", text);
         let p = Paragraph::new(text)
-            .alignment(Alignment::Center)
+            .alignment(Alignment::Left)
+            .wrap(ratatui::widgets::Wrap { trim: true })
             .style(Style::default().fg(Color::White));
         p.render_ref(*area, frame.buffer_mut());
     }

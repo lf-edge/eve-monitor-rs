@@ -11,6 +11,7 @@ pub enum UiActions {
     AppAction(MonActions),
     EditIfaceConfig(String),
     TabChanged(String, String),
+    ChangeServer,
 }
 
 #[derive(Debug, Clone)]

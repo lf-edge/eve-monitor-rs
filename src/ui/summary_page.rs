@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
-use log::info;
+use crossterm::event::{KeyCode, KeyModifiers};
+use log::{debug, info};
 use ratatui::{
     layout::{Constraint, Layout},
     prelude::Rect,
@@ -10,8 +11,10 @@ use ratatui::{
 };
 
 use crate::{
+    events::Event,
     model::model::{Model, OnboardingStatus, VaultStatus},
     traits::{IEventHandler, IPresenter, IWindow},
+    ui::action::{Action, UiActions},
 };
 
 pub struct SummaryPage {}
@@ -25,13 +28,23 @@ impl SummaryPage {
 impl IWindow for SummaryPage {}
 
 impl IEventHandler for SummaryPage {
-    fn handle_event(&mut self, _event: crate::events::Event) -> Option<super::action::Action> {
+    fn handle_event(&mut self, event: crate::events::Event) -> Option<super::action::Action> {
+        // handle Ctrl+s to change the server
+        match event {
+            Event::Key(key)
+                if (key.code == KeyCode::Char('s')) && (key.modifiers == KeyModifiers::CONTROL) =>
+            {
+                debug!("CTRL+s: server change requested");
+                return Some(Action::new("net", UiActions::ChangeServer));
+            }
+            _ => {}
+        }
         None
     }
 }
 
 impl IPresenter for SummaryPage {
-    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, focused: bool) {
+    fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
         let [server, onboarding_status_and_app_sunnary_rect, vault_status_rect] =
             Layout::vertical(vec![
                 Constraint::Length(3),
@@ -44,8 +57,6 @@ impl IPresenter for SummaryPage {
             Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
                 .areas(onboarding_status_and_app_sunnary_rect);
 
-        let ns = &model.borrow().node_status;
-        info!("Node statue {:?}", ns);
         let server_url = ratatui::widgets::Paragraph::new(
             model
                 .borrow()
@@ -57,7 +68,7 @@ impl IPresenter for SummaryPage {
         .block(
             ratatui::widgets::Block::default()
                 .borders(ratatui::widgets::Borders::ALL)
-                .title("Server"),
+                .title("Server (CTRL+s to change)"),
         )
         .style(ratatui::style::Style::default().fg(ratatui::style::Color::White));
         frame.render_widget(server_url, server);
@@ -74,11 +85,11 @@ fn render_onboarding_status(
     frame: &mut Frame<'_>,
     onboarding_status_rect: Rect,
 ) {
-    let onboarding_staus = model.borrow().node_status.onboarding_status.clone();
+    let onboarding_status = model.borrow().node_status.onboarding_status.clone();
     let mut text = Vec::new();
     let mut spans = vec![];
     spans.push(Span::styled("status: ", Style::default().fg(Color::White)));
-    spans.push(match onboarding_staus {
+    spans.push(match onboarding_status {
         OnboardingStatus::Unknown => Span::styled("Unknown", Style::default().fg(Color::Yellow)),
         OnboardingStatus::Onboarding => {
             Span::styled("Onboarding...", Style::default().fg(Color::Yellow))
@@ -91,7 +102,7 @@ fn render_onboarding_status(
 
     text.push(Line::from(spans));
 
-    match onboarding_staus {
+    match onboarding_status {
         OnboardingStatus::Unknown => {
             text.push(Line::from(vec![
                 Span::styled("GUID: ", Style::default().fg(Color::White)),
@@ -195,8 +206,8 @@ fn render_vault_status(model: &Rc<Model>, frame: &mut Frame<'_>, onboarding_stat
     spans.push(Span::styled("Status: ", Style::default().fg(Color::White)));
     spans.push(match vault_status {
         VaultStatus::Unknown => Span::styled("Unknown", Style::default().fg(Color::Yellow)),
-        VaultStatus::EncriptionDisabled(_, _) => {
-            Span::styled("Encription disabled", Style::default().fg(Color::Yellow))
+        VaultStatus::EncryptionDisabled(_, _) => {
+            Span::styled("Encryption disabled", Style::default().fg(Color::Yellow))
         }
         VaultStatus::Unlocked(_) => Span::styled("Unlocked", Style::default().fg(Color::Green)),
         VaultStatus::Locked(_, _) => Span::styled("Locked", Style::default().fg(Color::Red)),
@@ -211,7 +222,7 @@ fn render_vault_status(model: &Rc<Model>, frame: &mut Frame<'_>, onboarding_stat
                 Span::styled("N/A", Style::default().fg(Color::Green)),
             ]));
         }
-        VaultStatus::EncriptionDisabled(reason, tpm_used) => {
+        VaultStatus::EncryptionDisabled(reason, tpm_used) => {
             text.push(Line::from(vec![
                 Span::styled("TPM used: ", Style::default().fg(Color::White)),
                 if *tpm_used {

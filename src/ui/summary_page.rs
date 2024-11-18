@@ -57,8 +57,6 @@ impl IPresenter for SummaryPage {
             Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
                 .areas(onboarding_status_and_app_sunnary_rect);
 
-        let ns = &model.borrow().node_status;
-        info!("Node statue {:?}", ns);
         let server_url = ratatui::widgets::Paragraph::new(
             model
                 .borrow()

@@ -163,8 +163,7 @@ impl Application {
                 self.model.borrow_mut().update_vault_status(status);
             }
 
-            IpcMessage::LedBlinkCounter(led) => {
-                // self.raw_model.set_led_blink_counter(led);
+            IpcMessage::LedBlinkCounter(_led) => {
                 debug!("Got LedBlinkCounter");
             }
 
@@ -189,8 +188,7 @@ impl Application {
         let current_dpc = self.model.borrow().get_current_dpc().cloned();
         if let Some(current_dpc) = current_dpc {
             info!("send_dpc: Sending DPC for iface {}", &new.iface_name);
-            let dpc = current_dpc.clone();
-            let mut new_dpc = dpc.to_new_dpc_with_key("manual");
+            let mut new_dpc = current_dpc.to_new_dpc_with_key("manual");
             // there are 3 cases:
             // 1. iface is switched DHCP -> Static
             // 2. iface is switched Static -> DHCP
@@ -603,20 +601,19 @@ impl Application {
         match action.action {
             UiActions::EditIfaceConfig(iface) => {
                 // get interface info by name
-                let model = self.model.borrow();
-                let iface_data = model
+                let iface_data = self
+                    .model
+                    .borrow()
                     .network
                     .iter()
                     .find(|e| e.name == iface)
-                    .map(|e| e.clone());
+                    .cloned();
                 if let Some(iface_data) = iface_data {
                     self.ui.show_ip_dialog(iface_data);
                 }
             }
             UiActions::ChangeServer => {
-                let is_onboarded = self.model.borrow().node_status.is_onboarded();
-
-                if is_onboarded {
+                if self.model.borrow().node_status.is_onboarded() {
                     self.ui.message_box(
                         "WARNING",
                         "The node is onboarded and the server URL cannot be changed.",

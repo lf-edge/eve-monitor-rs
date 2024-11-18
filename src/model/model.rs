@@ -162,7 +162,7 @@ impl From<EveNodeStatus> for NodeStatus {
 impl MonitorModel {
     fn get_network_settings(
         &self,
-        network_status: DeviceNetworkStatus,
+        network_status: &DeviceNetworkStatus,
     ) -> Option<Vec<NetworkInterfaceStatus>> {
         let ports = network_status.ports.as_ref()?;
         Some(ports.iter().map(|p| p.into()).collect())
@@ -192,8 +192,8 @@ impl MonitorModel {
     }
 
     pub fn update_network_status(&mut self, net_status: DeviceNetworkStatus) {
-        self.dpc_key = Some(net_status.dpc_key.clone());
-        self.network = self.get_network_settings(net_status).unwrap_or_default();
+        self.network = self.get_network_settings(&net_status).unwrap_or_default();
+        self.dpc_key = Some(net_status.dpc_key);
     }
 
     pub fn update_vault_status(&mut self, vault_status: EveVaultStatus) {

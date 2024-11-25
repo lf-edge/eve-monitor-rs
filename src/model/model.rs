@@ -29,8 +29,7 @@ pub struct NodeStatus {
 
 impl NodeStatus {
     pub fn is_onboarded(&self) -> bool {
-        matches!(self.onboarding_status, OnboardingStatus::Onboarding)
-            || matches!(self.onboarding_status, OnboardingStatus::Onboarded(_))
+        matches!(self.onboarding_status, OnboardingStatus::Onboarded(_))
     }
 }
 

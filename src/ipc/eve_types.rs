@@ -930,9 +930,7 @@ pub struct DhcpConfig {
     pub gateway: String,
     pub domain_name: String,
     #[serde_as(as = "NoneAsEmptyString")]
-    #[serde(
-        rename = "NTPServer",
-    )]
+    #[serde(rename = "NTPServer")]
     pub ntp_server: Option<IpAddr>,
     #[serde(rename = "DNSServers")]
     pub dns_servers: Option<Vec<IpAddr>>,
@@ -1205,7 +1203,7 @@ pub struct VmConfig {
     pub extra_args: String,
     pub boot_loader: String,
     #[serde(rename = "CPUs")]
-    pub cpus: String,
+    pub cpus: Option<String>,
     pub device_tree: String,
     pub dt_dev: Option<Vec<String>>,
     #[serde(rename = "IRQs")]

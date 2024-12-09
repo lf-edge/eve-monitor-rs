@@ -9,7 +9,7 @@ use ratatui::{
     Frame,
 };
 
-use crate::{actions::MonActions, model::model::Model, traits::IWindow, ui::action::UiActions};
+use crate::{model::model::Model, traits::IWindow, ui::action::UiActions};
 
 use super::{
     action::Action,
@@ -84,7 +84,7 @@ fn do_layout(w: &mut Window<MessageBoxState>, rect: &Rect, _model: &Rc<Model>) {
 }
 
 fn on_key_event(w: &mut Window<MessageBoxState>, key: KeyEvent) -> Option<Action> {
-    debug!("ip_dialog: on_key_event");
+    debug!("message_box: on_key_event");
 
     if key.code == KeyCode::Esc {
         return Some(Action::new(&w.name, UiActions::DismissDialog));
@@ -100,12 +100,7 @@ fn on_child_ui_action(
     debug!("on_child_ui_action: {}:{:?}", source, action);
     match action {
         UiActions::ButtonClicked(name) => match name.as_str() {
-            "cancel" => Some(Action::new(&w.name, UiActions::DismissDialog)),
-            "ok" => Some(Action::new(
-                &w.name,
-                UiActions::AppAction(MonActions::ServerUpdated(w.state.content.clone())),
-            )),
-            _ => None,
+            _ => Some(Action::new(&w.name, UiActions::DismissDialog)),
         },
         _ => None,
     }

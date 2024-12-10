@@ -1,5 +1,7 @@
 use super::*;
 use anyhow::Result;
+use eve_types::AppInstanceStatus;
+use eve_types::AppInstanceSummary;
 use eve_types::DeviceNetworkStatus;
 use eve_types::DevicePortConfigList;
 use eve_types::DownloaderStatus;
@@ -36,6 +38,9 @@ enum TestMessageType {
     IOAdapters,
     LedBlinkCounter,
     DownloaderStatus,
+    AppSummary,
+    AppStatus,
+    Response,
     Unknown(String),
 }
 
@@ -52,6 +57,9 @@ impl From<&str> for TestMessageType {
             "IOAdapters" => TestMessageType::IOAdapters,
             "LedBlinkCounter" => TestMessageType::LedBlinkCounter,
             "DownloaderStatus" => TestMessageType::DownloaderStatus,
+            "AppSummary" => TestMessageType::AppSummary,
+            "AppStatus" => TestMessageType::AppStatus,
+            "Response" => TestMessageType::Response,
             _ => TestMessageType::Unknown(s.to_string()),
         }
     }
@@ -128,6 +136,16 @@ fn test_from_device_files() -> Result<()> {
             TestMessageType::DownloaderStatus => {
                 let _ = serde_json::from_str::<DownloaderStatus>(&data)
                     .map_err(|err| SerdeError::new(data.to_string(), err))?;
+            }
+            TestMessageType::AppSummary => {
+                let _ = serde_json::from_str::<AppInstanceSummary>(&data)
+                    .map_err(|err| SerdeError::new(data.to_string(), err))?;
+            }
+            TestMessageType::AppStatus => {
+                let _ = serde_json::from_str::<AppInstanceStatus>(&data)
+                    .map_err(|err| SerdeError::new(data.to_string(), err))?;
+            }
+            TestMessageType::Response => {
             }
             TestMessageType::Unknown(s) => {
                 println!("Unknown message type: {}", s);

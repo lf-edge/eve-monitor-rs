@@ -3,11 +3,11 @@ use std::{cell::RefCell, rc::Rc};
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
-    text::Text,
+    style::{Color, Style, Styled, Stylize},
+    text::{Line, Span, Text},
     widgets::{
-        Block, BorderType, Borders, Cell, HighlightSpacing, Padding, Row, StatefulWidget, Table,
-        TableState,
+        Block, BorderType, Borders, Cell, HighlightSpacing, Padding, Paragraph, Row,
+        StatefulWidget, Table, TableState,
     },
     Frame,
 };
@@ -182,12 +182,17 @@ impl IPresenter for NetworkPage {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
         let estimated_width =
             IFACE_LABEL_LENGTH + LINK_STATE_LENGTH + IPV6_AVERAGE_LENGTH + MAC_LENGTH + 3 + 2 + 2; // for spacers and borders and selector
-        let [top_rect, details_rect] =
-            Layout::vertical([Constraint::Percentage(40), Constraint::Fill(1)]).areas(*area);
+        let [dpc_info_rect, iface_list_rect, details_rect] = Layout::vertical([
+            Constraint::Length(3),
+            Constraint::Percentage(40),
+            Constraint::Fill(1),
+        ])
+        .areas(*area);
         let [list_rect, _unused_rect] =
             Layout::horizontal([Constraint::Length(estimated_width), Constraint::Fill(1)])
-                .areas(top_rect);
+                .areas(iface_list_rect);
 
+        self.render_dpc_info(model, dpc_info_rect, frame);
         self.render_interface_list(model, list_rect, frame);
         self.render_interface_details(model, details_rect, frame);
     }
@@ -286,6 +291,35 @@ impl NetworkPage {
         .header(header);
 
         StatefulWidget::render(list, list_rect, frame.buffer_mut(), &mut self.list.state);
+    }
+
+    fn render_dpc_info(&mut self, model: &Rc<Model>, rect: Rect, frame: &mut Frame) {
+        let dpc_key = model.borrow().dpc_key.clone().unwrap_or("N/A".to_string());
+
+        let configuration_string = match dpc_key.as_str() {
+            "zedagent" => "From controller".green(),
+            "manual" => "Set by local user".yellow(),
+            s => s.red(),
+        };
+
+        // convert DPC key into human readabel piece of information
+        let dpc_info = Line::default().spans(vec![
+            "Current configuration: ".white(),
+            configuration_string,
+        ]);
+
+        let mut text = Text::from(dpc_info);
+
+        if dpc_key == "manual" {
+            text.push_line(vec!["WARNING: ".red(),"the configuratiion set locally will be overwritten by working configuration from the controller".white()]);
+        }
+
+        // create paragraph with the DPC key
+        let paragraph = Paragraph::new(text)
+            .style(Style::default().fg(Color::White))
+            .alignment(Alignment::Left);
+
+        frame.render_widget(paragraph, rect);
     }
 }
 

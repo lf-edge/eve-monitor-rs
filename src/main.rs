@@ -124,7 +124,7 @@ async fn main() -> Result<()> {
     }
     // FIXME: this is a workaround for malfunctioning terminal event stream
     // Terminal must be dropped and restored automatically but one of the threads doesn't exit
-    // and await? on a mina function never finishes. Drops are executed later.
+    // and await? on a main function never finishes. Drops are executed later.
     TerminalWrapper::close_terminal()?;
     std::process::exit(EXIT_SUCCESS);
 }

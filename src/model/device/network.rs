@@ -188,7 +188,7 @@ pub struct NetworkInterfaceStatus {
     pub ipv4: Option<Vec<Ipv4Addr>>,
     pub ipv6: Option<Vec<Ipv6Addr>>,
     pub routes: Option<Vec<IpAddr>>,
-    pub mac: MacAddr,
+    pub mac: Option<MacAddr>,
     pub ntp_servers: Option<Vec<IpAddr>>,
     pub up: bool,
     pub media: NetworkType,

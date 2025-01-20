@@ -92,7 +92,10 @@ fn info_row_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Row<'b> {
     }
 
     // cell #4 MAC
-    cells.push(Cell::from(iface.mac.to_string()).style(Style::new().yellow()));
+    cells.push(
+        Cell::from(iface.mac.map_or("N/A".to_string(), |e| e.to_string()))
+            .style(Style::new().yellow()),
+    );
 
     Row::new(cells).height(height as u16)
 }

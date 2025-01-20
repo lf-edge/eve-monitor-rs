@@ -145,13 +145,9 @@ fn test_from_device_files() -> Result<()> {
                 let _ = serde_json::from_str::<AppInstanceStatus>(&data)
                     .map_err(|err| SerdeError::new(data.to_string(), err))?;
             }
-            TestMessageType::Response => {
-            }
+            TestMessageType::Response => {}
             TestMessageType::Unknown(s) => {
                 println!("Unknown message type: {}", s);
-                panic!("Deserialization is not implemented!!!");
-            }
-            _ => {
                 panic!("Deserialization is not implemented!!!");
             }
         }

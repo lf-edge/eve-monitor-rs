@@ -301,7 +301,7 @@ impl Application {
                             return Ok(());
                         }
                         log = st.next() => {
-                            info!("Got log entry");
+                            debug!("Got log entry");
                             match log {
                                 Some(Ok(log)) => {
                                     dmesg_tx.send(log).unwrap();

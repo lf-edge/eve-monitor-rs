@@ -142,32 +142,38 @@ pub struct RadioSilence {
     pub config_error: String,
 }
 
-pub fn deserialize_mac<'de, D>(deserializer: D) -> Result<MacAddr, D::Error>
+pub fn deserialize_mac<'de, D>(deserializer: D) -> Result<Option<MacAddr>, D::Error>
 where
     D: Deserializer<'de>,
 {
-    let s: String = Deserialize::deserialize(deserializer)?;
-    let bytes = base64::engine::general_purpose::STANDARD
-        .decode(s)
-        .map_err(de::Error::custom)?;
+    let s: Option<String> = Deserialize::deserialize(deserializer)?;
 
-    match bytes.len() {
-        6 => {
-            let array: [u8; 6] = bytes
-                .try_into()
-                .map_err(|_| de::Error::custom("invalid byte array length"))?;
-            let mac = MacAddr::from(MacAddr6::from(array));
-            Ok(mac)
-        }
-        8 => {
-            let array: [u8; 8] = bytes
-                .try_into()
-                .map_err(|_| de::Error::custom("invalid byte array length"))?;
-            let mac = MacAddr::from(MacAddr8::from(array));
-            Ok(mac)
-        }
-        _ => Err(de::Error::custom("invalid MAC address length")),
-    }
+    s.map_or_else(
+        || Ok(None),
+        |s| {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(s)
+                .map_err(de::Error::custom)?;
+
+            match bytes.len() {
+                6 => {
+                    let array: [u8; 6] = bytes
+                        .try_into()
+                        .map_err(|_| de::Error::custom("invalid byte array length"))?;
+                    let mac = MacAddr::from(MacAddr6::from(array));
+                    Ok(Some(mac))
+                }
+                8 => {
+                    let array: [u8; 8] = bytes
+                        .try_into()
+                        .map_err(|_| de::Error::custom("invalid byte array length"))?;
+                    let mac = MacAddr::from(MacAddr8::from(array));
+                    Ok(Some(mac))
+                }
+                _ => Err(de::Error::custom("invalid MAC address length")),
+            }
+        },
+    )
 }
 
 // "subnet": {
@@ -247,7 +253,7 @@ pub struct NetworkPortStatus {
     pub addr_info_list: Option<Vec<AddrInfo>>,
     pub up: bool,
     #[serde(deserialize_with = "deserialize_mac", skip_serializing)]
-    pub mac_addr: MacAddr,
+    pub mac_addr: Option<MacAddr>,
     pub default_routers: Option<Vec<IpAddr>>,
     #[serde(rename = "MTU")]
     pub mtu: u16,

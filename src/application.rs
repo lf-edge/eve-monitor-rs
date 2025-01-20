@@ -214,13 +214,12 @@ impl Application {
                         .flatten()
                         .collect::<Vec<IpAddr>>();
 
-                    // same for NTP
+                    // same for NTP. NTP can now be either IP or FQDN
                     let ntp_servers = new
                         .ntp
                         .split(',')
-                        .map(|s| s.parse::<IpAddr>().ok())
-                        .flatten()
-                        .collect::<Vec<IpAddr>>();
+                        .map(|s| s.to_string())
+                        .collect::<Vec<String>>();
 
                     // case 1,3
                     new_dpc
@@ -233,7 +232,7 @@ impl Application {
                             if ntp_servers.is_empty() {
                                 None
                             } else {
-                                Some(ntp_servers[0])
+                                Some(ntp_servers)
                             },
                             if dns_servers.is_empty() {
                                 None

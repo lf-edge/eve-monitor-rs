@@ -244,12 +244,11 @@ pub struct NetworkPortStatus {
     pub network_type: NetworkType,
     #[serde_as(as = "FromInto<GoIpNetwork>")]
     pub subnet: Option<IpNet>,
-    #[serde_as(as = "NoneAsEmptyString")]
-    pub ntp_server: Option<IpAddr>,
+    pub configured_ntp_servers: Option<Vec<String>>,
     pub domain_name: String,
     #[serde(rename = "DNSServers")]
     pub dns_servers: Option<Vec<IpAddr>>,
-    pub ntp_servers: Option<Vec<IpAddr>>,
+    pub dhcp_ntp_servers: Option<Vec<IpAddr>>,
     pub addr_info_list: Option<Vec<AddrInfo>>,
     pub up: bool,
     #[serde(deserialize_with = "deserialize_mac", skip_serializing)]
@@ -875,7 +874,7 @@ impl NetworkPortConfig {
         self.dhcp_config.addr_subnet = None;
         self.dhcp_config.gateway = String::new();
         self.dhcp_config.domain_name = String::new();
-        self.dhcp_config.ntp_server = None;
+        self.dhcp_config.ntp_servers = None;
         self.dhcp_config.dns_servers = None;
         //TODO: what do we do with NetworkUUID?
         self
@@ -886,14 +885,14 @@ impl NetworkPortConfig {
         addr_subnet: IpNet,
         gateway: String,
         domain_name: String,
-        ntp_server: Option<IpAddr>,
+        ntp_server: Option<Vec<String>>,
         dns_servers: Option<Vec<IpAddr>>,
     ) -> Self {
         self.dhcp_config.dhcp = DhcpType::Static;
         self.dhcp_config.addr_subnet = Some(addr_subnet);
         self.dhcp_config.gateway = gateway;
         self.dhcp_config.domain_name = domain_name;
-        self.dhcp_config.ntp_server = ntp_server;
+        self.dhcp_config.ntp_servers = ntp_server;
         self.dhcp_config.dns_servers = dns_servers;
         self
     }
@@ -904,7 +903,7 @@ impl NetworkPortConfig {
         self.dhcp_config.addr_subnet = None;
         self.dhcp_config.gateway = String::new();
         self.dhcp_config.domain_name = String::new();
-        self.dhcp_config.ntp_server = None;
+        self.dhcp_config.ntp_servers = None;
         self.dhcp_config.dns_servers = None;
     }
 
@@ -913,14 +912,14 @@ impl NetworkPortConfig {
         addr_subnet: IpNet,
         gateway: String,
         domain_name: String,
-        ntp_server: Option<IpAddr>,
+        ntp_server: Option<Vec<String>>,
         dns_servers: Option<Vec<IpAddr>>,
     ) {
         self.dhcp_config.dhcp = DhcpType::Static;
         self.dhcp_config.addr_subnet = Some(addr_subnet);
         self.dhcp_config.gateway = gateway;
         self.dhcp_config.domain_name = domain_name;
-        self.dhcp_config.ntp_server = ntp_server;
+        self.dhcp_config.ntp_servers = ntp_server;
         self.dhcp_config.dns_servers = dns_servers;
     }
 }
@@ -935,9 +934,8 @@ pub struct DhcpConfig {
     pub addr_subnet: Option<IpNet>,
     pub gateway: String,
     pub domain_name: String,
-    #[serde_as(as = "NoneAsEmptyString")]
-    #[serde(rename = "NTPServer")]
-    pub ntp_server: Option<IpAddr>,
+    #[serde(rename = "NTPServers")]
+    pub ntp_servers: Option<Vec<String>>,
     #[serde(rename = "DNSServers")]
     pub dns_servers: Option<Vec<IpAddr>>,
     #[serde(rename = "Type")]

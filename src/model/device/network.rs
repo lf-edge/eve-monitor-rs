@@ -189,7 +189,7 @@ pub struct NetworkInterfaceStatus {
     pub ipv6: Option<Vec<Ipv6Addr>>,
     pub routes: Option<Vec<IpAddr>>,
     pub mac: Option<MacAddr>,
-    pub ntp_servers: Option<Vec<IpAddr>>,
+    pub ntp_servers: Option<Vec<String>>,
     pub up: bool,
     pub media: NetworkType,
     pub dns: Option<Vec<IpAddr>>,
@@ -302,10 +302,32 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             .as_ref()
             .and_then(|routers| routers.first().cloned());
 
-        let ntp_servers = if port.dhcp == DhcpType::Client {
-            port.ntp_servers.clone()
+        // collect NTP servers. Some may come from DHCP as IpAddr, others are FQDN from
+        // network configuration. Collect both types in the same list as strings
+
+        let mut ntp_servers = vec![];
+        // collect manually configured NTP servers
+        if let Some(configured_ntp_servers) = &port.configured_ntp_servers {
+            ntp_servers.extend(configured_ntp_servers.clone());
+        }
+
+        // append NTP servers provided by DHCP
+        if is_dhcp {
+            let dhcp_ntp_servers = port.dhcp_ntp_servers.as_ref().map(|ntp_servers| {
+                ntp_servers
+                    .iter()
+                    .map(|ntp_server| ntp_server.clone().to_string())
+                    .collect::<Vec<String>>()
+            });
+            if let Some(dhcp_ntp_servers) = dhcp_ntp_servers {
+                ntp_servers.extend(dhcp_ntp_servers);
+            }
+        }
+
+        let ntp_servers = if ntp_servers.is_empty() {
+            None
         } else {
-            port.ntp_server.map(|ntp_server| vec![ntp_server])
+            Some(ntp_servers)
         };
 
         NetworkInterfaceStatus {

@@ -2,6 +2,11 @@
 name = "monitor"
 version = "0.1.0"
 edition = "2021"
+authors = [
+    "Mikhail Malyshev <mike.malyshev@gmail.com>",
+    "Dion Bramley <dionbramley@gmail.com>",
+]
+repository = "https://github.com/lf-edge/eve-monitor-rs"
 
 [profile.release]
 strip = "debuginfo" # Automatically strip symbols from the binary.

@@ -149,6 +149,11 @@ pub fn initialize_panic_handler() -> Result<()> {
 fn log_system_info() {
     // log monitor version
     info!("Starting monitor version: {}", env!("CARGO_PKG_VERSION"));
+    info!(
+        "Git version: {}",
+        option_env!("GIT_VERSION").unwrap_or("GIT_VERSION is not set, no .git directory?")
+    );
+
     // get current user UID and GID
     use std::os::unix::fs::MetadataExt;
     std::fs::metadata("/proc/self")

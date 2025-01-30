@@ -1400,6 +1400,8 @@ pub struct EveNodeStatus {
     pub node_uuid: Option<Uuid>,
     pub onboarded: bool,
     pub app_instance_summary: Option<AppInstanceSummary>,
+    pub base_os_status: Option<Vec<BaseOsStatus>>,
+    pub zboot_status: Option<Vec<ZbootStatus>>,
 }
 
 fn zero_uuid_as_none<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
@@ -1498,4 +1500,36 @@ pub enum ConfigGetStatus {
     Fail = 2,          // ConfigGetFail
     TemporaryFail = 3, // ConfigGetTemporaryFail
     ReadSaved = 4,     // ConfigGetReadSaved
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct BaseOsStatus {
+    pub base_os_version: String,
+    pub activated: bool,
+    pub too_early: bool, // Failed since previous was inprogress/test
+    #[serde(rename = "ContentTreeUUID")]
+    pub content_tree_uuid: Uuid,
+    pub partition_label: String,
+    pub partition_device: String, // From zboot
+    pub partition_state: String,  // From zboot
+    // Minimum state across all steps/StorageStatus.
+    // Error* set implies error
+    pub state: SwState,
+    // error strings across all steps/StorageStatus
+    // ErrorAndTime provides SetErrorNow() and ClearError()
+    #[serde(flatten)]
+    pub error_and_time: ErrorAndTime,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct ZbootStatus {
+    pub partition_label: String,
+    pub partition_devname: String,
+    pub partition_state: String,
+    pub short_version: String,
+    pub long_version: String,
+    pub current_partition: bool,
+    pub test_complete: bool,
 }

@@ -13,7 +13,7 @@ use ratatui::{
     },
     style::{Color, Modifier, Stylize},
     text::Line,
-    widgets::{Block, Clear, Tabs, Widget},
+    widgets::{Block, Clear, Paragraph, Tabs, Widget},
 };
 use std::rc::Rc;
 use strum::{Display, EnumCount, EnumIter, FromRepr, IntoEnumIterator};
@@ -112,21 +112,31 @@ impl Ui {
         //TODO: handle terminal event
         let _ = self.terminal.draw(|frame| {
             let area = frame.area();
-            let [tabs, body, statusbar_rect] = screen_layout.areas(area);
+            let [top_bar_rect, body_rect, statusbar_rect] = screen_layout.areas(area);
 
             if self.first_frame {
                 self.first_frame = false;
                 frame.render_widget(Clear, area);
             }
+
+            // these are evaluated statically during build time
+            let git_version = option_env!("GIT_VERSION").unwrap_or("Git version: N/A");
+
+            let [tabs_rect, version_rect] =
+                Layout::horizontal([Fill(0), Length(git_version.len() as u16)]).areas(top_bar_rect);
+
+            let version_widget = Paragraph::new(git_version).fg(Color::DarkGray);
+            frame.render_widget(version_widget, version_rect);
+
             tabs_widget
                 .select(self.selected_tab as usize)
-                .render(tabs, frame.buffer_mut());
+                .render(tabs_rect, frame.buffer_mut());
 
             // redraw from the bottom up
             let stack = &mut self.views[self.selected_tab as usize];
             let last_index = stack.len().saturating_sub(1);
             for (index, layer) in stack.iter_mut().enumerate() {
-                layer.render(&body, frame, &model, index == last_index);
+                layer.render(&body_rect, frame, &model, index == last_index);
             }
             // render status bar
             self.status_bar

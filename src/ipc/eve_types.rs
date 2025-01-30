@@ -1401,6 +1401,7 @@ pub struct EveNodeStatus {
     pub onboarded: bool,
     pub app_instance_summary: Option<AppInstanceSummary>,
     pub base_os_status: Option<Vec<BaseOsStatus>>,
+    pub zboot_status: Option<Vec<ZbootStatus>>,
 }
 
 fn zero_uuid_as_none<'de, D>(deserializer: D) -> Result<Option<Uuid>, D::Error>
@@ -1519,4 +1520,16 @@ pub struct BaseOsStatus {
     // ErrorAndTime provides SetErrorNow() and ClearError()
     #[serde(flatten)]
     pub error_and_time: ErrorAndTime,
+}
+
+#[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
+pub struct ZbootStatus {
+    pub partition_label: String,
+    pub partition_devname: String,
+    pub partition_state: String,
+    pub short_version: String,
+    pub long_version: String,
+    pub current_partition: bool,
+    pub test_complete: bool,
 }

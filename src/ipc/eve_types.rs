@@ -1502,3 +1502,16 @@ pub enum ConfigGetStatus {
     TemporaryFail = 3, // ConfigGetTemporaryFail
     ReadSaved = 4,     // ConfigGetReadSaved
 }
+
+#[serde_as]
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct TpmLogs {
+    #[serde_as(as = "Option<Base64>")]
+    pub lats_failed_log: Option<Vec<u8>>,
+    #[serde_as(as = "Option<Base64>")]
+    pub last_good_log: Option<Vec<u8>>,
+    #[serde_as(as = "Option<Base64>")]
+    pub backup_failed_log: Option<Vec<u8>>,
+    #[serde_as(as = "Option<Base64>")]
+    pub backup_good_log: Option<Vec<u8>>,
+}

@@ -24,6 +24,7 @@ use super::eve_types::EveOnboardingStatus;
 use super::eve_types::EveVaultStatus;
 use super::eve_types::LedBlinkCounter;
 use super::eve_types::PhysicalIOAdapterList;
+use super::eve_types::TpmLogs;
 use super::eve_types::ZedAgentStatus;
 
 /// WindowId is a unique identifier for a window that is incremented sequentially.
@@ -63,6 +64,7 @@ pub enum IpcMessage {
     NodeStatus(EveNodeStatus),
     AppsList(AppsList),
     ZedAgentStatus(ZedAgentStatus),
+    TpmLogs(TpmLogs),
     Response {
         #[serde(flatten)]
         result: core::result::Result<String, String>,

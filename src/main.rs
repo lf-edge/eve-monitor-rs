@@ -7,6 +7,7 @@ mod events;
 mod ipc;
 mod model;
 mod terminal;
+mod tpm;
 mod traits;
 mod ui;
 

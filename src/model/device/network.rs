@@ -16,7 +16,7 @@ pub struct SimStatus {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CellularStatus {
-    sims: Vec<SimStatus>,
+    sims: Option<Vec<SimStatus>>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -265,24 +265,19 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
                     .and_then(|w| Some(w[0].ssid.clone())),
             }),
             WirelessType::Cellular => NetworkType::Cellular(CellularStatus {
-                // A modem can have multiple sims
-                sims: port
-                    .wireless_cfg
-                    .cellular_v2
-                    .as_ref()
-                    .and_then(|c| {
-                        c.access_points.as_ref().and_then(|a| {
-                            Some(
-                                a.iter()
-                                    .map(|s| SimStatus {
-                                        apn: s.apn.clone(),
-                                        slot: u32::from(s.sim_slot),
-                                    })
-                                    .collect(),
-                            )
-                        })
+                // A modem can have 0 or multiple sims
+                sims: port.wireless_cfg.cellular_v2.as_ref().and_then(|c| {
+                    c.access_points.as_ref().and_then(|a| {
+                        Some(
+                            a.iter()
+                                .map(|s| SimStatus {
+                                    apn: s.apn.clone(),
+                                    slot: u32::from(s.sim_slot),
+                                })
+                                .collect(),
+                        )
                     })
-                    .unwrap(),
+                }),
             }),
         };
 

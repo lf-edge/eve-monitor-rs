@@ -46,7 +46,7 @@ impl IpcClient {
             .little_endian()
             // go module github.com/getlantern/framed expects 2-byte in little-endian format
             // little-endian format as length field
-            .length_field_type::<u16>()
+            .length_field_type::<u32>()
             .new_framed(unix_stream);
         Ok(stream)
     }

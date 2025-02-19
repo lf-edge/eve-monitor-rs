@@ -3,6 +3,7 @@
 
 mod actions;
 mod application;
+mod efi;
 mod events;
 mod ipc;
 mod model;

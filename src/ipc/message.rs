@@ -86,6 +86,11 @@ fn dump_to_file(message: &str, is_error: bool) {
     use std::fs::OpenOptions;
     use std::io::Write;
 
+    // release build write the full message only on error
+    if !is_error && cfg!(debug_assertions) {
+        return;
+    }
+
     // get EVE_MONITOR_LOG_DIR from environment
     if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {
         let log_file_name = format!(

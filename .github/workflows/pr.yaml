@@ -1,0 +1,39 @@
+name: Pull Request Workflow
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  check-spdx-headers:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: Get files for PR
+        uses: tj-actions/changed-files@v44
+        id: changed-files
+        with:
+          separator: "," # Space-separated output
+      - name: Verify SPDX headers
+        uses: rucoder/spdx@v1
+        with:
+          licenses: |-
+            Apache-2.0
+          files: ${{ steps.changed-files.outputs.all_changed_files }}
+          copyright: "Zededa, Inc."
+  build:
+    runs-on: ubuntu-latest
+    needs: check-spdx-headers
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --verbose
+      - name: Run tests
+        run: cargo test --verbose

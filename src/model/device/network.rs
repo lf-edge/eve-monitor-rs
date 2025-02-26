@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2025 Zededa, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 use crate::ipc::eve_types::{DhcpType, NetworkPortStatus, NetworkProxyType, WirelessType};

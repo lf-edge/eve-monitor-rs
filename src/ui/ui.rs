@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2025 Zededa, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::{
     model::device::network::NetworkInterfaceStatus,
     traits::{IPresenter, IWindow},

@@ -24,6 +24,7 @@ use super::eve_types::EveOnboardingStatus;
 use super::eve_types::EveVaultStatus;
 use super::eve_types::LedBlinkCounter;
 use super::eve_types::PhysicalIOAdapterList;
+use super::eve_types::TpmLogs;
 use super::eve_types::ZedAgentStatus;
 
 /// WindowId is a unique identifier for a window that is incremented sequentially.
@@ -63,6 +64,7 @@ pub enum IpcMessage {
     NodeStatus(EveNodeStatus),
     AppsList(AppsList),
     ZedAgentStatus(ZedAgentStatus),
+    TpmLogs(TpmLogs),
     Response {
         #[serde(flatten)]
         result: core::result::Result<String, String>,
@@ -83,6 +85,11 @@ static mut LOG_FILE_INDEX: u64 = 0;
 fn dump_to_file(message: &str, is_error: bool) {
     use std::fs::OpenOptions;
     use std::io::Write;
+
+    // release build write the full message only on error
+    if !is_error && cfg!(debug_assertions) {
+        return;
+    }
 
     // get EVE_MONITOR_LOG_DIR from environment
     if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {

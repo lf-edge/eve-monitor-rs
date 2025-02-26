@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2025 Zededa, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use crate::actions::MonActions;
 use crate::events::Event;
 use crate::model::model::Model;

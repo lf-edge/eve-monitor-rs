@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2025 Zededa, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 mod actions;
 mod application;
 mod events;

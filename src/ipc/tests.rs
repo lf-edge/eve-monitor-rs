@@ -1,3 +1,6 @@
+// Copyright (c) 2024-2025 Zededa, Inc.
+// SPDX-License-Identifier: Apache-2.0
+
 use super::*;
 use anyhow::Result;
 use eve_types::AppInstanceStatus;

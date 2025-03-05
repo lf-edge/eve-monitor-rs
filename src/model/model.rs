@@ -73,6 +73,15 @@ pub enum VaultStatus {
     Locked(EveError, Option<Vec<i32>>),
 }
 
+impl VaultStatus {
+    pub fn is_vault_locked(&self) -> bool {
+        match self {
+            VaultStatus::Locked(_, _) => true,
+            _ => false,
+        }
+    }
+}
+
 pub type Model = RefCell<MonitorModel>;
 #[derive(Debug)]
 pub struct MonitorModel {
@@ -85,7 +94,8 @@ pub struct MonitorModel {
     pub dpc_list: Option<DevicePortConfigList>,
     pub dpc_key: Option<String>,
     pub z_status: Option<ZedAgentStatus>,
-    pub tpm_logs: Option<TpmLogs>,
+    // pub tpm_logs: Option<TpmLogs>,
+    pub tpm_log_parse_result: Option<String>,
 }
 
 impl From<EveVaultStatus> for VaultStatus {
@@ -225,7 +235,14 @@ impl MonitorModel {
     }
 
     pub fn update_tpm_logs(&mut self, logs: TpmLogs) {
-        self.tpm_logs = Some(logs);
+        //self.tpm_logs = Some(logs);
+        // TODO: check logs changed
+        //reset parsing results
+
+        // let (good, bad) = logs.get_logs_pair();
+
+        self.tpm_log_parse_result = None;
+        // TODO: start async parsing
     }
 }
 
@@ -241,7 +258,8 @@ impl Default for MonitorModel {
             dpc_list: None,
             dpc_key: None,
             z_status: None,
-            tpm_logs: None,
+            // tpm_logs: None,
+            tpm_log_parse_result: None,
         }
     }
 }

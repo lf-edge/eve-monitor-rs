@@ -1515,13 +1515,13 @@ pub struct EfiVariable {
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct TpmLogs {
     #[serde_as(as = "Option<Base64>")]
-    pub lats_failed_log: Option<Vec<u8>>,
+    pub last_failed_log: Option<Vec<u8>>,
     #[serde_as(as = "Option<Base64>")]
     pub last_good_log: Option<Vec<u8>>,
     #[serde_as(as = "Option<Base64>")]
     pub backup_failed_log: Option<Vec<u8>>,
     #[serde_as(as = "Option<Base64>")]
     pub backup_good_log: Option<Vec<u8>>,
-    efi_vars_success: Option<Vec<EfiVariable>>,
-    efi_vars_failed: Option<Vec<EfiVariable>>,
+    pub efi_vars_success: Option<Vec<EfiVariable>>,
+    pub efi_vars_failed: Option<Vec<EfiVariable>>,
 }

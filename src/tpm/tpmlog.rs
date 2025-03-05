@@ -4,11 +4,13 @@
 use anyhow::{anyhow, Context, Result};
 use byteorder::{LittleEndian, ReadBytesExt};
 use num_enum::TryFromPrimitive;
+use sha2::{Digest as Sha2Digest, Sha256};
 use std::io::{Cursor, Read, Seek};
-use std::io::{Error, ErrorKind};
+use std::io::{Error as IoError, ErrorKind};
+use strum::Display;
 
 #[repr(u16)]
-#[derive(TryFromPrimitive, Debug)]
+#[derive(TryFromPrimitive, Debug, PartialEq)]
 pub enum TpmAlgorithmId {
     Error = 0x0000,         // TPM_ALG_ERROR
     RSA = 0x0001,           // TPM_ALG_RSA
@@ -52,7 +54,7 @@ pub enum TpmAlgorithmId {
 }
 
 #[repr(u32)]
-#[derive(Debug, TryFromPrimitive, PartialEq)]
+#[derive(Debug, TryFromPrimitive, PartialEq, Display)]
 pub enum TpmEventType {
     PrebootCert = 0x00000000,          // EV_PREBOOT_CERT
     PostCode = 0x00000001,             // EV_POST_CODE
@@ -74,26 +76,35 @@ pub enum TpmEventType {
     OmitBootDeviceEvents = 0x00000012, // EV_OMIT_BOOT_DEVICE_EVENTS
     PostCode2 = 0x00000013,            // EV_POST_CODE2
 
-    EFIEventBase = 0x80000000,               // EV_EFI_EVENT_BASE
-    EFIVariableDriverConfig = 0x80000001,    // EV_EFI_VARIABLE_DRIVER_CONFIG
-    EFIVariableBoot = 0x80000002,            // EV_EFI_VARIABLE_BOOT
-    EFIBootServicesApplication = 0x80000003, // EV_EFI_BOOT_SERVICES_APPLICATION
-    EFIBootServicesDriver = 0x80000004,      // EV_EFI_BOOT_SERVICES_DRIVER
-    EFIRuntimeServicesDriver = 0x80000005,   // EV_EFI_RUNTIME_SERVICES_DRIVER
-    EFIGPTEvent = 0x80000006,                // EV_EFI_GPT_EVENT
-    EFIAction = 0x80000007,                  // EV_EFI_ACTION
-    EFIPlatformFirmwareBlob = 0x80000008,    // EV_EFI_PLATFORM_FIRMWARE_BLOB
-    EFIHandoffTables = 0x80000009,           // EV_EFI_HANDOFF_TABLES
-    EFIPlatformFirmwareBlob2 = 0x8000000a,   // EV_EFI_PLATFORM_FIRMWARE_BLOB2
-    EFIHandoffTables2 = 0x8000000b,          // EV_EFI_HANDOFF_TABLES2
-    EFIVariableBoot2 = 0x8000000c,           // EV_EFI_VARIABLE_BOOT2
-    EFIGPTEvent2 = 0x8000000d,               // EV_EFI_GPT_EVENT2
-    EFIHCRTMEvent = 0x80000010,              // EV_EFI_HCRTM_EVENT
-    EFIVariableAuthority = 0x800000e0,       // EV_EFI_VARIABLE_AUTHORITY
-    EFISPDMFirmwareBlob = 0x800000e1,        // EV_EFI_SPDM_FIRMWARE_BLOB
-    EFISPDMFirmwareConfig = 0x800000e2,      // EV_EFI_SPDM_FIRMWARE_CONFIG
-    EFISPDMDevicePolicy = 0x800000e3,        // EV_EFI_SPDM_DEVICE_POLICY
-    EFISPDMDeviceAuthority = 0x800000e4,     // EV_EFI_SPDM_DEVICE_AUTHORITY
+    EfiEventBase = 0x80000000,               // EV_EFI_EVENT_BASE
+    EfiVariableDriverConfig = 0x80000001,    // EV_EFI_VARIABLE_DRIVER_CONFIG
+    EfiVariableBoot = 0x80000002,            // EV_EFI_VARIABLE_BOOT
+    EfiBootServicesApplication = 0x80000003, // EV_EFI_BOOT_SERVICES_APPLICATION
+    EfiBootServicesDriver = 0x80000004,      // EV_EFI_BOOT_SERVICES_DRIVER
+    EfiRuntimeServicesDriver = 0x80000005,   // EV_EFI_RUNTIME_SERVICES_DRIVER
+    EfiGPTEvent = 0x80000006,                // EV_EFI_GPT_EVENT
+    EfiAction = 0x80000007,                  // EV_EFI_ACTION
+    EfiPlatformFirmwareBlob = 0x80000008,    // EV_EFI_PLATFORM_FIRMWARE_BLOB
+    EfiHandoffTables = 0x80000009,           // EV_EFI_HANDOFF_TABLES
+    EfiPlatformFirmwareBlob2 = 0x8000000a,   // EV_EFI_PLATFORM_FIRMWARE_BLOB2
+    EfiHandoffTables2 = 0x8000000b,          // EV_EFI_HANDOFF_TABLES2
+    EfiVariableBoot2 = 0x8000000c,           // EV_EFI_VARIABLE_BOOT2
+    EfiGPTEvent2 = 0x8000000d,               // EV_EFI_GPT_EVENT2
+    EfiHCRTMEvent = 0x80000010,              // EV_EFI_HCRTM_EVENT
+    EfiVariableAuthority = 0x800000e0,       // EV_EFI_VARIABLE_AUTHORITY
+    EfiSPDMFirmwareBlob = 0x800000e1,        // EV_EFI_SPDM_FIRMWARE_BLOB
+    EfiSPDMFirmwareConfig = 0x800000e2,      // EV_EFI_SPDM_FIRMWARE_CONFIG
+    EfiSPDMDevicePolicy = 0x800000e3,        // EV_EFI_SPDM_DEVICE_POLICY
+    EfiSPDMDeviceAuthority = 0x800000e4,     // EV_EFI_SPDM_DEVICE_AUTHORITY
+}
+
+#[repr(u32)]
+#[derive(Debug, TryFromPrimitive, PartialEq)]
+pub enum EvePcrIndex {
+    GrubPcr = 8,
+    GrubInitrdPcr = 9,
+    RootFsPcr = 13,
+    ConfigPcr = 14,
 }
 
 impl TpmAlgorithmId {
@@ -109,7 +120,7 @@ impl TpmAlgorithmId {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct TpmEvent {
     pub pcr_index: u32,
     pub event_type: TpmEventType,
@@ -117,7 +128,7 @@ pub struct TpmEvent {
     pub event_data: Vec<u8>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Digest {
     pub algorithm_id: TpmAlgorithmId,
     pub digest: Vec<u8>,
@@ -149,6 +160,30 @@ impl LogSpec {
 struct DigestSize {
     algorithm_id: TpmAlgorithmId,
     size: usize,
+}
+
+impl Digest {
+    pub fn new_sha256(data: &[u8]) -> Self {
+        let mut hasher = Sha256::new();
+        hasher.update(data);
+        let digest = hasher.finalize();
+        Self {
+            algorithm_id: TpmAlgorithmId::SHA256,
+            digest: digest.to_vec(),
+        }
+    }
+}
+
+impl TpmEvent {
+    pub fn new(pcr_index: u32, event_type: TpmEventType, event_data: Vec<u8>) -> Self {
+        let digests = Digest::new_sha256(&event_data);
+        Self {
+            pcr_index,
+            event_type,
+            digests: vec![digests],
+            event_data,
+        }
+    }
 }
 
 impl TryFrom<TpmEvent> for LogSpec {
@@ -245,7 +280,7 @@ impl TPMLog {
         let pcr_index = cursor.read_u32::<LittleEndian>()?;
         let event_type = cursor.read_u32::<LittleEndian>()?;
         let event_type = TpmEventType::try_from(event_type).map_err(|e| {
-            Error::new(
+            IoError::new(
                 ErrorKind::InvalidData,
                 format!("Failed to convert to TpmEventType: {}", e),
             )
@@ -260,7 +295,7 @@ impl TPMLog {
                 let algorithm_id = cursor.read_u16::<LittleEndian>()?;
 
                 let algorithm_id = TpmAlgorithmId::try_from(algorithm_id).map_err(|e| {
-                    Error::new(
+                    IoError::new(
                         ErrorKind::InvalidData,
                         format!("Failed to convert to TpmAlgorithmId: {}", e),
                     )
@@ -319,22 +354,18 @@ impl TPMLog {
 
         Ok(events)
     }
-}
 
-// tests
-#[cfg(test)]
-mod tests {
-    use super::*;
+    pub fn events_for_pcr_ref(&self, pcr_index: u32) -> Vec<&TpmEvent> {
+        self.events
+            .iter()
+            .filter(|e| e.pcr_index == pcr_index)
+            .collect()
+    }
 
-    #[test]
-    fn test_load_tpm_log() {
-        let data = std::fs::read("./src/tpm/test_data/tpm_measurement_seal_success").unwrap();
-        let log = TPMLog::from_slice(&data).unwrap();
-        println!();
-        for event in log.events {
-            //if event.pcr_index == 15 {
-            println!("PCR: {} {:?}", event.pcr_index, event.event_type);
-            //}
-        }
+    pub fn into_events_for_pcr(self, pcr_index: u32) -> Vec<TpmEvent> {
+        self.events
+            .into_iter()
+            .filter(|e| e.pcr_index == pcr_index)
+            .collect()
     }
 }

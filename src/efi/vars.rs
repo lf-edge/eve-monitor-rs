@@ -94,6 +94,16 @@ pub enum ParseError {
     UnsupportedAttributes(u32),
 }
 
+impl std::error::Error for ParseError {}
+
+impl TryFrom<&[u8]> for EfiLoadOption {
+    type Error = ParseError;
+
+    fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
+        Self::parse(value)
+    }
+}
+
 impl EfiLoadOption {
     pub fn parse(data: &[u8]) -> Result<Self, ParseError> {
         let mut cursor = Cursor::new(data);
@@ -161,6 +171,14 @@ impl EfiLoadOption {
 #[derive(Debug, PartialEq)]
 pub struct EfiBootOrder {
     pub boot_order: Vec<u16>,
+}
+
+impl TryFrom<&[u8]> for EfiBootOrder {
+    type Error = ParseError;
+
+    fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
+        Self::parse(data)
+    }
 }
 
 impl EfiBootOrder {

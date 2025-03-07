@@ -1,371 +1,256 @@
-// Copyright (c) 2025 Zededa, Inc.
-// SPDX-License-Identifier: Apache-2.0
+use crate::{
+    efi::vars::{EfiBootOrder, EfiLoadOption},
+    ipc::eve_types::EfiVariable,
+};
 
+use super::{
+    tcg_events::{TcgEfiActionEvent, TcgEfiVariableEvent, TcgIPLEvent},
+    tcg_tpmlog::{TcgTpmEvent, TcgTpmEventType},
+};
 use anyhow::{anyhow, Context, Result};
-use byteorder::{LittleEndian, ReadBytesExt};
-use num_enum::TryFromPrimitive;
-use sha2::{Digest as Sha2Digest, Sha256};
-use std::io::{Cursor, Read, Seek};
-use std::io::{Error as IoError, ErrorKind};
-use strum::Display;
+use regex::Regex;
 
-#[repr(u16)]
-#[derive(TryFromPrimitive, Debug, PartialEq)]
-pub enum TpmAlgorithmId {
-    Error = 0x0000,         // TPM_ALG_ERROR
-    RSA = 0x0001,           // TPM_ALG_RSA
-    TDES = 0x0003,          // TPM_ALG_TDES
-    SHA1 = 0x0004,          // TPM_ALG_SHA1
-    HMAC = 0x0005,          // TPM_ALG_HMAC
-    AES = 0x0006,           // TPM_ALG_AES
-    MGF1 = 0x0007,          // TPM_ALG_MGF1
-    KeyedHash = 0x0008,     // TPM_ALG_KEYEDHASH
-    XOR = 0x000a,           // TPM_ALG_XOR
-    SHA256 = 0x000b,        // TPM_ALG_SHA256
-    SHA384 = 0x000c,        // TPM_ALG_SHA384
-    SHA512 = 0x000d,        // TPM_ALG_SHA512
-    Null = 0x0010,          // TPM_ALG_NULL
-    SM3_256 = 0x0012,       // TPM_ALG_SM3_256
-    SM4 = 0x0013,           // TPM_ALG_SM4
-    RSASSA = 0x0014,        // TPM_ALG_RSASSA
-    RSAES = 0x0015,         // TPM_ALG_RSAES
-    RSAPSS = 0x0016,        // TPM_ALG_RSAPSS
-    OAEP = 0x0017,          // TPM_ALG_OAEP
-    ECDSA = 0x0018,         // TPM_ALG_ECDSA
-    ECDH = 0x0019,          // TPM_ALG_ECDH
-    ECDAA = 0x001a,         // TPM_ALG_ECDAA
-    SM2 = 0x001b,           // TPM_ALG_SM2
-    ECSchnorr = 0x001c,     // TPM_ALG_ECSCHNORR
-    ECMQV = 0x001d,         // TPM_ALG_ECMQV
-    Kdf1Sp800_56a = 0x0020, // TPM_ALG_KDF1_SP800_56A
-    KDF2 = 0x0021,          // TPM_ALG_KDF2
-    Kdf1Sp800_108 = 0x0022, // TPM_ALG_KDF1_SP800_108
-    ECC = 0x0023,           // TPM_ALG_ECC
-    SymCipher = 0x0025,     // TPM_ALG_SYMCIPHER
-    Camellia = 0x0026,      // TPM_ALG_CAMELLIA
-    SHA3_256 = 0x0027,      // TPM_ALG_SHA3_256
-    SHA3_384 = 0x0028,      // TPM_ALG_SHA3_384
-    SHA3_512 = 0x0029,      // TPM_ALG_SHA3_512
-    CTR = 0x0040,           // TPM_ALG_CTR
-    OFB = 0x0041,           // TPM_ALG_OFB
-    CBC = 0x0042,           // TPM_ALG_CBC
-    CFB = 0x0043,           // TPM_ALG_CFB
-    ECB = 0x0044,           // TPM_ALG_ECB
+pub trait TpmEventDescribe {
+    fn semantic_key(&self) -> String;
 }
 
-#[repr(u32)]
-#[derive(Debug, TryFromPrimitive, PartialEq, Display)]
-pub enum TpmEventType {
-    PrebootCert = 0x00000000,          // EV_PREBOOT_CERT
-    PostCode = 0x00000001,             // EV_POST_CODE
-    NoAction = 0x00000003,             // EV_NO_ACTION
-    Separator = 0x00000004,            // EV_SEPARATOR
-    Action = 0x00000005,               // EV_ACTION
-    EventTag = 0x00000006,             // EV_EVENT_TAG
-    SCRTMContents = 0x00000007,        // EV_S_CRTM_CONTENTS
-    SCRTMVersion = 0x00000008,         // EV_S_CRTM_VERSION
-    CPUMicrocode = 0x00000009,         // EV_CPU_MICROCODE
-    PlatformConfigFlags = 0x0000000a,  // EV_PLATFORM_CONFIG_FLAGS
-    TableOfDevices = 0x0000000b,       // EV_TABLE_OF_DEVICES
-    CompactHash = 0x0000000c,          // EV_COMPACT_HASH
-    IPL = 0x0000000d,                  // EV_IPL
-    IPLPartitionData = 0x0000000e,     // EV_IPL_PARTITION_DATA
-    NonhostCode = 0x0000000f,          // EV_NONHOST_CODE
-    NonhostConfig = 0x00000010,        // EV_NONHOST_CONFIG
-    NonhostInfo = 0x00000011,          // EV_NONHOST_INFO
-    OmitBootDeviceEvents = 0x00000012, // EV_OMIT_BOOT_DEVICE_EVENTS
-    PostCode2 = 0x00000013,            // EV_POST_CODE2
-
-    EfiEventBase = 0x80000000,               // EV_EFI_EVENT_BASE
-    EfiVariableDriverConfig = 0x80000001,    // EV_EFI_VARIABLE_DRIVER_CONFIG
-    EfiVariableBoot = 0x80000002,            // EV_EFI_VARIABLE_BOOT
-    EfiBootServicesApplication = 0x80000003, // EV_EFI_BOOT_SERVICES_APPLICATION
-    EfiBootServicesDriver = 0x80000004,      // EV_EFI_BOOT_SERVICES_DRIVER
-    EfiRuntimeServicesDriver = 0x80000005,   // EV_EFI_RUNTIME_SERVICES_DRIVER
-    EfiGPTEvent = 0x80000006,                // EV_EFI_GPT_EVENT
-    EfiAction = 0x80000007,                  // EV_EFI_ACTION
-    EfiPlatformFirmwareBlob = 0x80000008,    // EV_EFI_PLATFORM_FIRMWARE_BLOB
-    EfiHandoffTables = 0x80000009,           // EV_EFI_HANDOFF_TABLES
-    EfiPlatformFirmwareBlob2 = 0x8000000a,   // EV_EFI_PLATFORM_FIRMWARE_BLOB2
-    EfiHandoffTables2 = 0x8000000b,          // EV_EFI_HANDOFF_TABLES2
-    EfiVariableBoot2 = 0x8000000c,           // EV_EFI_VARIABLE_BOOT2
-    EfiGPTEvent2 = 0x8000000d,               // EV_EFI_GPT_EVENT2
-    EfiHCRTMEvent = 0x80000010,              // EV_EFI_HCRTM_EVENT
-    EfiVariableAuthority = 0x800000e0,       // EV_EFI_VARIABLE_AUTHORITY
-    EfiSPDMFirmwareBlob = 0x800000e1,        // EV_EFI_SPDM_FIRMWARE_BLOB
-    EfiSPDMFirmwareConfig = 0x800000e2,      // EV_EFI_SPDM_FIRMWARE_CONFIG
-    EfiSPDMDevicePolicy = 0x800000e3,        // EV_EFI_SPDM_DEVICE_POLICY
-    EfiSPDMDeviceAuthority = 0x800000e4,     // EV_EFI_SPDM_DEVICE_AUTHORITY
+pub enum TpmEvent {
+    EfiAction(String),
+    EnterBiosSetup,
+    BootEntry {
+        boot_num: u16,
+        description: String,
+        device_path: Vec<u8>,
+    },
+    BootOrder(Vec<u16>),
+    MeasureRoot {
+        rootfs: String,
+        hash: String,
+    },
+    MeasureConfig {
+        file: String,
+        hash: String,
+        exists: bool,
+    },
+    GrubCmd {
+        cmd: String,
+        params: String,
+    },
+    GrubKernelCmdline(String),
+    GrubLinuxEfi(String),
+    GrubGenericEvent(String, String),
 }
 
-#[repr(u32)]
-#[derive(Debug, TryFromPrimitive, PartialEq)]
-pub enum EvePcrIndex {
-    GrubPcr = 8,
-    GrubInitrdPcr = 9,
-    RootFsPcr = 13,
-    ConfigPcr = 14,
-}
-
-impl TpmAlgorithmId {
-    pub fn get_byte_size(&self) -> Result<usize> {
+impl TpmEventDescribe for TpmEvent {
+    fn semantic_key(&self) -> String {
         match self {
-            TpmAlgorithmId::SHA1 => Ok(20),
-            TpmAlgorithmId::SHA256 => Ok(32),
-            TpmAlgorithmId::SHA384 => Ok(48),
-            TpmAlgorithmId::SHA512 => Ok(64),
-            TpmAlgorithmId::SM3_256 => Ok(32),
-            _ => Err(anyhow!("Unsupported algorithm for digest")),
+            TpmEvent::EfiAction(s) => s.clone(),
+            TpmEvent::BootEntry {
+                boot_num,
+                description: _,
+                device_path: _,
+            } => format!("BootEntry-{}", boot_num),
+            TpmEvent::BootOrder(_items) => "BootOrder".to_string(),
+            TpmEvent::GrubCmd { cmd, params: _ } => cmd.clone(),
+            TpmEvent::GrubKernelCmdline(_) => "GrubKernelCmdLine".to_string(),
+            TpmEvent::GrubLinuxEfi(_) => "GrubLinuxEfi".to_string(),
+            TpmEvent::GrubGenericEvent(cmd, _params) => cmd.clone(),
+            TpmEvent::MeasureConfig {
+                file,
+                hash: _,
+                exists: _,
+            } => file.clone(),
+            TpmEvent::EnterBiosSetup => "EnterBiosSetup".to_string(),
+            TpmEvent::MeasureRoot { rootfs: _, hash: _ } => "MeasureRootFs".to_string(),
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub struct TpmEvent {
-    pub pcr_index: u32,
-    pub event_type: TpmEventType,
-    pub digests: Vec<Digest>,
-    pub event_data: Vec<u8>,
-}
+fn parse_efi_boot_variable(event: &TcgTpmEvent, efi_vars: &Vec<EfiVariable>) -> Result<TpmEvent> {
+    let var = TcgEfiVariableEvent::try_from(event)?;
+    let name = var.unicode_name;
+    let var = efi_vars
+        .into_iter()
+        .find(|v| v.name == name)
+        .ok_or_else(|| anyhow!("No variable found for boot event"))?;
 
-#[derive(Debug, PartialEq)]
-pub struct Digest {
-    pub algorithm_id: TpmAlgorithmId,
-    pub digest: Vec<u8>,
-}
+    let re = Regex::new(r"Boot[0-9A-F]{4}").unwrap();
 
-#[repr(u32)]
-#[derive(TryFromPrimitive, Debug, PartialEq)]
-enum PlatformType {
-    Unknown = 0,
-    BIOS = 1,
-    EFI = 2,
-}
-
-#[derive(Debug)]
-struct LogSpec {
-    major: u8,
-    minor: u8,
-    platform_type: PlatformType,
-    digest_length: Option<Vec<DigestSize>>,
-}
-
-impl LogSpec {
-    fn is_efi_2(&self) -> bool {
-        self.platform_type == PlatformType::EFI && self.major == 2
+    if name == "BootOrder" {
+        let efi_boot_order = EfiBootOrder::try_from(event.event_data.as_slice())?;
+        Ok(TpmEvent::BootOrder(efi_boot_order.boot_order))
+    } else if re.is_match(&name) {
+        let efi_load_options = EfiLoadOption::try_from(var.value.as_slice())?;
+        Ok(TpmEvent::BootEntry {
+            boot_num: u16::from_str_radix(&name[4..], 16)?,
+            description: efi_load_options.description,
+            device_path: efi_load_options.device_path_list,
+        })
+    } else {
+        Err(anyhow!("Unsupported Boot variable `{}'", name))
     }
 }
 
-#[derive(Debug)]
-struct DigestSize {
-    algorithm_id: TpmAlgorithmId,
-    size: usize,
-}
+// IPL event may appear in several PCRs: 8 and 13
+fn parse_grub_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+    let efi_grub_event = TcgIPLEvent::try_from(event)?;
 
-impl Digest {
-    pub fn new_sha256(data: &[u8]) -> Self {
-        let mut hasher = Sha256::new();
-        hasher.update(data);
-        let digest = hasher.finalize();
-        Self {
-            algorithm_id: TpmAlgorithmId::SHA256,
-            digest: digest.to_vec(),
+    // split by first space and keep both parts
+    let event_data = efi_grub_event.get().splitn(2, ' ').collect::<Vec<&str>>();
+
+    if event_data.len() != 2 {
+        return Err(anyhow::anyhow!("Invalid event data for grub event"));
+    }
+
+    let event_type = event_data.get(0).unwrap().to_string();
+    let event_data = event_data.get(1).unwrap().to_string();
+
+    match event_type.as_str() {
+        "grub_cmd" => {
+            // split again and try to get params
+            let event_data = event_data.splitn(2, ' ').collect::<Vec<&str>>();
+            let cmd = event_data.get(0).unwrap().to_string();
+            let params = event_data.get(1).unwrap_or(&"").to_string();
+            Ok(TpmEvent::GrubCmd { cmd, params })
         }
+        "grub_kernel_cmdline" => Ok(TpmEvent::GrubKernelCmdline(event_data)),
+        "grub_linuxefi" => Ok(TpmEvent::GrubLinuxEfi(event_data)),
+        _ => Err(anyhow::anyhow!("Invalid grub event type {}", event_type)),
     }
+}
+
+fn parse_action_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+    let action_event = TcgEfiActionEvent::try_from(event)?;
+    let action_value = action_event.get();
+
+    match event.pcr_index {
+        // e.g file:/config/authorized_keys exist:true content-hash:61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8
+        // content-hash can be omitted if file does not exist
+        1 | 3 if action_value == "Entering ROM Based Setup" => Ok(TpmEvent::EnterBiosSetup),
+        1 | 3 | 4 | 5 | 7 => Ok(TpmEvent::EfiAction(action_value.to_string())),
+        _ => Err(anyhow::anyhow!(
+            "Invalid PCR index for TpmEventType::Action {}",
+            event.pcr_index
+        )),
+    }
+}
+
+fn parse_measure_config_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+    if event.pcr_index != 14 {
+        return Err(anyhow::anyhow!(
+            "Invalid PCR index for measure config event"
+        ));
+    }
+
+    let action_event = TcgEfiActionEvent::try_from(event)?;
+    let action_value = action_event.get();
+
+    let re = regex::Regex::new(r"file:(\S+) exist:(true|false)(?: content-hash:(\S+))?")?;
+    let captures = re.captures(action_value).context(format!(
+        "Error parsing TpmEvent::MeasureConfig with regexp for '{}`",
+        action_value
+    ))?;
+    let file = captures.get(1).context("Error parsing 'file:'")?.as_str();
+    let exists = captures.get(2).context("Error parsing 'exists:'")?.as_str() == "true";
+    let hash = captures.get(3).map(|m| m.as_str()).unwrap_or_default();
+    if !exists && !hash.is_empty() {
+        return Err(anyhow::anyhow!(
+            "Invalid TpmEvent::MeasureConfig: hash is not empty for exist:false"
+        ));
+    }
+    Ok(TpmEvent::MeasureConfig {
+        file: file.to_string(),
+        hash: hash.to_string(),
+        exists,
+    })
+}
+
+fn parse_rootfs_measurement_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+    if event.pcr_index != 13 {
+        return Err(anyhow::anyhow!(
+            "Invalid PCR index for rootfs measurement event"
+        ));
+    }
+
+    let efi_grub_event = TcgIPLEvent::try_from(event)?;
+
+    // split by space. exactly 2 parts are expected
+    let parts = efi_grub_event
+        .get()
+        .split_whitespace()
+        .collect::<Vec<&str>>();
+
+    if parts.len() != 2 {
+        return Err(anyhow::anyhow!(
+            "Invalid event data for rootfs measurement event"
+        ));
+    }
+
+    Ok(TpmEvent::MeasureRoot {
+        rootfs: parts[0].to_string(),
+        hash: parts[1].to_string(),
+    })
 }
 
 impl TpmEvent {
-    pub fn new(pcr_index: u32, event_type: TpmEventType, event_data: Vec<u8>) -> Self {
-        let digests = Digest::new_sha256(&event_data);
-        Self {
-            pcr_index,
-            event_type,
-            digests: vec![digests],
-            event_data,
-        }
-    }
-}
-
-impl TryFrom<TpmEvent> for LogSpec {
-    type Error = anyhow::Error;
-
-    fn try_from(event: TpmEvent) -> std::result::Result<Self, Self::Error> {
-        if event.event_type != TpmEventType::NoAction {
-            return Err(anyhow!("Not a NoAction event"));
-        }
-
-        // read signature field 16 bytes
-        let mut cursor = Cursor::new(&event.event_data);
-        let mut signature = [0u8; 16];
-
-        cursor
-            .read_exact(&mut signature)
-            .context("cannot read signature bytes")?;
-
-        // convert to string. signature is padded with 0x0
-        let signature = String::from_utf8_lossy(&signature)
-            .trim_end_matches(|c| c == char::from_u32(0).unwrap())
-            .to_string();
-
-        match signature.as_str() {
-            "Spec ID Event00" => {
-                // read spec id event data
-                let _platform_class = cursor.read_u32::<LittleEndian>()?;
-                let minor = cursor.read_u8()?;
-                let major = cursor.read_u8()?;
-
-                Ok(LogSpec {
-                    major,
-                    minor,
-                    platform_type: PlatformType::BIOS,
-                    digest_length: None,
-                })
+    pub fn try_from_tcg_event(
+        event: &TcgTpmEvent,
+        efi_vars: Option<Vec<EfiVariable>>,
+    ) -> Result<Self> {
+        match event.event_type {
+            TcgTpmEventType::EfiAction if event.pcr_index == 14 => {
+                parse_measure_config_event(event)
             }
-            "Spec ID Event02" => {
-                let _platform_class = cursor.read_u32::<LittleEndian>()?;
-                let minor = cursor.read_u8()?;
-                let major = cursor.read_u8()?;
-
-                Ok(LogSpec {
-                    major,
-                    minor,
-                    platform_type: PlatformType::EFI,
-                    digest_length: None,
-                })
-            }
-            "Spec ID Event03" => {
-                let _platform_class = cursor.read_u32::<LittleEndian>()?;
-                let minor = cursor.read_u8()?;
-                let major = cursor.read_u8()?;
-                cursor.seek_relative(2)?; // skip 2 bytes errata and uintn_size
-
-                let digest_count = cursor.read_u32::<LittleEndian>()?;
-                let mut digest_length_list = Vec::with_capacity(digest_count as usize);
-
-                for _ in 0..digest_count {
-                    let algorithm_id = cursor.read_u16::<LittleEndian>()?;
-                    let algorithm_id = TpmAlgorithmId::try_from(algorithm_id)?;
-                    let digest_size = cursor.read_u16::<LittleEndian>()?;
-                    digest_length_list.push(DigestSize {
-                        algorithm_id,
-                        size: digest_size as usize,
-                    });
+            TcgTpmEventType::EfiAction => parse_action_event(event),
+            TcgTpmEventType::EfiVariableBoot | TcgTpmEventType::EfiVariableBoot2 => {
+                if let Some(efi_vars) = efi_vars {
+                    parse_efi_boot_variable(event, &efi_vars)
+                } else {
+                    return Err(anyhow!("No EFI variables provided for boot event"));
                 }
-
-                Ok(LogSpec {
-                    major,
-                    minor,
-                    platform_type: PlatformType::EFI,
-                    digest_length: Some(digest_length_list),
-                })
             }
-            _ => Err(anyhow!(format!("Unsupported signature {}", signature))),
-        }
-    }
-}
-
-// struct SpecId00Event {}
-
-pub struct TPMLog {
-    pub events: Vec<TpmEvent>,
-}
-
-impl TPMLog {
-    pub fn from_slice(data: &[u8]) -> Result<Self> {
-        let events = Self::deserialize_tpm_event_log(data)?;
-        Ok(Self { events })
-    }
-
-    fn read_event(cursor: &mut Cursor<&[u8]>, efi_2_0: bool) -> Result<TpmEvent> {
-        let pcr_index = cursor.read_u32::<LittleEndian>()?;
-        let event_type = cursor.read_u32::<LittleEndian>()?;
-        let event_type = TpmEventType::try_from(event_type).map_err(|e| {
-            IoError::new(
-                ErrorKind::InvalidData,
-                format!("Failed to convert to TpmEventType: {}", e),
-            )
-        })?;
-
-        let digests = if efi_2_0 {
-            // Read digest count and parse each digest
-            let digest_count = cursor.read_u32::<LittleEndian>()?;
-            let mut digests = Vec::with_capacity(digest_count as usize);
-
-            for _ in 0..digest_count {
-                let algorithm_id = cursor.read_u16::<LittleEndian>()?;
-
-                let algorithm_id = TpmAlgorithmId::try_from(algorithm_id).map_err(|e| {
-                    IoError::new(
-                        ErrorKind::InvalidData,
-                        format!("Failed to convert to TpmAlgorithmId: {}", e),
-                    )
-                })?;
-
-                let digest_size = algorithm_id.get_byte_size()?; // Implement this based on TPM specs
-                let mut digest = vec![0u8; digest_size];
-                cursor.read_exact(&mut digest)?;
-
-                digests.push(Digest {
-                    algorithm_id,
-                    digest,
-                });
+            TcgTpmEventType::IPL if event.pcr_index == 8 => parse_grub_event(event),
+            TcgTpmEventType::IPL if event.pcr_index == 13 => parse_rootfs_measurement_event(event),
+            TcgTpmEventType::NoAction => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
             }
-            digests
-        } else {
-            let mut digests = Vec::with_capacity(1);
-            // read sha1 digest
-            let digest_size = TpmAlgorithmId::SHA1.get_byte_size()?;
-            let mut digest = vec![0u8; digest_size];
-            cursor.read_exact(&mut digest)?;
-            digests.push(Digest {
-                algorithm_id: TpmAlgorithmId::SHA1,
-                digest,
-            });
-            digests
-        };
+            TcgTpmEventType::Separator => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
+            TcgTpmEventType::Action => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
+            TcgTpmEventType::CPUMicrocode => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
 
-        // Read event data
-        let event_data_size = cursor.read_u32::<LittleEndian>()?;
+            TcgTpmEventType::PrebootCert => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
+            TcgTpmEventType::PostCode => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
+            TcgTpmEventType::EfiVariableDriverConfig => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
+            TcgTpmEventType::EfiGPTEvent => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
+            TcgTpmEventType::EfiHandoffTables => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
+            TcgTpmEventType::EfiHandoffTables2 => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
+            TcgTpmEventType::EfiGPTEvent2 => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
+            TcgTpmEventType::EfiVariableAuthority => {
+                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
+            }
 
-        let mut event_data = vec![0u8; event_data_size as usize];
-        cursor.read_exact(&mut event_data)?;
-
-        Ok(TpmEvent {
-            pcr_index,
-            event_type,
-            digests,
-            event_data,
-        })
-    }
-
-    fn deserialize_tpm_event_log(data: &[u8]) -> Result<Vec<TpmEvent>> {
-        let mut cursor = Cursor::new(data);
-        let mut events = Vec::new();
-
-        // the very first event is always a Spec event in 'old' format wit honly SHA1 digest
-        let spec_event = Self::read_event(&mut cursor, false)?;
-        let log_spec = LogSpec::try_from(spec_event)?;
-
-        // Loop until all data is read
-        while cursor.position() < data.len() as u64 {
-            let event = Self::read_event(&mut cursor, log_spec.is_efi_2())?;
-            events.push(event);
+            // FIXME: we should not error here
+            _ => Err(anyhow!("Unsupported event type: {:?}", event.event_type)),
         }
-
-        Ok(events)
-    }
-
-    pub fn events_for_pcr_ref(&self, pcr_index: u32) -> Vec<&TpmEvent> {
-        self.events
-            .iter()
-            .filter(|e| e.pcr_index == pcr_index)
-            .collect()
-    }
-
-    pub fn into_events_for_pcr(self, pcr_index: u32) -> Vec<TpmEvent> {
-        self.events
-            .into_iter()
-            .filter(|e| e.pcr_index == pcr_index)
-            .collect()
     }
 }

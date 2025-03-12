@@ -3,13 +3,14 @@
 
 [package]
 name = "monitor"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 authors = [
     "Mikhail Malyshev <mike.malyshev@gmail.com>",
     "Dion Bramley <dionbramley@gmail.com>",
 ]
 repository = "https://github.com/lf-edge/eve-monitor-rs"
+rust-version = "1.84"
 
 [profile.release]
 strip = "debuginfo" # Automatically strip symbols from the binary.

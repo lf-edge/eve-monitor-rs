@@ -208,28 +208,20 @@ impl TryFrom<&Node> for MediaNode {
                             partition_format: PartitionType::from(partition_format),
                         })
                     }
-                    NodeSubTypeMedia::CdromElTorito => {
-                        let boot_entry = cursor.read_u32::<LittleEndian>()?;
-                        let partition_start = cursor.read_u64::<LittleEndian>()?;
-                        let partition_size = cursor.read_u64::<LittleEndian>()?;
-                        Ok(MediaNode::CdRom {
-                            boot_entry,
-                            partition_start,
-                            partition_size,
-                        })
-                    }
+                    NodeSubTypeMedia::CdromElTorito => Ok(MediaNode::CdRom {
+                        boot_entry: cursor.read_u32::<LittleEndian>()?,
+                        partition_start: cursor.read_u64::<LittleEndian>()?,
+                        partition_size: cursor.read_u64::<LittleEndian>()?,
+                    }),
                     NodeSubTypeMedia::Vendor => {
-                        let mut uuid_buffer: Vec<u8> = Vec::with_capacity(16);
                         let mut vendor_data = Vec::new();
-                        cursor.read_exact(&mut uuid_buffer)?;
-                        let guid = uuid::Uuid::from_slice(&uuid_buffer)?;
+                        let guid = cursor.read_guid()?;
                         let _data_size = cursor.read_to_end(&mut vendor_data)?;
                         Ok(MediaNode::Vendor { guid, vendor_data })
                     }
                     NodeSubTypeMedia::FilePath => {
                         let path = cursor.read_ucs16_null_terminated_to_string()?;
                         Ok(MediaNode::FilePath(path))
-                        // Ok(MediaNode::Unknown(node.clone()))
                     }
                     NodeSubTypeMedia::PiwgFvFile => Ok(MediaNode::PiwgFvFile(cursor.read_guid()?)),
                     NodeSubTypeMedia::PiwgFv => Ok(MediaNode::PiwgFv(cursor.read_guid()?)),

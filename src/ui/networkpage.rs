@@ -352,6 +352,7 @@ impl IEventHandler for NetworkPage {
 }
 
 impl ISelector for NetworkPage {
+    type Item = String;
     fn select_next(&mut self) {
         if let Some(selected) = self.list.state.selected() {
             if selected < self.list.size - 1 {

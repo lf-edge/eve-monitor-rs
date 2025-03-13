@@ -3,13 +3,18 @@
 
 use std::{cell::RefCell, collections::HashMap};
 
+use anyhow::Result;
 use chrono::{DateTime, Utc};
+use log::{error, info};
 use uuid::Uuid;
 
-use crate::ipc::eve_types::{
-    AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
-    DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
-    EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, TpmLogs, ZedAgentStatus,
+use crate::{
+    ipc::eve_types::{
+        AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
+        DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
+        EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, TpmLogs, ZedAgentStatus,
+    },
+    tpm::diff::{get_logs_pair, tpm_log_diff_interpret, InterpretedTpmEvent},
 };
 
 use super::device::network::NetworkInterfaceStatus;
@@ -70,7 +75,7 @@ pub enum VaultStatus {
     Unknown,
     EncryptionDisabled(EveError, bool),
     Unlocked(bool),
-    Locked(EveError, Option<Vec<i32>>),
+    Locked(EveError, Option<Vec<u32>>),
 }
 
 impl VaultStatus {
@@ -94,8 +99,8 @@ pub struct MonitorModel {
     pub dpc_list: Option<DevicePortConfigList>,
     pub dpc_key: Option<String>,
     pub z_status: Option<ZedAgentStatus>,
-    // pub tpm_logs: Option<TpmLogs>,
-    pub tpm_log_parse_result: Option<String>,
+    pub tpm_log_parse_result: Option<Vec<(u32, Vec<InterpretedTpmEvent>)>>,
+    pub error_log: Vec<String>,
 }
 
 impl From<EveVaultStatus> for VaultStatus {
@@ -234,15 +239,34 @@ impl MonitorModel {
         self.z_status = Some(status);
     }
 
+    fn parse_tpm_logs(
+        logs: TpmLogs,
+        pcrs: &Vec<u32>,
+    ) -> Result<Vec<(u32, Vec<InterpretedTpmEvent>)>> {
+        let (old_good_log, new_log) = get_logs_pair(logs)?;
+        tpm_log_diff_interpret(pcrs, old_good_log, new_log)
+    }
+
     pub fn update_tpm_logs(&mut self, logs: TpmLogs) {
-        //self.tpm_logs = Some(logs);
-        // TODO: check logs changed
-        //reset parsing results
-
-        // let (good, bad) = logs.get_logs_pair();
-
-        self.tpm_log_parse_result = None;
+        info!("Got TPM logs from EVE");
         // TODO: start async parsing
+        match &self.vault_status {
+            VaultStatus::Locked(_, Some(pcrs)) => match Self::parse_tpm_logs(logs, &pcrs) {
+                Ok(logs) => {
+                    self.tpm_log_parse_result = Some(logs);
+                }
+                Err(e) => {
+                    error!("Error parsing TPM logs: {:?}", e);
+                    self.error_log
+                        .push(format!("Error parsing TPM logs: {:?}", e));
+                }
+            },
+            _ => {
+                error!("TPM logs received while vault is not locked");
+                self.error_log
+                    .push("TPM logs received while vault is not locked".to_string());
+            }
+        }
     }
 }
 
@@ -258,8 +282,8 @@ impl Default for MonitorModel {
             dpc_list: None,
             dpc_key: None,
             z_status: None,
-            // tpm_logs: None,
             tpm_log_parse_result: None,
+            error_log: Vec::new(),
         }
     }
 }

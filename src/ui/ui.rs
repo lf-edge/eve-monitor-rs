@@ -37,6 +37,7 @@ use super::{
     networkpage::create_network_page,
     statusbar::{create_status_bar, StatusBarState},
     summary_page::SummaryPage,
+    vaultpage::VaultPage,
     window::Window,
 };
 
@@ -64,6 +65,7 @@ pub enum UiTabs {
     Home,
     Network,
     Applications,
+    Vault,
     Dmesg,
 }
 
@@ -106,6 +108,7 @@ impl Ui {
 
         self.views[UiTabs::Applications as usize].push(Box::new(ApplicationsPage::new()));
         self.views[UiTabs::Dmesg as usize].push(Box::new(DmesgViewer::new()));
+        self.views[UiTabs::Vault as usize].push(Box::new(VaultPage::new()));
     }
 
     pub fn draw(&mut self, model: Rc<Model>) {

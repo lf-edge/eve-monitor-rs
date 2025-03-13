@@ -5,17 +5,20 @@ use anyhow::Result;
 use std::collections::HashMap;
 use uuid::Uuid;
 
-use crate::tpm::{
-    diff::{tpm_log_compute_lcs, tpm_log_diff_binary},
-    tcg_events::TcgEfiVariableEvent,
-    tcg_tpmlog::{Digest, TPMLog, TcgTpmEvent, TcgTpmEventType},
-    tpmlog::TpmEvent,
+use crate::{
+    lcs::{collect_diff, compute_lcs},
+    tpm::{
+        diff::{interpret_pcr14, tpm_log_diff_for_pcr, InterpretedTpmEvent},
+        tcg_events::TcgEfiVariableEvent,
+        tcg_tpmlog::{Digest, TPMLog, TcgTpmEvent, TcgTpmEventType},
+        tpmlog::TpmEvent,
+    },
 };
 
 use super::diff::EveTpmLog;
 
 // Helper to create EFI variable boot events
-fn mock_boot_order_event(order: &[u16], is_good: bool) -> TcgTpmEvent {
+fn mock_boot_order_event(order: &[u16], is_type_2: bool) -> TcgTpmEvent {
     let efi_var = TcgEfiVariableEvent {
         vendor_guid: Uuid::parse_str("8BE4DF61-93CA-11D2-AA0D-00E098032B8C").unwrap(), // EFI_GLOBAL_VARIABLE_GUID
         unicode_name: "BootOrder".to_string(),
@@ -27,19 +30,14 @@ fn mock_boot_order_event(order: &[u16], is_good: bool) -> TcgTpmEvent {
 
     let event_data = efi_var.serialize();
 
-    TcgTpmEvent {
-        pcr_index: 1,
-        event_type: if is_good {
-            TcgTpmEventType::EfiVariableBoot
-        } else {
-            TcgTpmEventType::EfiVariableBoot2
-        },
-        digests: vec![Digest::new_sha256(&event_data)],
-        event_data,
+    if is_type_2 {
+        return mock_tcg_tpm_event(1, TcgTpmEventType::EfiVariableBoot2, &event_data);
+    } else {
+        return mock_tcg_tpm_event(1, TcgTpmEventType::EfiVariableBoot, &event_data);
     }
 }
 
-fn moc_boot_event(index: u16) -> TcgTpmEvent {
+fn moc_boot_event(index: u16, is_type_2: bool) -> TcgTpmEvent {
     let efi_var = TcgEfiVariableEvent {
         vendor_guid: Uuid::parse_str("8BE4DF61-93CA-11D2-AA0D-00E098032B8C").unwrap(), // EFI_GLOBAL_VARIABLE_GUID
         unicode_name: format!("Boot{:04X}", index),
@@ -48,11 +46,10 @@ fn moc_boot_event(index: u16) -> TcgTpmEvent {
 
     let event_data = efi_var.serialize();
 
-    TcgTpmEvent {
-        pcr_index: 1,
-        event_type: TcgTpmEventType::EfiVariableBoot,
-        digests: vec![Digest::new_sha256(&event_data)],
-        event_data,
+    if is_type_2 {
+        return mock_tcg_tpm_event(1, TcgTpmEventType::EfiVariableBoot2, &event_data);
+    } else {
+        return mock_tcg_tpm_event(1, TcgTpmEventType::EfiVariableBoot, &event_data);
     }
 }
 
@@ -62,16 +59,19 @@ fn moc_pcr14_event(file: &str, exists: bool, hash: Option<&str>) -> TcgTpmEvent 
     } else {
         format!("file:{} exist:{}", file, exists)
     };
-    return mock_event(14, TcgTpmEventType::EfiAction, &event_data);
+    return mock_tcg_tpm_event(14, TcgTpmEventType::EfiAction, &event_data);
 }
 
 // Helper to create mock events
-fn mock_event(pcr: u32, event_type: TcgTpmEventType, data: &str) -> TcgTpmEvent {
+fn mock_tcg_tpm_event<T>(pcr: u32, event_type: TcgTpmEventType, data: &T) -> TcgTpmEvent
+where
+    T: AsRef<[u8]> + ?Sized,
+{
     TcgTpmEvent {
         pcr_index: pcr,
         event_type,
-        digests: vec![Digest::new_sha256(data.as_bytes())], // Fixed digests
-        event_data: data.as_bytes().to_vec(),
+        digests: vec![Digest::new_sha256(data.as_ref())], // Fixed digests
+        event_data: data.as_ref().to_vec(),
     }
 }
 
@@ -98,23 +98,23 @@ fn test_lcs_insertion() {
     // --- Create Mock Events ---
     // "Good" log events: A, B, C, D
     let good_events = vec![
-        mock_event(1, TcgTpmEventType::NoAction, "EventA"),
-        mock_event(1, TcgTpmEventType::PostCode, "EventB"),
-        mock_event(1, TcgTpmEventType::Separator, "EventC"),
-        mock_event(1, TcgTpmEventType::Action, "EventD"),
+        mock_tcg_tpm_event(1, TcgTpmEventType::NoAction, "EventA"),
+        mock_tcg_tpm_event(1, TcgTpmEventType::PostCode, "EventB"),
+        mock_tcg_tpm_event(1, TcgTpmEventType::Separator, "EventC"),
+        mock_tcg_tpm_event(1, TcgTpmEventType::Action, "EventD"),
     ];
 
     // "Bad" log events: A, B, *E*, C, D (E inserted)
     let bad_events = vec![
-        mock_event(1, TcgTpmEventType::NoAction, "EventA"),
-        mock_event(1, TcgTpmEventType::PostCode, "EventB"),
-        mock_event(1, TcgTpmEventType::EventTag, "EventE"), // Inserted
-        mock_event(1, TcgTpmEventType::Separator, "EventC"),
-        mock_event(1, TcgTpmEventType::Action, "EventD"),
+        mock_tcg_tpm_event(1, TcgTpmEventType::NoAction, "EventA"),
+        mock_tcg_tpm_event(1, TcgTpmEventType::PostCode, "EventB"),
+        mock_tcg_tpm_event(1, TcgTpmEventType::EventTag, "EventE"), // Inserted
+        mock_tcg_tpm_event(1, TcgTpmEventType::Separator, "EventC"),
+        mock_tcg_tpm_event(1, TcgTpmEventType::Action, "EventD"),
     ];
 
     // --- Compute LCS ---
-    let lcs = tpm_log_compute_lcs(
+    let lcs = compute_lcs(
         &good_events.iter().collect::<Vec<_>>(),
         &bad_events.iter().collect::<Vec<_>>(),
     );
@@ -128,7 +128,7 @@ fn test_lcs_insertion() {
     assert_eq!(lcs[3].event_data, b"EventD");
 
     // --- Find Differences ---
-    let (deletions, insertions) = tpm_log_diff_binary(
+    let (deletions, insertions) = collect_diff(
         &good_events.iter().collect::<Vec<_>>(),
         &bad_events.iter().collect::<Vec<_>>(),
         &lcs,
@@ -156,20 +156,20 @@ fn test_lcs_insertion() {
 #[test]
 fn test_added_boot_entry() {
     let good_log = vec![
-        moc_boot_event(0x0000),
-        moc_boot_event(0x0001),
-        moc_boot_event(0x0002),
+        moc_boot_event(0x0000, true),
+        moc_boot_event(0x0001, true),
+        moc_boot_event(0x0002, true),
     ];
 
     let bad_log = vec![
-        moc_boot_event(0x0000),
-        moc_boot_event(0x0001),
-        moc_boot_event(0x0003),
-        moc_boot_event(0x0002),
+        moc_boot_event(0x0000, true),
+        moc_boot_event(0x0001, true),
+        moc_boot_event(0x0003, true),
+        moc_boot_event(0x0002, true),
     ];
 
     // --- Compute LCS ---
-    let lcs = tpm_log_compute_lcs(
+    let lcs = compute_lcs(
         &good_log.iter().collect::<Vec<_>>(),
         &bad_log.iter().collect::<Vec<_>>(),
     );
@@ -179,7 +179,7 @@ fn test_added_boot_entry() {
     // Note: We don't care about modifications in this test
     // since we are only adding a new boot entry
     // and not modifying an existing one
-    let (deletions, insertions) = tpm_log_diff_binary(
+    let (deletions, insertions) = collect_diff(
         &good_log.iter().collect::<Vec<_>>(),
         &bad_log.iter().collect::<Vec<_>>(),
         &lcs,
@@ -197,257 +197,220 @@ fn test_added_boot_entry() {
 
     // 2. Verify the inserted boot entry
     let inserted = insertions[0];
-    assert_eq!(inserted.event_type, TcgTpmEventType::EfiVariableBoot);
+    assert_eq!(inserted.event_type, TcgTpmEventType::EfiVariableBoot2);
     let efi_var = TcgEfiVariableEvent::try_from(inserted).unwrap();
     assert_eq!(efi_var.unicode_name, "Boot0003");
     assert_eq!(efi_var.variable_data, 0x0003u16.to_le_bytes().to_vec());
 }
 
-// #[test]
-// fn test_modified_boot_order() {
-//     // --- Create Mock Events ---
-//     // Good BootOrder: [0x0000, 0x0001]
-//     let good_event = mock_boot_order_event(&[0x0000, 0x0001], true);
+#[test]
+fn test_modified_boot_order() {
+    // --- Create Mock Events ---
+    // Good BootOrder: [0x0000, 0x0001]
+    let good_event = mock_boot_order_event(&[0x0000, 0x0001], true);
 
-//     // Bad BootOrder: [0x0001, 0x0000] (modified)
-//     let bad_event = mock_boot_order_event(&[0x0001, 0x0000], false);
+    // Bad BootOrder: [0x0001, 0x0000] (modified)
+    let bad_event = mock_boot_order_event(&[0x0001, 0x0000], false);
 
-//     // Create logs with just the BootOrder event
-//     let good_log = vec![&good_event];
-//     let bad_log = vec![&bad_event];
+    // Create logs with just the BootOrder event
+    let good_log = vec![&good_event];
+    let bad_log = vec![&bad_event];
 
-//     // --- Compute LCS ---
-//     let lcs = tpm_log_compute_lcs(&good_log, &bad_log);
+    // --- Compute LCS ---
+    let lcs = compute_lcs(&good_log, &bad_log);
 
-//     // LCS should be empty since the events are different
-//     assert!(lcs.is_empty(), "LCS should detect no common events");
+    // LCS should be empty since the events are different
+    assert!(lcs.is_empty(), "LCS should detect no common events");
 
-//     // --- Find Differences ---
-//     let (deletions, insertions) = tpm_log_diff_binary(&good_log, &bad_log, &lcs);
+    // --- Find Differences ---
+    let (deletions, insertions) = collect_diff(&good_log, &bad_log, &lcs);
 
-//     // --- Detect Modifications ---
-//     let mut mods = Vec::new();
-//     let del_map: HashMap<_, _> = deletions
-//         .iter()
-//         .filter_map(|e| get_event_semantic_key(e).map(|k| (k, e)))
-//         .collect();
+    // // --- Detect Modifications ---
+    // let mut mods = Vec::new();
+    // let del_map: HashMap<_, _> = deletions
+    //     .iter()
+    //     .filter_map(|e| get_event_semantic_key(e).map(|k| (k, e)))
+    //     .collect();
 
-//     for ins in &insertions {
-//         if let Some(key) = get_event_semantic_key(ins) {
-//             if let Some(del_event) = del_map.get(&key) {
-//                 mods.push((*del_event, ins));
-//             }
-//         }
-//     }
+    // for ins in &insertions {
+    //     if let Some(key) = get_event_semantic_key(ins) {
+    //         if let Some(del_event) = del_map.get(&key) {
+    //             mods.push((*del_event, ins));
+    //         }
+    //     }
+    // }
 
-//     // --- Assertions ---
-//     // 1. Should detect one modification
-//     assert_eq!(mods.len(), 1, "Expected 1 modified event");
+    // // --- Assertions ---
+    // // 1. Should detect one modification
+    // assert_eq!(mods.len(), 1, "Expected 1 modified event");
 
-//     // 2. Verify the modification details
-//     let (old_event, new_event) = mods[0];
-//     let old_boot_order = TcgEfiVariableEvent::try_from(*old_event)
-//         .unwrap()
-//         .variable_data
-//         .chunks(2)
-//         .map(|c| u16::from_le_bytes([c[0], c[1]]))
-//         .collect::<Vec<_>>();
+    // // 2. Verify the modification details
+    // let (old_event, new_event) = mods[0];
+    // let old_boot_order = TcgEfiVariableEvent::try_from(*old_event)
+    //     .unwrap()
+    //     .variable_data
+    //     .chunks(2)
+    //     .map(|c| u16::from_le_bytes([c[0], c[1]]))
+    //     .collect::<Vec<_>>();
 
-//     let new_boot_order = TcgEfiVariableEvent::try_from(*new_event)
-//         .unwrap()
-//         .variable_data
-//         .chunks(2)
-//         .map(|c| u16::from_le_bytes([c[0], c[1]]))
-//         .collect::<Vec<_>>();
+    // let new_boot_order = TcgEfiVariableEvent::try_from(*new_event)
+    //     .unwrap()
+    //     .variable_data
+    //     .chunks(2)
+    //     .map(|c| u16::from_le_bytes([c[0], c[1]]))
+    //     .collect::<Vec<_>>();
 
-//     assert_eq!(old_boot_order, vec![0x0000, 0x0001]);
-//     assert_eq!(new_boot_order, vec![0x0001, 0x0000]);
+    // assert_eq!(old_boot_order, vec![0x0000, 0x0001]);
+    // assert_eq!(new_boot_order, vec![0x0001, 0x0000]);
 
-//     // 3. No remaining insertions/deletions
-//     assert_eq!(insertions.len() - mods.len(), 0);
-//     assert_eq!(deletions.len() - mods.len(), 0);
-// }
+    // // 3. No remaining insertions/deletions
+    // assert_eq!(insertions.len() - mods.len(), 0);
+    // assert_eq!(deletions.len() - mods.len(), 0);
+}
 
-// #[test]
-// fn test_pcr14_file_removed() {
-//     let good_events = vec![moc_pcr14_event("file1", true, None)];
-//     let bad_events = vec![moc_pcr14_event("file1", false, None)];
+#[test]
+fn test_pcr14_file_removed() {
+    let old_good_events = vec![moc_pcr14_event("file1", true, None)];
+    let new_events = vec![moc_pcr14_event("file1", false, None)];
 
-//     let good_log = EveTpmLog::from_events(good_events);
-//     let bad_log = EveTpmLog::from_events(bad_events);
+    let old_good_log = EveTpmLog::from_events(old_good_events);
+    let new_log = EveTpmLog::from_events(new_events);
 
-//     let good_events = good_log.get_events_for_pcr_ref(14);
-//     let bad_events = bad_log.get_events_for_pcr_ref(14);
+    let (deleted, added, mods) = tpm_log_diff_for_pcr(&old_good_log, &new_log, 14).unwrap();
 
-//     let lcs = tpm_log_compute_lcs(&good_events, &bad_events);
-//     let (deletions, insertions) = tpm_log_diff_binary(&good_events, &bad_events, &lcs);
-//     let (deletions, insertions, mods) = tpm_log_diff_semantic(insertions, deletions);
+    assert_eq!(added.len(), 0);
+    assert_eq!(deleted.len(), 0);
+    assert_eq!(mods.len(), 1);
 
-//     assert_eq!(insertions.len(), 0);
-//     assert_eq!(deletions.len(), 0);
-//     assert_eq!(mods.len(), 1);
+    let interpretation = interpret_pcr14(deleted, added, mods);
 
-//     let interpretation = interpret_pcr14(&deletions, &insertions, &mods);
+    assert_eq!(interpretation.len(), 1);
+    if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {
+        assert_eq!(file, "file1");
+        assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Deleted);
+    } else {
+        panic!("Unexpected interpretation: {:?}", &interpretation);
+    }
+}
 
-//     assert_eq!(interpretation.len(), 1);
-//     if let crate::tpm::diff::InterpretedTpmEvent::ConfigFileModified { file, status } =
-//         &interpretation[0]
-//     {
-//         assert_eq!(file, "file1");
-//         assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Deleted);
-//     } else {
-//         panic!("Unexpected interpretation: {:?}", &interpretation);
-//     }
-// }
+#[test]
+fn test_pcr14_new_file() {
+    let old_good_events = vec![moc_pcr14_event("file1", false, None)];
+    let new_events = vec![moc_pcr14_event("file1", true, None)];
 
-// #[test]
-// fn test_pcr14_new_file() {
-//     let good_events = vec![moc_pcr14_event("file1", false, None)];
-//     let bad_events = vec![moc_pcr14_event("file1", true, None)];
+    let old_good = EveTpmLog::from_events(old_good_events);
+    let new = EveTpmLog::from_events(new_events);
 
-//     let good_log = EveTpmLog::from_events(good_events);
-//     let bad_log = EveTpmLog::from_events(bad_events);
+    let (deleted, added, mods) = tpm_log_diff_for_pcr(&old_good, &new, 14).unwrap();
 
-//     let good_events = good_log.get_events_for_pcr_ref(14);
-//     let bad_events = bad_log.get_events_for_pcr_ref(14);
+    assert_eq!(deleted.len(), 0);
+    assert_eq!(added.len(), 0);
+    assert_eq!(mods.len(), 1);
 
-//     let lcs = tpm_log_compute_lcs(&good_events, &bad_events);
-//     let (deletions, insertions) = tpm_log_diff_binary(&good_events, &bad_events, &lcs);
-//     let (deletions, insertions, mods) = tpm_log_diff_semantic(insertions, deletions);
+    let interpretation = interpret_pcr14(deleted, added, mods);
+    assert_eq!(interpretation.len(), 1);
 
-//     assert_eq!(insertions.len(), 0);
-//     assert_eq!(deletions.len(), 0);
-//     assert_eq!(mods.len(), 1);
+    if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {
+        assert_eq!(file, "file1");
+        assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Added);
+    } else {
+        panic!("Unexpected interpretation: {:?}", &interpretation);
+    }
+}
 
-//     let interpretation = interpret_pcr14(&deletions, &insertions, &mods);
-//     assert_eq!(interpretation.len(), 1);
+#[test]
+fn test_pcr14_new_file_with_hash() {
+    let old_good_events = vec![moc_pcr14_event("file1", false, None)];
+    let new_events = vec![moc_pcr14_event(
+        "file1",
+        true,
+        Some("61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8"),
+    )];
 
-//     if let crate::tpm::diff::InterpretedTpmEvent::ConfigFileModified { file, status } =
-//         &interpretation[0]
-//     {
-//         assert_eq!(file, "file1");
-//         assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Added);
-//     } else {
-//         panic!("Unexpected interpretation: {:?}", &interpretation);
-//     }
-// }
+    let old_good = EveTpmLog::from_events(old_good_events);
+    let new = EveTpmLog::from_events(new_events);
 
-// #[test]
-// fn test_pcr14_new_file_with_hash() {
-//     let good_events = vec![moc_pcr14_event("file1", false, None)];
-//     let bad_events = vec![moc_pcr14_event(
-//         "file1",
-//         true,
-//         Some("61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8"),
-//     )];
+    let (deleted, added, mods) = tpm_log_diff_for_pcr(&old_good, &new, 14).unwrap();
 
-//     let good_log = EveTpmLog::from_events(good_events);
-//     let bad_log = EveTpmLog::from_events(bad_events);
+    assert_eq!(deleted.len(), 0);
+    assert_eq!(added.len(), 0);
 
-//     let good_events = good_log.get_events_for_pcr_ref(14);
-//     let bad_events = bad_log.get_events_for_pcr_ref(14);
+    let interpretation = interpret_pcr14(deleted, added, mods);
 
-//     let lcs = tpm_log_compute_lcs(&good_events, &bad_events);
-//     let (deletions, insertions) = tpm_log_diff_binary(&good_events, &bad_events, &lcs);
-//     let (deletions, insertions, mods) = tpm_log_diff_semantic(insertions, deletions);
+    assert_eq!(interpretation.len(), 1);
+    if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {
+        assert_eq!(file, "file1");
+        assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Added);
+    } else {
+        panic!("Unexpected interpretation: {:?}", &interpretation);
+    }
+}
 
-//     assert_eq!(insertions.len(), 0);
-//     assert_eq!(deletions.len(), 0);
+#[test]
+fn test_pcr14_file_modified() {
+    let old_good_events = vec![moc_pcr14_event(
+        "file1",
+        true,
+        Some("61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8"),
+    )];
+    let new_events = vec![moc_pcr14_event(
+        "file1",
+        true,
+        Some("bb1451b8335cd0ef0f8d6e515154c94d764f1ddd0b247f5e6199ae3b2deec930"),
+    )];
 
-//     let interpretation = interpret_pcr14(&deletions, &insertions, &mods);
+    let old_good = EveTpmLog::from_events(old_good_events);
+    let new = EveTpmLog::from_events(new_events);
 
-//     assert_eq!(interpretation.len(), 1);
-//     if let crate::tpm::diff::InterpretedTpmEvent::ConfigFileModified { file, status } =
-//         &interpretation[0]
-//     {
-//         assert_eq!(file, "file1");
-//         assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Added);
-//     } else {
-//         panic!("Unexpected interpretation: {:?}", &interpretation);
-//     }
-// }
+    let (deleted, added, mods) = tpm_log_diff_for_pcr(&old_good, &new, 14).unwrap();
 
-// #[test]
-// fn test_pcr14_file_modified() {
-//     let good_events = vec![moc_pcr14_event(
-//         "file1",
-//         true,
-//         Some("61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8"),
-//     )];
-//     let bad_events = vec![moc_pcr14_event(
-//         "file1",
-//         true,
-//         Some("bb1451b8335cd0ef0f8d6e515154c94d764f1ddd0b247f5e6199ae3b2deec930"),
-//     )];
+    assert_eq!(added.len(), 0);
+    assert_eq!(deleted.len(), 0);
+    assert_eq!(mods.len(), 1);
 
-//     let good_log = EveTpmLog::from_events(good_events);
-//     let bad_log = EveTpmLog::from_events(bad_events);
+    let interpretation = interpret_pcr14(deleted, added, mods);
 
-//     let good_events = good_log.get_events_for_pcr_ref(14);
-//     let bad_events = bad_log.get_events_for_pcr_ref(14);
+    assert_eq!(interpretation.len(), 1);
+    if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {
+        assert_eq!(file, "file1");
+        assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Modified);
+    } else {
+        panic!("Unexpected interpretation: {:?}", &interpretation);
+    }
+}
 
-//     let lcs = tpm_log_compute_lcs(&good_events, &bad_events);
-//     let (deletions, insertions) = tpm_log_diff_binary(&good_events, &bad_events, &lcs);
-//     let (deletions, insertions, mods) = tpm_log_diff_semantic(insertions, deletions);
+#[test]
+fn test_pcr14_real_log_1() {
+    let old_good_bin =
+        std::fs::read("./src/tpm/test_data/pcr8-14/tpm_measurement_seal_success").unwrap();
+    let new_bin = std::fs::read("./src/tpm/test_data/pcr8-14/tpm_measurement_unseal_fail").unwrap();
 
-//     assert_eq!(insertions.len(), 0);
-//     assert_eq!(deletions.len(), 0);
+    let old_good_log = EveTpmLog::from_events(TPMLog::from_slice(&old_good_bin).unwrap().events);
+    let new_log = EveTpmLog::from_events(TPMLog::from_slice(&new_bin).unwrap().events);
 
-//     let interpretation = interpret_pcr14(&deletions, &insertions, &mods);
+    let (deleted, added, mods) = tpm_log_diff_for_pcr(&old_good_log, &new_log, 14).unwrap();
 
-//     assert_eq!(interpretation.len(), 1);
-//     if let crate::tpm::diff::InterpretedTpmEvent::ConfigFileModified { file, status } =
-//         &interpretation[0]
-//     {
-//         assert_eq!(file, "file1");
-//         assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Modified);
-//     } else {
-//         panic!("Unexpected interpretation: {:?}", &interpretation);
-//     }
-// }
+    assert_eq!(added.len(), 0);
+    assert_eq!(deleted.len(), 0);
+    assert_eq!(mods.len(), 2);
 
-// #[test]
-// fn test_pcr14_real_log_1() {
-//     let data_good =
-//         std::fs::read("./src/tpm/test_data/pcr8-14/tpm_measurement_seal_success").unwrap();
-//     let data_bad =
-//         std::fs::read("./src/tpm/test_data/pcr8-14/tpm_measurement_unseal_fail").unwrap();
+    let interpretation = interpret_pcr14(deleted, added, mods);
 
-//     let good_log = TPMLog::from_slice(&data_good).unwrap();
-//     let bad_log = TPMLog::from_slice(&data_bad).unwrap();
+    assert_eq!(interpretation.len(), 2);
+    if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {
+        assert_eq!(file, "/config/device.cert.pem");
+        assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Added);
+    } else {
+        panic!("Unexpected interpretation: {:?}", &interpretation);
+    }
 
-//     let good_events = good_log.events_for_pcr_ref(14);
-//     let bad_events = bad_log.events_for_pcr_ref(14);
-
-//     let lcs = tpm_log_compute_lcs(&good_events, &bad_events);
-//     let (deletions, insertions) = tpm_log_diff_binary(&good_events, &bad_events, &lcs);
-//     let (deletions, insertions, mods) = tpm_log_diff_semantic(insertions, deletions);
-
-//     assert_eq!(insertions.len(), 0);
-//     assert_eq!(deletions.len(), 0);
-//     assert_eq!(mods.len(), 2);
-
-//     let interpretation = interpret_pcr14(&deletions, &insertions, &mods);
-
-//     assert_eq!(interpretation.len(), 2);
-//     if let crate::tpm::diff::InterpretedTpmEvent::ConfigFileModified { file, status } =
-//         &interpretation[0]
-//     {
-//         assert_eq!(file, "/config/device.cert.pem");
-//         assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Added);
-//     } else {
-//         panic!("Unexpected interpretation: {:?}", &interpretation);
-//     }
-
-//     if let crate::tpm::diff::InterpretedTpmEvent::ConfigFileModified { file, status } =
-//         &interpretation[1]
-//     {
-//         assert_eq!(file, "/config/tpm_credential");
-//         assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Added);
-//     } else {
-//         panic!("Unexpected interpretation: {:?}", &interpretation);
-//     }
-// }
+    if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[1] {
+        assert_eq!(file, "/config/tpm_credential");
+        assert_eq!(*status, crate::tpm::diff::ConfigFileStatus::Added);
+    } else {
+        panic!("Unexpected interpretation: {:?}", &interpretation);
+    }
+}
 
 // #[test]
 // fn test_log1() {
@@ -504,16 +467,11 @@ fn test_added_boot_entry() {
 
 #[test]
 fn test_try_from_tpm_event_footfs_event() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-        event_type: TcgTpmEventType::IPL,
-        event_data: b"squash4 b6dd08d6bc197ea4417bcbc844ecdbe173af97504555d64014380a968aae9c43"
-            .to_vec(),
-        pcr_index: 13,
-        digests: vec![Digest::new_sha256(
-            &b"squash4 b6dd08d6bc197ea4417bcbc844ecdbe173af97504555d64014380a968aae9c43".to_vec(),
-        )],
-    };
+    let tpm_event = mock_tcg_tpm_event(
+        13,
+        TcgTpmEventType::IPL,
+        "squash4 b6dd08d6bc197ea4417bcbc844ecdbe173af97504555d64014380a968aae9c43",
+    );
     let rootfs_measurement_event = TpmEvent::try_from_tcg_event(&tpm_event, None).unwrap();
 
     match rootfs_measurement_event {
@@ -530,17 +488,12 @@ fn test_try_from_tpm_event_footfs_event() {
 
 #[test]
 fn test_try_from_tpm_event_action_config() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-            event_type: TcgTpmEventType::EfiAction,
-            event_data: b"file:/config/authorized_keys exist:true content-hash:61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8"
-                .to_vec(),
-            pcr_index: 14,
-            digests: vec![Digest::new_sha256(
-                &b"file:/config/authorized_keys exist:true content-hash:61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8"
-                    .to_vec(),
-            )],
-        };
+    let tpm_event = mock_tcg_tpm_event(
+        14,
+        TcgTpmEventType::EfiAction,
+        b"file:/config/authorized_keys exist:true \
+        content-hash:61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8",
+    );
 
     let action_event = TpmEvent::try_from_tcg_event(&tpm_event, None).unwrap();
 
@@ -559,15 +512,11 @@ fn test_try_from_tpm_event_action_config() {
 
 #[test]
 fn test_try_from_tpm_event_action_config_not_exist() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-        event_type: TcgTpmEventType::EfiAction,
-        event_data: b"file:/config/authorized_keys exist:false".to_vec(),
-        pcr_index: 14,
-        digests: vec![Digest::new_sha256(
-            &b"file:/config/authorized_keys exist:false".to_vec(),
-        )],
-    };
+    let tpm_event = mock_tcg_tpm_event(
+        14,
+        TcgTpmEventType::EfiAction,
+        b"file:/config/authorized_keys exist:false",
+    );
 
     let action_event = TpmEvent::try_from_tcg_event(&tpm_event, None).unwrap();
 
@@ -583,15 +532,12 @@ fn test_try_from_tpm_event_action_config_not_exist() {
 
 #[test]
 fn test_try_from_tpm_event_action_config_not_exist_hash() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-            event_type: TcgTpmEventType::EfiAction,
-            event_data: b"file:/config/authorized_keys exist:false content-hash:61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8".to_vec(),
-            pcr_index: 14,
-            digests: vec![Digest::new_sha256(
-                &b"file:/config/authorized_keys exist:false content-hash:61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8".to_vec(),
-            )],
-        };
+    let tpm_event = mock_tcg_tpm_event(
+        14,
+        TcgTpmEventType::EfiAction,
+        b"file:/config/authorized_keys exist:false \
+        content-hash:61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8",
+    );
 
     // should fail because hash is not empty
     let action_event = TpmEvent::try_from_tcg_event(&tpm_event, None);
@@ -599,22 +545,18 @@ fn test_try_from_tpm_event_action_config_not_exist_hash() {
         Ok(_) => panic!("must fail"),
         Err(e) => assert_eq!(
             e.to_string(),
-            "Invalid TpmEventType::Action: hash is not empty"
+            "Invalid TpmEvent::MeasureConfig: hash is not empty for exist:false"
         ),
     }
 }
 
 #[test]
 fn test_try_from_tpm_event_action_config_exist_no_hash() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-        event_type: TcgTpmEventType::EfiAction,
-        event_data: b"file:/config/authorized_keys exist:true".to_vec(),
-        pcr_index: 14,
-        digests: vec![Digest::new_sha256(
-            &b"file:/config/authorized_keys exist:true".to_vec(),
-        )],
-    };
+    let tpm_event = mock_tcg_tpm_event(
+        14,
+        TcgTpmEventType::EfiAction,
+        b"file:/config/authorized_keys exist:true",
+    );
 
     // should fail because hash is not empty
     let action_event = TpmEvent::try_from_tcg_event(&tpm_event, None).unwrap();
@@ -630,15 +572,11 @@ fn test_try_from_tpm_event_action_config_exist_no_hash() {
 
 #[test]
 fn test_try_from_grub_event_cmd() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-        event_type: TcgTpmEventType::IPL,
-        event_data: b"grub_cmd export dom0_flavor_tweaks".to_vec(),
-        pcr_index: 14,
-        digests: vec![Digest::new_sha256(
-            &b"grub_cmd export dom0_flavor_tweaks".to_vec(),
-        )],
-    };
+    let tpm_event = mock_tcg_tpm_event(
+        8,
+        TcgTpmEventType::IPL,
+        b"grub_cmd export dom0_flavor_tweaks",
+    );
 
     let grub_event = TpmEvent::try_from_tcg_event(&tpm_event, None).unwrap();
 
@@ -652,19 +590,24 @@ fn test_try_from_grub_event_cmd() {
 }
 #[test]
 fn test_try_from_grub_event_kernel_cmdline() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-            event_type: TcgTpmEventType::IPL,
-            event_data: b"grub_kernel_cmdline /boot/kernel console=ttyS0 console=hvc0 root=PARTUUID=ad6871ee-31f9-4cf3-9e09-6f7a25c30052 dom0_mem=640M,max:800M dom0_max_vcpus=1 dom0_vcpus_pin eve_mem=520M,max:650M eve_max_vcpus=1 ctrd_mem=320M,max:400M ctrd_max_vcpus=1 change=500 clocksource=tsc clocksource_failover=xen pcie_acs_override=downstream,multifunction crashkernel=2G-16G:128M,16G-128G:256M,128G-:512M rootdelay=3 linuxkit.unified_cgroup_hierarchy=0 panic=120 rfkill.default_state=0 split_lock_detect=off test".to_vec(),
-            pcr_index: 8,
-            digests: vec![Digest::new_sha256(&b"grub_kernel_cmdline /boot/kernel console=ttyS0 console=hvc0 root=PARTUUID=ad6871ee-31f9-4cf3-9e09-6f7a25c30052 dom0_mem=640M,max:800M dom0_max_vcpus=1 dom0_vcpus_pin eve_mem=520M,max:650M eve_max_vcpus=1 ctrd_mem=320M,max:400M ctrd_max_vcpus=1 change=500 clocksource=tsc clocksource_failover=xen pcie_acs_override=downstream,multifunction crashkernel=2G-16G:128M,16G-128G:256M,128G-:512M rootdelay=3 linuxkit.unified_cgroup_hierarchy=0 panic=120 rfkill.default_state=0 split_lock_detect=off test".to_vec())],
-        };
+    let tpm_event = mock_tcg_tpm_event(
+        8,
+        TcgTpmEventType::IPL,
+        b"grub_kernel_cmdline /boot/kernel console=ttyS0 console=hvc0 root=PARTUUID=ad6871ee-31f9-4cf3-9e09-6f7a25c30052 dom0_mem=640M,\
+        max:800M dom0_max_vcpus=1 dom0_vcpus_pin eve_mem=520M,max:650M eve_max_vcpus=1 ctrd_mem=320M,max:400M ctrd_max_vcpus=1 \
+        change=500 clocksource=tsc clocksource_failover=xen pcie_acs_override=downstream,multifunction crashkernel=2G-16G:128M,16G-128G:256M,128G-:512M \
+        rootdelay=3 linuxkit.unified_cgroup_hierarchy=0 panic=120 rfkill.default_state=0 split_lock_detect=off test",
+    );
 
     let grub_event = TpmEvent::try_from_tcg_event(&tpm_event, None).unwrap();
 
     match grub_event {
         TpmEvent::GrubKernelCmdline(cmd) => {
-            assert_eq!(cmd,"/boot/kernel console=ttyS0 console=hvc0 root=PARTUUID=ad6871ee-31f9-4cf3-9e09-6f7a25c30052 dom0_mem=640M,max:800M dom0_max_vcpus=1 dom0_vcpus_pin eve_mem=520M,max:650M eve_max_vcpus=1 ctrd_mem=320M,max:400M ctrd_max_vcpus=1 change=500 clocksource=tsc clocksource_failover=xen pcie_acs_override=downstream,multifunction crashkernel=2G-16G:128M,16G-128G:256M,128G-:512M rootdelay=3 linuxkit.unified_cgroup_hierarchy=0 panic=120 rfkill.default_state=0 split_lock_detect=off test" );
+            assert_eq!(cmd,"/boot/kernel console=ttyS0 console=hvc0 root=PARTUUID=ad6871ee-31f9-4cf3-9e09-6f7a25c30052 dom0_mem=640M,max:800M \
+                dom0_max_vcpus=1 dom0_vcpus_pin eve_mem=520M,max:650M eve_max_vcpus=1 ctrd_mem=320M,max:400M \
+                ctrd_max_vcpus=1 change=500 clocksource=tsc clocksource_failover=xen pcie_acs_override=downstream,multifunction \
+                crashkernel=2G-16G:128M,16G-128G:256M,128G-:512M rootdelay=3 linuxkit.unified_cgroup_hierarchy=0 panic=120 rfkill.default_state=0 \
+                split_lock_detect=off test" );
         }
         _ => panic!("Invalid grub event"),
     }
@@ -672,13 +615,11 @@ fn test_try_from_grub_event_kernel_cmdline() {
 
 #[test]
 fn test_try_from_grub_event_linuxefi() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-            event_type: TcgTpmEventType::IPL,
-            event_data: b"grub_linuxefi /boot/vmlinuz-5.4.0-104-generic root=PARTUUID=ad6871ee-31f9-4cf3-9e09-6f7a25c30052 ro quiet splash vt.handoff=7".to_vec(),
-            pcr_index: 8,
-            digests: vec![Digest::new_sha256(&b"grub_linuxefi /boot/vmlinuz-5.4.0-104-generic root=PARTUUID=ad6871ee-31f9-4cf3-9e09-6f7a25c30052 ro quiet splash vt.handoff=7".to_vec())],
-        };
+    let tpm_event = mock_tcg_tpm_event(
+        8,
+        TcgTpmEventType::IPL,
+        b"grub_linuxefi /boot/vmlinuz-5.4.0-104-generic root=PARTUUID=ad6871ee-31f9-4cf3-9e09-6f7a25c30052 ro quiet splash vt.handoff=7",
+    );
 
     let grub_event = TpmEvent::try_from_tcg_event(&tpm_event, None).unwrap();
 
@@ -691,13 +632,7 @@ fn test_try_from_grub_event_linuxefi() {
 }
 #[test]
 fn test_try_from_grub_event_invalid() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-        event_type: TcgTpmEventType::IPL,
-        event_data: b"invalid_event data".to_vec(),
-        pcr_index: 8,
-        digests: vec![Digest::new_sha256(&b"invalid_event".to_vec())],
-    };
+    let tpm_event = mock_tcg_tpm_event(8, TcgTpmEventType::IPL, b"invalid_event data");
 
     let grub_event = TpmEvent::try_from_tcg_event(&tpm_event, None);
     match grub_event {
@@ -707,19 +642,15 @@ fn test_try_from_grub_event_invalid() {
 }
 #[test]
 fn test_try_from_grub_event_invalid_pcr() {
-    use super::*;
-    let tpm_event = TcgTpmEvent {
-        event_type: TcgTpmEventType::IPL,
-        event_data: b"grub_cmd export dom0_flavor_tweaks".to_vec(),
-        pcr_index: 1,
-        digests: vec![Digest::new_sha256(
-            &b"grub_cmd export dom0_flavor_tweaks".to_vec(),
-        )],
-    };
+    let tpm_event = mock_tcg_tpm_event(
+        1,
+        TcgTpmEventType::IPL,
+        b"grub_cmd export dom0_flavor_tweaks",
+    );
 
     let grub_event = TpmEvent::try_from_tcg_event(&tpm_event, None);
     match grub_event {
         Ok(_) => panic!("must fail"),
-        Err(e) => assert_eq!(e.to_string(), "Invalid PCR index for grub event 1"),
+        Err(e) => assert_eq!(e.to_string(), "Unsupported event type: IPL for PCR 1"),
     }
 }

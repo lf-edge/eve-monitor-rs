@@ -6,6 +6,7 @@ mod application;
 mod efi;
 mod events;
 mod ipc;
+mod lcs;
 mod model;
 mod terminal;
 mod tpm;

@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
+use anyhow::Result;
 
 #[derive(Debug)]
 enum LoadOptionAttributesBits {
@@ -17,15 +18,16 @@ const LOAD_OPTION_ATTRIBUTES_ALLOWED_BITS: u32 = LoadOptionAttributesBits::LoadO
     | LoadOptionAttributesBits::LoadOptionHidden as u32
     | LoadOptionAttributesBits::LoadOptionCategoryApp as u32;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct LoadOptionAttributes(u32);
 
 impl TryFrom<u32> for LoadOptionAttributes {
-    type Error = ParseError;
+    type Error = anyhow::Error;
 
     fn try_from(value: u32) -> Result<Self, Self::Error> {
         if value & !LOAD_OPTION_ATTRIBUTES_ALLOWED_BITS != 0 {
-            return Err(ParseError::UnsupportedAttributes(value));
+            // return Err(ParseError::UnsupportedAttributes(value));
+            return Err(anyhow::anyhow!("UnsupportedAttributes: {}", value));
         }
         Ok(LoadOptionAttributes(value))
     }
@@ -79,7 +81,7 @@ impl std::fmt::Display for LoadOptionAttributes {
 pub struct EfiLoadOption {
     pub attributes: LoadOptionAttributes,
     pub description: String,
-    pub device_path_list: Vec<u8>,
+    pub device_path_list: DevicePath,
     pub optional_data: Option<Vec<u8>>,
 }
 
@@ -87,17 +89,19 @@ use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{Cursor, Read};
 use strum::Display;
 
-#[derive(Debug, Display, PartialEq)]
-pub enum ParseError {
-    InsufficientData,
-    MissingNulTerminator,
-    UnsupportedAttributes(u32),
-}
+use super::device_path::DevicePath;
 
-impl std::error::Error for ParseError {}
+// #[derive(Debug, Display, PartialEq)]
+// pub enum ParseError {
+//     InsufficientData,
+//     MissingNulTerminator,
+//     UnsupportedAttributes(u32),
+// }
+
+// impl std::error::Error for ParseError {}
 
 impl TryFrom<&[u8]> for EfiLoadOption {
-    type Error = ParseError;
+    type Error = anyhow::Error;
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         Self::parse(value)
@@ -105,24 +109,21 @@ impl TryFrom<&[u8]> for EfiLoadOption {
 }
 
 impl EfiLoadOption {
-    pub fn parse(data: &[u8]) -> Result<Self, ParseError> {
+    pub fn parse(data: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(data);
 
         // read 32 bits UEFI variable attributes we do not care about
         // reade WARNING at https://docs.kernel.org/filesystems/efivarfs.html
-        let _ = cursor
-            .read_u32::<LittleEndian>()
-            .map_err(|_| ParseError::InsufficientData)?;
+        let _ = cursor.read_u32::<LittleEndian>()?;
+        // .map_err(|_| ParseError::InsufficientData)?;
 
-        let attributes = cursor
-            .read_u32::<LittleEndian>()
-            .map_err(|_| ParseError::InsufficientData)?;
+        let attributes = cursor.read_u32::<LittleEndian>()?;
+        // .map_err(|_| ParseError::InsufficientData)?;
 
         let attributes = LoadOptionAttributes::try_from(attributes)?;
 
-        let file_path_list_length = cursor
-            .read_u16::<LittleEndian>()
-            .map_err(|_| ParseError::InsufficientData)?;
+        let file_path_list_length = cursor.read_u16::<LittleEndian>()?;
+        // .map_err(|_| ParseError::InsufficientData)?;
 
         // Read UCS-2 description directly from cursor
         let mut description_chars = Vec::new();
@@ -132,10 +133,12 @@ impl EfiLoadOption {
                 Ok(c) => description_chars.push(c),
                 Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => {
                     // No null terminator found before end of data
-                    return Err(ParseError::MissingNulTerminator);
+                    //return Err(ParseError::MissingNulTerminator);
+                    return Err(anyhow::anyhow!("MissingNulTerminator"));
                 }
                 Err(_) => {
-                    return Err(ParseError::InsufficientData);
+                    //return Err(ParseError::InsufficientData);
+                    return Err(anyhow::anyhow!("InsufficientData"));
                 }
             }
         }
@@ -143,15 +146,13 @@ impl EfiLoadOption {
         let description = String::from_utf16_lossy(&description_chars);
 
         let mut device_path_list = vec![0; file_path_list_length as usize];
-        cursor
-            .read_exact(&mut device_path_list)
-            .map_err(|_| ParseError::InsufficientData)?;
+        cursor.read_exact(&mut device_path_list)?;
+        // .map_err(|_| ParseError::InsufficientData)?;
 
         // Remaining data is optional
         let mut optional_data = Vec::new();
-        cursor
-            .read_to_end(&mut optional_data)
-            .map_err(|_| ParseError::InsufficientData)?;
+        cursor.read_to_end(&mut optional_data)?;
+        // .map_err(|_| ParseError::InsufficientData)?;
 
         let optional_data = if optional_data.is_empty() {
             None
@@ -162,7 +163,8 @@ impl EfiLoadOption {
         Ok(Self {
             attributes,
             description,
-            device_path_list,
+            device_path_list: DevicePath::try_from(device_path_list.as_slice())?,
+            // .map_err(|_| ParseError::InsufficientData)?,
             optional_data,
         })
     }
@@ -174,7 +176,7 @@ pub struct EfiBootOrder {
 }
 
 impl TryFrom<&[u8]> for EfiBootOrder {
-    type Error = ParseError;
+    type Error = anyhow::Error;
 
     fn try_from(data: &[u8]) -> Result<Self, Self::Error> {
         Self::parse(data)
@@ -182,20 +184,18 @@ impl TryFrom<&[u8]> for EfiBootOrder {
 }
 
 impl EfiBootOrder {
-    pub fn parse(data: &[u8]) -> Result<Self, ParseError> {
+    pub fn parse(data: &[u8]) -> Result<Self> {
         let mut cursor = Cursor::new(data);
 
         // read 32 bits UEFI variable attributes we do not care about
         // reade WARNING at https://docs.kernel.org/filesystems/efivarfs.html
-        let _ = cursor
-            .read_u32::<LittleEndian>()
-            .map_err(|_| ParseError::InsufficientData)?;
+        let _ = cursor.read_u32::<LittleEndian>()?;
+        // .map_err(|_| ParseError::InsufficientData)?;
 
         let mut boot_order = Vec::new();
         while cursor.position() < data.len() as u64 {
-            let entry = cursor
-                .read_u16::<LittleEndian>()
-                .map_err(|_| ParseError::InsufficientData)?;
+            let entry = cursor.read_u16::<LittleEndian>()?;
+            // .map_err(|_| ParseError::InsufficientData)?;
             boot_order.push(entry);
         }
 

@@ -1,16 +1,16 @@
 use std::collections::HashMap;
 
 use super::{
-    tcg_events::{TcgEfiVariableEvent, TcgIPLEvent},
-    tcg_tpmlog::{TPMLog, TcgTpmEvent, TcgTpmEventType},
+    tcg_tpmlog::{TPMLog, TcgTpmEvent},
+    tpmlog::{TpmEvent, TpmEventDescribe},
 };
 use crate::{
-    efi::vars::{EfiBootOrder, EfiLoadOption},
     ipc::eve_types::{EfiVariable, TpmLogs},
-    tpm::tcg_events::TcgEfiActionEvent,
+    lcs::{collect_diff, compute_lcs},
 };
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use log::{info, trace};
+use strum::Display;
 
 pub struct EveTpmLog {
     pub log: TPMLog,
@@ -56,164 +56,63 @@ pub fn get_logs_pair(raw_logs: TpmLogs) -> Result<(EveTpmLog, EveTpmLog)> {
     Ok((good, bad))
 }
 
-pub(super) fn tpm_log_compute_lcs<'a>(
-    good: &[&'a TcgTpmEvent],
-    bad: &[&'a TcgTpmEvent],
-) -> Vec<&'a TcgTpmEvent> {
-    let good_len = good.len();
-    let bad_len = bad.len();
+pub(super) fn tcg_tpm_log_translate(
+    tcg_log: &[&TcgTpmEvent],
+    efi_vars: Option<&Vec<EfiVariable>>,
+) -> Result<Vec<TpmEvent>> {
+    let mut events = Vec::new();
 
-    // Initialize DP table with dimensions (good_len + 1) x (bad_len + 1)
-    let mut dp = vec![vec![0; bad_len + 1]; good_len + 1];
-
-    // Fill the DP table
-    for i in 1..=good_len {
-        for j in 1..=bad_len {
-            if good[i - 1] == bad[j - 1] {
-                // Events match: extend the LCS
-                dp[i][j] = dp[i - 1][j - 1] + 1;
-            } else {
-                // Take the maximum of the left or top cell
-                dp[i][j] = std::cmp::max(dp[i - 1][j], dp[i][j - 1]);
-            }
-        }
+    for event in tcg_log {
+        let tpm_event =
+            TpmEvent::try_from_tcg_event(event, efi_vars).context("try_from_tcg_event failed")?;
+        events.push(tpm_event);
     }
 
-    // Backtrack to reconstruct the LCS
-    let mut i = good_len;
-    let mut j = bad_len;
-    let mut lcs = Vec::new();
-
-    while i > 0 && j > 0 {
-        if good[i - 1] == bad[j - 1] {
-            // Include the matching event in the LCS
-            lcs.push(good[i - 1]);
-            i -= 1;
-            j -= 1;
-        } else if dp[i - 1][j] > dp[i][j - 1] {
-            // Move up (prioritize the good log)
-            i -= 1;
-        } else {
-            // Move left (prioritize the bad log)
-            j -= 1;
-        }
-    }
-
-    // Reverse to restore original order
-    lcs.reverse();
-    lcs
+    Ok(events)
 }
-
-pub(super) fn tpm_log_diff_binary<'a>(
-    good: &[&'a TcgTpmEvent],
-    bad: &[&'a TcgTpmEvent],
-    lcs: &[&'a TcgTpmEvent],
-) -> (Vec<&'a TcgTpmEvent>, Vec<&'a TcgTpmEvent>) {
-    // Find deletions (events in `good` but not in LCS)
-    let deletions: Vec<_> = good.iter().filter(|e| !lcs.contains(e)).copied().collect();
-
-    // Find insertions (events in `bad` but not in LCS)
-    let insertions: Vec<_> = bad.iter().filter(|e| !lcs.contains(e)).copied().collect();
-
-    (deletions, insertions)
-}
-
-// pub(super) fn get_event_semantic_key(event: &TcgTpmEvent) -> Option<String> {
-//     match event.event_type {
-//         TcgTpmEventType::EfiVariableBoot | TcgTpmEventType::EfiVariableBoot2 => {
-//             let efi_var = TcgEfiVariableEvent::try_from(event).ok()?;
-//             Some(format!("EFIVar:{}", efi_var.unicode_name))
-//         }
-//         TcgTpmEventType::EfiAction => {
-//             // for PCR14 use file name as a key
-//             let action = TcgEfiActionEvent::try_from(event).ok()?;
-//             match action {
-//                 TcgEfiActionEvent::MeasureConfig {
-//                     file,
-//                     hash: _,
-//                     exists: _,
-//                 } => Some(format!("Config:{}", file)),
-//                 TcgEfiActionEvent::EnterBiosSetup => Some("BIOS".to_string()),
-//                 TcgEfiActionEvent::EfiAction(s) => Some(s),
-//             }
-//         }
-//         TcgTpmEventType::IPL if event.pcr_index == 8 => {
-//             // decode grub event
-//             let grub_event = TcgIPLEvent::try_from(event).ok()?;
-//             match grub_event {
-//                 TcgIPLEvent::Cmd(d) => {
-//                     // split the command into command and the rest
-//                     let d = d.splitn(2, ' ').next().unwrap_or(&d);
-//                     Some(format!("GrubCmd:{}", d))
-//                 }
-//                 TcgIPLEvent::KernelCmdLine(_) => Some("GrubKernelCmdLine".to_string()),
-//                 TcgIPLEvent::LinuxEfi(_) => Some("GrubLinuxEfi".to_string()),
-//             }
-//         }
-//         _ => Some(format!("{}", event.event_type)),
-//     }
-// }
 
 // Detect simanctic Modifications
 // if the same event exists in both deltions and insetions then it is a modification
 // e.g. BootOrder changed from [1, 2, 3] to [1, 3, 2]. It is marked as deleted in
 // good log and inserted in bad log. However this is the same event with different data.
-// pub(super) fn tpm_log_diff_semantic<'a>(
-//     bin_insertions: Vec<&'a TcgTpmEvent>,
-//     bin_deletions: Vec<&'a TcgTpmEvent>,
-// ) -> (
-//     Vec<&'a TcgTpmEvent>,
-//     Vec<&'a TcgTpmEvent>,
-//     Vec<(&'a TcgTpmEvent, &'a TcgTpmEvent)>,
-// ) {
-//     let mut mods = Vec::new();
-//     let mut del_indexes = Vec::new();
-//     let mut ins_indexes = Vec::new();
+pub(super) fn tpm_log_diff_semantic<'a>(
+    added_events: Vec<TpmEvent>,
+    deleted_events: Vec<TpmEvent>,
+) -> (Vec<TpmEvent>, Vec<TpmEvent>, Vec<(TpmEvent, TpmEvent)>) {
+    let mut mods = Vec::new();
+    let mut new_events = Vec::new();
 
-//     let mut del_map: HashMap<_, _> = bin_deletions
-//         .iter()
-//         .enumerate()
-//         .filter_map(|(index, e)| get_event_semantic_key(e).map(|k| (k, (index, e))))
-//         .collect();
+    let mut del_map: HashMap<_, _> = deleted_events
+        .into_iter()
+        .map(|e| {
+            let key = e.semantic_key();
+            (key, e)
+        })
+        .collect();
 
-//     // println!("{:#?}", &del_map.keys());
+    for new_event in added_events.into_iter() {
+        if let Some(old_event) = del_map.remove(&new_event.semantic_key()) {
+            mods.push((old_event, new_event));
+        } else {
+            new_events.push(new_event);
+        }
+    }
 
-//     for (index, ins) in bin_insertions.iter().enumerate() {
-//         if let Some(key) = get_event_semantic_key(ins) {
-//             if let Some((del_index, event)) = del_map.get(&key) {
-//                 mods.push((**event, *ins));
-//                 del_indexes.push(*del_index);
-//                 ins_indexes.push(index);
-//             }
-//         }
-//     }
+    // what is left in hashmap are real deleted events
+    // FIXME: do we care about the order?
+    let deleted_events = del_map.into_values().collect::<Vec<_>>();
 
-//     // cleanup deletions and insertions
-//     let deletions = bin_deletions
-//         .iter()
-//         .enumerate()
-//         .filter(|(index, _)| !del_indexes.contains(index))
-//         .map(|(_, e)| *e)
-//         .collect::<Vec<_>>();
+    (deleted_events, new_events, mods)
+}
 
-//     let insertions = bin_insertions
-//         .iter()
-//         .enumerate()
-//         .filter(|(index, _)| !ins_indexes.contains(index))
-//         .map(|(_, e)| *e)
-//         .collect::<Vec<_>>();
-
-//     (deletions, insertions, mods)
-// }
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Display, Clone)]
 pub enum ConfigFileStatus {
     Added,
     Deleted,
     Modified,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Display, Clone)]
 pub enum InterpretedTpmEvent {
     ConfigFileModified {
         file: String,
@@ -225,63 +124,88 @@ pub enum InterpretedTpmEvent {
     },
     GrubCfgModified,
     BootOrderModified {
-        old: Vec<u32>,
-        new: Vec<u32>,
+        old: Vec<u16>,
+        new: Vec<u16>,
     },
     BootOptionsModified {
         old: Vec<String>,
         new: Vec<String>,
     },
-    Error(TcgTpmEvent),
+    Error(TpmEvent),
 }
 
-// pub fn tpm_log_diff_interpret(
-//     pcrs: &[u32],
-//     good: EveTpmLog,
-//     bad: EveTpmLog,
-// ) -> Vec<InterpretedTpmEvent> {
-//     let mut pcr_map = pcrs
-//         .iter()
-//         .map(|pcr| {
-//             let good_events = good.get_events_for_pcr_ref(*pcr);
-//             let bad_events = bad.get_events_for_pcr_ref(*pcr);
+pub fn tpm_log_diff_interpret(
+    pcrs: &[u32],
+    old_good: EveTpmLog,
+    new: EveTpmLog,
+) -> Result<Vec<(u32, Vec<InterpretedTpmEvent>)>> {
+    info!("tpm_log_diff_interpret");
+    let mut interpretations: HashMap<u32, Vec<InterpretedTpmEvent>> = HashMap::new();
 
-//             let lcs = tpm_log_compute_lcs(&good_events, &bad_events);
-//             let (deletions, insertions) = tpm_log_diff_binary(&good_events, &bad_events, &lcs);
-//             let (deletions, insertions, mods) = tpm_log_diff_semantic(insertions, deletions);
-//             (*pcr, (deletions, insertions, mods))
-//         })
-//         .collect::<HashMap<_, _>>();
+    for pcr in pcrs {
+        let (deleted, added, mods) = tpm_log_diff_for_pcr(&old_good, &new, *pcr)?;
+        info!("====  PCR: {:?} ====", pcr);
+        // print deleted
+        for e in &deleted {
+            info!("D {:?}", e);
+        }
+        // print added
+        for e in &added {
+            info!("I {:?}", e);
+        }
+        // print mods
+        for (e1, e2) in &mods {
+            info!("M {:?} -> {:?}", e1, e2);
+        }
 
-//     let mut interpretations = Vec::new();
+        match pcr {
+            13 => {
+                interpretations.insert(13, interpret_pcr14(deleted, added, mods));
+            }
+            8 => {
+                interpretations.insert(8, interpret_pcr8(deleted, added, mods));
+            }
+            1 => {
+                interpretations.insert(1, interpret_pcr1(deleted, added, mods));
+            }
+            14 => {
+                interpretations.insert(14, interpret_pcr14(deleted, added, mods));
+            }
+            _ => {
+                let errors = deleted
+                    .into_iter()
+                    .chain(added)
+                    .map(|e| InterpretedTpmEvent::Error(e))
+                    .collect::<Vec<InterpretedTpmEvent>>();
+                if !errors.is_empty() {
+                    interpretations.insert(*pcr, errors);
+                }
+            }
+        }
+    }
 
-//     if let Some((deletions, insertions, mods)) = pcr_map.remove(&14) {
-//         interpretations.extend(interpret_pcr14(&deletions, &insertions, &mods));
-//     }
+    let mut interpretations = interpretations.into_iter().collect::<Vec<_>>();
+    interpretations.sort_by_key(|e| e.0);
 
-//     // let grub_cfg_changed = interpretations.iter().find(|e| match e {
-//     //     InterpretedTpmEvent::ConfigFileModified { file, status: _ } => file == "/config/grub.cfg",
-//     //     _ => false,
-//     // });
+    Ok(interpretations)
+}
 
-//     if let Some((deletions, insertions, events)) = pcr_map.remove(&8) {
-//         interpretations.extend(interpret_pcr8(&deletions, &insertions, &events));
-//     }
-
-//     if let Some((deletions, insertions, events)) = pcr_map.remove(&1) {
-//         interpretations.extend(interpret_pcr1(
-//             &deletions,
-//             &insertions,
-//             &events,
-//             good.efi_vars.as_ref(),
-//             bad.efi_vars.as_ref(),
-//         ));
-//     }
-
-//     //TODO: if some PCRs left - interpret them as errors
-
-//     interpretations
-// }
+pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
+    old_good: &'a EveTpmLog,
+    new: &'b EveTpmLog,
+    pcr: u32,
+) -> Result<(Vec<TpmEvent>, Vec<TpmEvent>, Vec<(TpmEvent, TpmEvent)>), anyhow::Error> {
+    let good_events = old_good.get_events_for_pcr_ref(pcr);
+    let bad_events = new.get_events_for_pcr_ref(pcr);
+    let lcs = compute_lcs(&good_events, &bad_events);
+    let (deleted_events, added_events) = collect_diff(&good_events, &bad_events, &lcs);
+    let deleted_events = tcg_tpm_log_translate(&deleted_events, old_good.efi_vars.as_ref())
+        .context("cannot translate deleted events")?;
+    let added_events = tcg_tpm_log_translate(&added_events, new.efi_vars.as_ref())
+        .context("cannot translate added events")?;
+    let (deleted, added, mods) = tpm_log_diff_semantic(added_events, deleted_events);
+    Ok((deleted, added, mods))
+}
 
 // a pair of events represents a single file.
 // 1. file may be deleted (exists true->false)
@@ -291,115 +215,176 @@ pub enum InterpretedTpmEvent {
 // because we interpret events that were already decoded in get_event_key
 // detions and insertions are impossible. Only files measure-config cares about are recoded in PCR14
 // if an arbitrary file appears on /config partition it is not recorded in PCR14
-// pub(super) fn interpret_pcr14(
-//     _deletions: &Vec<&TcgTpmEvent>,
-//     _insertions: &Vec<&TcgTpmEvent>,
-//     mods: &Vec<(&TcgTpmEvent, &TcgTpmEvent)>,
-// ) -> Vec<InterpretedTpmEvent> {
-//     let mut results = Vec::new();
+pub(super) fn interpret_pcr14(
+    _deleted_events: Vec<TpmEvent>,
+    _added_events: Vec<TpmEvent>,
+    mods: Vec<(TpmEvent, TpmEvent)>,
+) -> Vec<InterpretedTpmEvent> {
+    let mut results = Vec::new();
 
-//     for (e1, e2) in mods {
-//         let action1 = TcgEfiActionEvent::try_from(*e1);
-//         let action2 = TcgEfiActionEvent::try_from(*e2);
-//         match (action1, action2) {
-//             (Ok(a1), Ok(a2)) => match (a1, a2) {
-//                 (
-//                     TcgEfiActionEvent::MeasureConfig {
-//                         file: file1,
-//                         hash: hash1,
-//                         exists: exists1,
-//                     },
-//                     TcgEfiActionEvent::MeasureConfig {
-//                         file: file2,
-//                         hash: hash2,
-//                         exists: exists2,
-//                     },
-//                 ) => {
-//                     if file1 != file2 {
-//                         results.push(InterpretedTpmEvent::Error((*e1).clone()));
-//                         results.push(InterpretedTpmEvent::Error((*e2).clone()));
-//                         continue;
-//                     }
+    for (e1, e2) in mods.into_iter() {
+        match (e1, e2) {
+            (
+                TpmEvent::MeasureConfig {
+                    file: file1,
+                    hash: hash1,
+                    exists: exists1,
+                },
+                TpmEvent::MeasureConfig {
+                    file: file2,
+                    hash: hash2,
+                    exists: exists2,
+                },
+            ) => {
+                if file1 != file2 {
+                    results.push(InterpretedTpmEvent::Error(TpmEvent::MeasureConfig {
+                        file: file1,
+                        hash: hash1,
+                        exists: exists1,
+                    }));
+                    results.push(InterpretedTpmEvent::Error(TpmEvent::MeasureConfig {
+                        file: file2,
+                        hash: hash2,
+                        exists: exists2,
+                    }));
+                    continue;
+                }
 
-//                     if exists1 && !exists2 {
-//                         results.push(InterpretedTpmEvent::ConfigFileModified {
-//                             file: file1,
-//                             status: ConfigFileStatus::Deleted,
-//                         });
-//                     } else if !exists1 && exists2 {
-//                         results.push(InterpretedTpmEvent::ConfigFileModified {
-//                             file: file1,
-//                             status: ConfigFileStatus::Added,
-//                         });
-//                     } else if exists1 && exists2 && hash1 != hash2 {
-//                         results.push(InterpretedTpmEvent::ConfigFileModified {
-//                             file: file1,
-//                             status: ConfigFileStatus::Modified,
-//                         });
-//                     }
-//                 }
-//                 _ => {
-//                     results.push(InterpretedTpmEvent::Error((*e1).clone()));
-//                     results.push(InterpretedTpmEvent::Error((*e2).clone()));
-//                 }
-//             },
+                if exists1 && !exists2 {
+                    results.push(InterpretedTpmEvent::ConfigFileModified {
+                        file: file1,
+                        status: ConfigFileStatus::Deleted,
+                    });
+                } else if !exists1 && exists2 {
+                    results.push(InterpretedTpmEvent::ConfigFileModified {
+                        file: file1,
+                        status: ConfigFileStatus::Added,
+                    });
+                } else if exists1 && exists2 && hash1 != hash2 {
+                    results.push(InterpretedTpmEvent::ConfigFileModified {
+                        file: file1,
+                        status: ConfigFileStatus::Modified,
+                    });
+                }
+            }
+            (a, b) => {
+                results.push(InterpretedTpmEvent::Error(a));
+                results.push(InterpretedTpmEvent::Error(b));
+            }
+        }
+    }
 
-//             (_, _) => {
-//                 results.push(InterpretedTpmEvent::Error((*e1).clone()));
-//                 results.push(InterpretedTpmEvent::Error((*e2).clone()));
-//             }
-//         }
-//     }
+    results
+}
 
-//     results
-// }
+fn interpret_pcr1(
+    deleted_events: Vec<TpmEvent>,
+    new_events: Vec<TpmEvent>,
+    mods: Vec<(TpmEvent, TpmEvent)>,
+) -> Vec<InterpretedTpmEvent> {
+    //println!("Interpreting [PCR 1]");
 
-// fn interpret_pcr1(
-//     deletions: &Vec<&TcgTpmEvent>,
-//     insertions: &Vec<&TcgTpmEvent>,
-//     mods: &Vec<(&TcgTpmEvent, &TcgTpmEvent)>,
-//     good_efi_vars: Option<&Vec<EfiVariable>>,
-//     bad_efi_vars: Option<&Vec<EfiVariable>>,
-// ) -> Vec<InterpretedTpmEvent> {
-//     println!("Interpreting [PCR 1]");
+    let mut result = Vec::new();
 
-//     let result = Vec::new();
+    for e in deleted_events {
+        match e {
+            TpmEvent::BootEntry {
+                boot_num,
+                description,
+                device_path,
+                attributes,
+            } => {
+                //println!("D {} {} {:?}", boot_num, description, device_path);
+            }
+            // TpmEvent::BootOrder(items) => {
+            //     // println!("D {:?}", items);
+            // }
+            _ => {
+                //println!("D {:?}", e);
+            }
+        }
+    }
 
-//     // parse inserted events
-//     // Bootorder cannot be here
-//     for &e in insertions {
-//         if e.event_type.is_efi_boot_variable() {
-//             // we can unwrap since this is how we got to this point. these events are parsable
-//             let efi_var_name = TcgEfiVariableEvent::try_from(e).unwrap().unicode_name;
+    for e in new_events {
+        match e {
+            TpmEvent::BootEntry {
+                boot_num,
+                description,
+                device_path,
+                attributes,
+            } => {
+                //println!("I {} {} {:?}", boot_num, description, device_path);
+            }
+            _ => {
+                //println!("I {:?}", e);
+            }
+        }
+    }
 
-//             // find EFI variable with the same name
-//             let efi_var = bad_efi_vars
-//                 .unwrap()
-//                 .iter()
-//                 .find(|v| v.name == efi_var_name)
-//                 .unwrap();
+    // modifed events
+    for (e1, e2) in mods {
+        match (e1, e2) {
+            (
+                TpmEvent::BootEntry {
+                    boot_num: boot_num1,
+                    description: description1,
+                    device_path: device_path1,
+                    attributes: attributes1,
+                },
+                TpmEvent::BootEntry {
+                    boot_num: boot_num2,
+                    description: description2,
+                    device_path: device_path2,
+                    attributes: attributes2,
+                },
+            ) => {
+                //println!("M {} {} {:?}", boot_num1, description1, device_path1);
+                //println!("M {} {} {:?}", boot_num2, description2, device_path2);
+            }
+            (TpmEvent::BootOrder(o1), TpmEvent::BootOrder(o2)) => {
+                result.push(InterpretedTpmEvent::BootOrderModified { old: o1, new: o2 });
+            }
+            _ => {
+                //println!("M {:?} -> {:?}", e1, e2);
+            }
+        }
+    }
 
-//             if efi_var_name.starts_with("Boot") {
-//                 let boot_var = EfiLoadOption::parse(&efi_var.value).unwrap().description;
-//             }
-//         } else {
-//             println!("I {:?}", e.event_type);
-//         }
-//     }
+    // parse inserted events
+    // Bootorder cannot be here
+    // for e in insertions {
+    //     if e.event_type.is_efi_boot_variable() {
+    //         // we can unwrap since this is how we got to this point. these events are parsable
+    //         let efi_var_name = TcgEfiVariableEvent::try_from(e).unwrap().unicode_name;
 
-//     // e1 and e2 describe the same variable by design
-//     for (e1, e2) in mods {
-//         if e1.event_type == TcgTpmEventType::EfiVariableBoot
-//             || e1.event_type == TcgTpmEventType::EfiVariableBoot2
-//         {
-//             // we can unwrap since this is how we got to this point. these events are parsable
-//             let efi_var_name = TcgEfiVariableEvent::try_from(*e1).unwrap().unicode_name;
-//         } else {
-//             println!("M {:?} -> {:?}", e1.event_type, e2.event_type);
-//         }
-//     }
-//     result
-// }
+    //         // find EFI variable with the same name
+    //         let efi_var = bad_efi_vars
+    //             .unwrap()
+    //             .iter()
+    //             .find(|v| v.name == efi_var_name)
+    //             .unwrap();
+
+    //         if efi_var_name.starts_with("Boot") {
+    //             let boot_var = EfiLoadOption::parse(&efi_var.value).unwrap().description;
+    //         }
+    //     } else {
+    //         println!("I {:?}", e.event_type);
+    //     }
+    // }
+
+    // e1 and e2 describe the same variable by design
+    // for (e1, e2) in mods {
+    //     if e1.event_type == TcgTpmEventType::EfiVariableBoot
+    //         || e1.event_type == TcgTpmEventType::EfiVariableBoot2
+    //     {
+    //         // we can unwrap since this is how we got to this point. these events are parsable
+    //         let efi_var_name = TcgEfiVariableEvent::try_from(*e1).unwrap().unicode_name;
+    //     } else {
+    //         println!("M {:?} -> {:?}", e1.event_type, e2.event_type);
+    //     }
+    // }
+    result
+}
 
 // new events may appear only if
 // 1. grub.cfg updated due to EVE update
@@ -420,53 +405,41 @@ pub enum InterpretedTpmEvent {
 //
 // when eve is updated this evet is updated
 // - EV_IPL grub_cmd setparams Boot 0.0.0-rucoder_monitor-tpm-log-15ec5037-dirty-2025-03-04.10.17-kvm-amd64
-// fn interpret_pcr8(
-//     deletions: &Vec<&TcgTpmEvent>,
-//     insertions: &Vec<&TcgTpmEvent>,
-//     mods: &Vec<(&TcgTpmEvent, &TcgTpmEvent)>,
-// ) -> Vec<InterpretedTpmEvent> {
-//     let mut results = Vec::new();
+fn interpret_pcr8(
+    _deletions: Vec<TpmEvent>,
+    _insertions: Vec<TpmEvent>,
+    mods: Vec<(TpmEvent, TpmEvent)>,
+) -> Vec<InterpretedTpmEvent> {
+    let mut results = Vec::new();
 
-//     println!("Interpreting [PCR 8]");
+    //println!("Interpreting [PCR 8]");
 
-//     let mut grub_cfg_changed = false;
+    let mut grub_cfg_changed = false;
 
-//     for (e1, e2) in mods {
-//         let grub_event1 = TcgIPLEvent::try_from(*e1);
-//         let grub_event2 = TcgIPLEvent::try_from(*e2);
-//         match (grub_event1, grub_event2) {
-//             (Ok(g1), Ok(g2)) => match (g1, g2) {
-//                 (TcgIPLEvent::Cmd(d1), TcgIPLEvent::Cmd(d2)) => {
-//                     println!("M {:?} -> {:?}", d1, d2);
-//                     grub_cfg_changed = true;
-//                 }
-//                 (TcgIPLEvent::KernelCmdLine(d1), TcgIPLEvent::KernelCmdLine(d2)) => {
-//                     println!("M {:?} -> {:?}", d1, d2);
-//                     results.push(InterpretedTpmEvent::KernelCmdLineModified { old: d1, new: d2 });
-//                 }
-//                 (TcgIPLEvent::LinuxEfi(d1), TcgIPLEvent::LinuxEfi(d2)) => {
-//                     println!("M {:?} -> {:?}", d1, d2);
-//                     grub_cfg_changed = true;
-//                 }
-//                 _ => {
-//                     println!("M {:?} -> {:?}", e1.event_type, e2.event_type);
-//                     grub_cfg_changed = true;
-//                 }
-//             },
-//             (_, _) => {
-//                 println!("M {:?} -> {:?}", e1.event_type, e2.event_type);
-//                 results.push(InterpretedTpmEvent::Error((*e1).clone()));
-//                 results.push(InterpretedTpmEvent::Error((*e2).clone()));
-//             }
-//         }
-//     }
+    for (e1, e2) in mods {
+        match (e1, e2) {
+            (TpmEvent::GrubKernelCmdline(d1), TpmEvent::GrubKernelCmdline(d2)) => {
+                results.push(InterpretedTpmEvent::KernelCmdLineModified { old: d1, new: d2 });
+            }
+            (TpmEvent::GrubCmd { cmd: _, params: _ }, TpmEvent::GrubCmd { cmd: _, params: _ }) => {
+                grub_cfg_changed = true;
+            }
+            (TpmEvent::GrubLinuxEfi(_), TpmEvent::GrubLinuxEfi(_)) => {
+                grub_cfg_changed = true;
+            }
+            (e1, e2) => {
+                results.push(InterpretedTpmEvent::Error(e1));
+                results.push(InterpretedTpmEvent::Error(e2));
+            }
+        }
+    }
 
-//     if grub_cfg_changed {
-//         results.push(InterpretedTpmEvent::GrubCfgModified);
-//     }
+    if grub_cfg_changed {
+        results.push(InterpretedTpmEvent::GrubCfgModified);
+    }
 
-//     results
-// }
+    results
+}
 
 #[cfg(test)]
 mod tests {
@@ -477,21 +450,32 @@ mod tests {
         TPMLog::from_slice(&data).unwrap()
     }
 
-    // #[test]
-    // fn test_decode_tpm_logs_message() {
-    //     // load src/tpm/test_data/pcr8-14/2025-03-04-10-52-35/eve_ipc_message-6.json
-    //     // and deserialize to TpmLogs
-    //     let message =
-    //         std::fs::read("src/tpm/test_data/pcr8/log/2025-03-04-12-25-31/eve_ipc_message-6.json")
-    //             .unwrap();
+    #[test]
+    fn test_decode_tpm_logs_message() -> Result<()> {
+        // init logger
+        let _ = env_logger::builder()
+            .is_test(true)
+            .filter_level(log::LevelFilter::Trace)
+            .try_init();
 
-    //     let mut json_data: serde_json::Value = serde_json::from_slice(&message).unwrap();
+        // load src/tpm/test_data/pcr8-14/2025-03-04-10-52-35/eve_ipc_message-6.json
+        // and deserialize to TpmLogs
+        // let message =
+        //     std::fs::read("src/tpm/test_data/pcr8/log/2025-03-04-12-25-31/eve_ipc_message-6.json")
+        //         .unwrap();
 
-    //     let raw_logs: TpmLogs =
-    //         serde_json::from_value::<TpmLogs>(json_data["message"].take()).unwrap();
+        let message =
+            std::fs::read("/home/mikem/projects/monitor/eve-monitor-rs/persist/monitor/log/2025-03-13-00-07-35/eve_ipc_message-7.json")
+                .unwrap();
 
-    //     let (good, bad) = get_logs_pair(raw_logs).unwrap();
+        let mut json_data: serde_json::Value = serde_json::from_slice(&message).unwrap();
 
-    //     tpm_log_diff_interpret(&[8], good, bad);
-    // }
+        let raw_logs: TpmLogs =
+            serde_json::from_value::<TpmLogs>(json_data["message"].take()).unwrap();
+
+        let (good, bad) = get_logs_pair(raw_logs).unwrap();
+
+        tpm_log_diff_interpret(&[1, 4, 14], good, bad)?;
+        Ok(())
+    }
 }

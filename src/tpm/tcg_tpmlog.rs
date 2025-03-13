@@ -131,13 +131,25 @@ impl TpmAlgorithmId {
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct TcgTpmEvent {
     pub pcr_index: u32,
     pub event_type: TcgTpmEventType,
     pub digests: Vec<Digest>,
     pub event_data: Vec<u8>,
 }
+
+// Implement PartialEq for TcgTpmEvent
+// we do not need to cpmpare event_data
+// becasue digest is calculated from event_data
+// we need to compare only one digest from the list
+// impl PartialEq for TcgTpmEvent {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.pcr_index == other.pcr_index
+//             && self.event_type == other.event_type
+//             && self.digests[0] == other.digests[0]
+//     }
+// }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Digest {

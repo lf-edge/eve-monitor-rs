@@ -1,10 +1,13 @@
 use crate::{
-    efi::vars::{EfiBootOrder, EfiLoadOption},
+    efi::{
+        device_path::DevicePath,
+        vars::{EfiBootOrder, EfiLoadOption, LoadOptionAttributes},
+    },
     ipc::eve_types::EfiVariable,
 };
 
 use super::{
-    tcg_events::{TcgEfiActionEvent, TcgEfiVariableEvent, TcgIPLEvent},
+    tcg_events::{TcgEfiActionEvent, TcgEfiVariableEvent, TcgIPLEvent, TcgUefiImageLoadEvent},
     tcg_tpmlog::{TcgTpmEvent, TcgTpmEventType},
 };
 use anyhow::{anyhow, Context, Result};
@@ -14,13 +17,15 @@ pub trait TpmEventDescribe {
     fn semantic_key(&self) -> String;
 }
 
+#[derive(Debug, Clone)]
 pub enum TpmEvent {
     EfiAction(String),
     EnterBiosSetup,
     BootEntry {
         boot_num: u16,
         description: String,
-        device_path: Vec<u8>,
+        device_path: DevicePath,
+        attributes: LoadOptionAttributes,
     },
     BootOrder(Vec<u16>),
     MeasureRoot {
@@ -39,6 +44,7 @@ pub enum TpmEvent {
     GrubKernelCmdline(String),
     GrubLinuxEfi(String),
     GrubGenericEvent(String, String),
+    BootApplication(DevicePath),
 }
 
 impl TpmEventDescribe for TpmEvent {
@@ -49,6 +55,7 @@ impl TpmEventDescribe for TpmEvent {
                 boot_num,
                 description: _,
                 device_path: _,
+                attributes: _,
             } => format!("BootEntry-{}", boot_num),
             TpmEvent::BootOrder(_items) => "BootOrder".to_string(),
             TpmEvent::GrubCmd { cmd, params: _ } => cmd.clone(),
@@ -62,6 +69,7 @@ impl TpmEventDescribe for TpmEvent {
             } => file.clone(),
             TpmEvent::EnterBiosSetup => "EnterBiosSetup".to_string(),
             TpmEvent::MeasureRoot { rootfs: _, hash: _ } => "MeasureRootFs".to_string(),
+            TpmEvent::BootApplication(_) => "BootApplication".to_string(), //FIXME: use DevicePath here
         }
     }
 }
@@ -77,14 +85,17 @@ fn parse_efi_boot_variable(event: &TcgTpmEvent, efi_vars: &Vec<EfiVariable>) -> 
     let re = Regex::new(r"Boot[0-9A-F]{4}").unwrap();
 
     if name == "BootOrder" {
-        let efi_boot_order = EfiBootOrder::try_from(event.event_data.as_slice())?;
+        let efi_boot_order =
+            EfiBootOrder::try_from(var.value.as_slice()).context("cannot parse BootOrder")?;
         Ok(TpmEvent::BootOrder(efi_boot_order.boot_order))
     } else if re.is_match(&name) {
-        let efi_load_options = EfiLoadOption::try_from(var.value.as_slice())?;
+        let efi_load_options = EfiLoadOption::try_from(var.value.as_slice())
+            .context(format!("cannot parse {}", name))?;
         Ok(TpmEvent::BootEntry {
             boot_num: u16::from_str_radix(&name[4..], 16)?,
             description: efi_load_options.description,
             device_path: efi_load_options.device_path_list,
+            attributes: efi_load_options.attributes,
         })
     } else {
         Err(anyhow!("Unsupported Boot variable `{}'", name))
@@ -195,7 +206,7 @@ fn parse_rootfs_measurement_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
 impl TpmEvent {
     pub fn try_from_tcg_event(
         event: &TcgTpmEvent,
-        efi_vars: Option<Vec<EfiVariable>>,
+        efi_vars: Option<&Vec<EfiVariable>>,
     ) -> Result<Self> {
         match event.event_type {
             TcgTpmEventType::EfiAction if event.pcr_index == 14 => {
@@ -204,13 +215,20 @@ impl TpmEvent {
             TcgTpmEventType::EfiAction => parse_action_event(event),
             TcgTpmEventType::EfiVariableBoot | TcgTpmEventType::EfiVariableBoot2 => {
                 if let Some(efi_vars) = efi_vars {
-                    parse_efi_boot_variable(event, &efi_vars)
+                    parse_efi_boot_variable(event, efi_vars)
+                        .context("parse_efi_boot_variable failed")
                 } else {
                     return Err(anyhow!("No EFI variables provided for boot event"));
                 }
             }
             TcgTpmEventType::IPL if event.pcr_index == 8 => parse_grub_event(event),
             TcgTpmEventType::IPL if event.pcr_index == 13 => parse_rootfs_measurement_event(event),
+            //EfiBootServicesApplication
+            TcgTpmEventType::EfiBootServicesApplication => {
+                let image_load_event = TcgUefiImageLoadEvent::try_from(event)?;
+                let device_path = DevicePath::try_from(image_load_event.device_path.as_slice())?;
+                Ok(TpmEvent::BootApplication(device_path))
+            }
             TcgTpmEventType::NoAction => {
                 Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
             }
@@ -250,7 +268,11 @@ impl TpmEvent {
             }
 
             // FIXME: we should not error here
-            _ => Err(anyhow!("Unsupported event type: {:?}", event.event_type)),
+            _ => Err(anyhow!(
+                "Unsupported event type: {:?} for PCR {}",
+                event.event_type,
+                event.pcr_index
+            )),
         }
     }
 }

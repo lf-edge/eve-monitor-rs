@@ -9,11 +9,81 @@ use uuid::Uuid;
 
 use super::tcg_tpmlog::{TcgTpmEvent, TcgTpmEventType};
 
+// typedef struct tdUEFI_IMAGE_LOAD_EVENT {
+// UEFI_PHYSICAL_ADDRESS ImageLocationInMemory; // PE/COFF image
+// UINT64
+//  ImageLengthInMemory;
+// UINT64
+//  ImageLinkTimeAddress;
+// UINT64
+//  LengthOfDevicePath;
+// UEFI_DEVICE_PATH
+//  DevicePath[LengthOfDevicePath];
+// // SeeUEFI spec for
+// // the encodings.
+// } UEFI_IMAGE_LOAD_EVENT
+
+pub struct TcgUefiImageLoadEvent {
+    pub image_location_in_memory: u64,
+    pub image_length_in_memory: u64,
+    pub image_link_time_address: u64,
+    pub length_of_device_path: u64,
+    pub device_path: Vec<u8>,
+}
+
 #[derive(Debug)]
 pub struct TcgEfiVariableEvent {
     pub vendor_guid: Uuid,
     pub unicode_name: String,
     pub variable_data: Vec<u8>,
+}
+
+impl TryFrom<TcgTpmEvent> for TcgUefiImageLoadEvent {
+    type Error = anyhow::Error;
+
+    fn try_from(value: TcgTpmEvent) -> std::result::Result<Self, Self::Error> {
+        Self::try_from(&value)
+    }
+}
+
+impl TryFrom<&TcgTpmEvent> for TcgUefiImageLoadEvent {
+    type Error = anyhow::Error;
+
+    fn try_from(value: &TcgTpmEvent) -> std::result::Result<Self, Self::Error> {
+        // the event is valid for PCR 2,4 only
+        if value.pcr_index != 2 && value.pcr_index != 4 {
+            return Err(anyhow::anyhow!(
+                "Invalid PCR index for UEFI image load event {}",
+                value.pcr_index
+            ));
+        }
+
+        // FIXME: other events also use this sctructure but for now it is OK
+        if value.event_type != TcgTpmEventType::EfiBootServicesApplication {
+            return Err(anyhow::anyhow!(
+                "Invalid event type for UEFI image load event {}",
+                value.event_type
+            ));
+        }
+
+        let mut cursor = Cursor::new(&value.event_data);
+
+        let image_location_in_memory = cursor.read_u64::<LittleEndian>()?;
+        let image_length_in_memory = cursor.read_u64::<LittleEndian>()?;
+        let image_link_time_address = cursor.read_u64::<LittleEndian>()?;
+        let length_of_device_path = cursor.read_u64::<LittleEndian>()?;
+
+        let mut device_path = vec![0u8; length_of_device_path as usize];
+        cursor.read_exact(&mut device_path)?;
+
+        Ok(TcgUefiImageLoadEvent {
+            image_location_in_memory,
+            image_length_in_memory,
+            image_link_time_address,
+            length_of_device_path,
+            device_path,
+        })
+    }
 }
 
 // corresponds to EV_IPL event for PCR 8

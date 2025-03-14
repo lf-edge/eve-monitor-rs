@@ -254,6 +254,7 @@ impl TpmEventDecode for InterpretedTpmEvent {
             InterpretedTpmEvent::Error(tpm_event) => {
                 Line::from(format!("Error decoding event: {:?}", tpm_event))
             }
+            InterpretedTpmEvent::EnterBios => Line::from("BIOS Setup enter"),
         }
     }
 

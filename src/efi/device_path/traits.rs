@@ -47,7 +47,7 @@ pub(super) trait DevicePathDisplay {
 pub(super) trait DevicePathTypeReader {
     fn read_null_terminated_ascii_to_string(&mut self) -> Result<String>;
     fn read_ucs16_null_terminated_to_string(&mut self) -> Result<String>;
-    fn read_guid(&mut self) -> Result<uuid::Uuid>;
+    fn read_efi_guid(&mut self) -> Result<uuid::Uuid>;
 }
 
 impl DevicePathTypeReader for Cursor<&Vec<u8>> {
@@ -67,10 +67,14 @@ impl DevicePathTypeReader for Cursor<&Vec<u8>> {
         }
         Ok(String::from_utf8(chars).context("error converting ascii string")?)
     }
-    fn read_guid(&mut self) -> Result<uuid::Uuid> {
-        let mut guid = [0u8; 16];
-        self.read_exact(&mut guid)?;
-        Ok(uuid::Uuid::from_bytes(guid))
+    fn read_efi_guid(&mut self) -> Result<uuid::Uuid> {
+        let d1: u32 = self.read_u32::<LittleEndian>()?;
+        let d2: u16 = self.read_u16::<LittleEndian>()?;
+        let d3: u16 = self.read_u16::<LittleEndian>()?;
+
+        let mut d4: [u8; 8] = [0; 8];
+        self.read_exact(&mut d4)?;
+        Ok(uuid::Uuid::from_fields(d1, d2, d3, &d4))
     }
     fn read_ucs16_null_terminated_to_string(&mut self) -> Result<String> {
         let mut chars = Vec::new();
@@ -102,10 +106,15 @@ impl DevicePathTypeReader for Cursor<Vec<u8>> {
         }
         Ok(String::from_utf8(chars).context("error converting ascii string")?)
     }
-    fn read_guid(&mut self) -> Result<uuid::Uuid> {
-        let mut guid = [0u8; 16];
-        self.read_exact(&mut guid)?;
-        Ok(uuid::Uuid::from_bytes(guid))
+
+    fn read_efi_guid(&mut self) -> Result<uuid::Uuid> {
+        let d1: u32 = self.read_u32::<LittleEndian>()?;
+        let d2: u16 = self.read_u16::<LittleEndian>()?;
+        let d3: u16 = self.read_u16::<LittleEndian>()?;
+
+        let mut d4: [u8; 8] = [0; 8];
+        self.read_exact(&mut d4)?;
+        Ok(uuid::Uuid::from_fields(d1, d2, d3, &d4))
     }
     fn read_ucs16_null_terminated_to_string(&mut self) -> Result<String> {
         let mut chars = Vec::new();

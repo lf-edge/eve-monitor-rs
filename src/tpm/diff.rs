@@ -5,12 +5,15 @@ use super::{
     tpmlog::{TpmEvent, TpmEventDescribe},
 };
 use crate::{
+    efi::device_path::{media::MediaNode, PathNode},
     ipc::eve_types::{EfiVariable, TpmLogs},
     lcs::{collect_diff, compute_lcs},
 };
 use anyhow::{anyhow, Context, Result};
+use color_eyre::owo_colors::OwoColorize;
 use log::{info, trace};
 use strum::Display;
+use uuid::uuid;
 
 pub struct EveTpmLog {
     pub log: TPMLog,
@@ -92,7 +95,11 @@ pub(super) fn tpm_log_diff_semantic<'a>(
 
     for new_event in added_events.into_iter() {
         if let Some(old_event) = del_map.remove(&new_event.semantic_key()) {
-            mods.push((old_event, new_event));
+            // LCS is not good when events were reordered
+            // only add to mods if events are different
+            if old_event != new_event {
+                mods.push((old_event, new_event));
+            }
         } else {
             new_events.push(new_event);
         }
@@ -131,6 +138,7 @@ pub enum InterpretedTpmEvent {
         old: Vec<String>,
         new: Vec<String>,
     },
+    EnterBios,
     Error(TpmEvent),
 }
 
@@ -151,6 +159,12 @@ pub fn tpm_log_diff_interpret(
         }
         // print added
         for e in &added {
+            match e {
+                TpmEvent::BootApplication(dp) => {
+                    info!("BootApplication dp {}", dp.display(false));
+                }
+                _ => {}
+            }
             info!("I {:?}", e);
         }
         // print mods
@@ -170,6 +184,9 @@ pub fn tpm_log_diff_interpret(
             }
             14 => {
                 interpretations.insert(14, interpret_pcr14(deleted, added, mods));
+            }
+            4 => {
+                interpretations.insert(4, interpret_pcr4(deleted, added, mods));
             }
             _ => {
                 let errors = deleted
@@ -198,7 +215,27 @@ pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
     let good_events = old_good.get_events_for_pcr_ref(pcr);
     let bad_events = new.get_events_for_pcr_ref(pcr);
     let lcs = compute_lcs(&good_events, &bad_events);
+
+    // print LCS
+    info!("==== LCS ====");
+    for (e) in &lcs {
+        trace!("{:?}", e);
+    }
+
     let (deleted_events, added_events) = collect_diff(&good_events, &bad_events, &lcs);
+
+    // print deleted
+    info!("==== DELETED ====");
+    for e in &deleted_events {
+        trace!("{:?}", e);
+    }
+
+    // print added
+    info!("==== ADDED ====");
+    for e in &added_events {
+        trace!("{:?}", e);
+    }
+
     let deleted_events = tcg_tpm_log_translate(&deleted_events, old_good.efi_vars.as_ref())
         .context("cannot translate deleted events")?;
     let added_events = tcg_tpm_log_translate(&added_events, new.efi_vars.as_ref())
@@ -441,6 +478,47 @@ fn interpret_pcr8(
     results
 }
 
+fn interpret_pcr4(
+    _deletions: Vec<TpmEvent>,
+    insertions: Vec<TpmEvent>,
+    _mods: Vec<(TpmEvent, TpmEvent)>,
+) -> Vec<InterpretedTpmEvent> {
+    let mut reult = Vec::new();
+    for e in insertions {
+        match e {
+            TpmEvent::CallingEfiAppFromBootOption | TpmEvent::FailedToStartEfiAppFromBootOption => {
+                // just skip it. there is no easy way to know which app exactly so we cannot
+                // reliably distinguish between two identical events
+            }
+            TpmEvent::BootApplication(ref dp) => {
+                info!("BootApplication dp {}", dp.display(false));
+                let bios_uuids = vec![
+                    uuid!("462CAA21-7614-4503-836E-8AB6F4662331"),
+                    uuid!("D89A7D8B-D016-4D26-93E3-EAB6B4D3B0A2"),
+                    uuid!("EEC25BDC-67F2-4D95-B1D5-F81B2039D11D"),
+                ];
+                let is_bios = dp.nodes.iter().any(|e| -> bool {
+                    match e {
+                        PathNode::Media(MediaNode::FvFile(uuid)) => bios_uuids.contains(uuid),
+                        _ => false,
+                    }
+                });
+                if is_bios {
+                    reult.push(InterpretedTpmEvent::EnterBios);
+                } else {
+                    reult.push(InterpretedTpmEvent::Error(e));
+                }
+            }
+            _ => {
+                info!("I {:?}", e);
+                reult.push(InterpretedTpmEvent::Error(e));
+            }
+        }
+    }
+
+    reult
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -473,9 +551,29 @@ mod tests {
         let raw_logs: TpmLogs =
             serde_json::from_value::<TpmLogs>(json_data["message"].take()).unwrap();
 
+        raw_logs.save_raw_binary_logs(
+            "/home/mikem/projects/monitor/eve-monitor-rs/persist/monitor/log",
+        )?;
+
         let (good, bad) = get_logs_pair(raw_logs).unwrap();
 
-        tpm_log_diff_interpret(&[1, 4, 14], good, bad)?;
+        let (deleted, added, mods) = tpm_log_diff_for_pcr(&good, &bad, 1).unwrap();
+
+        // print deleted
+        for e in &deleted {
+            info!("D {:?}", e);
+        }
+
+        // print added
+        for e in &added {
+            info!("I {:?}", e);
+        }
+        // print mods
+        for (e1, e2) in &mods {
+            info!("M {:?} -> {:?}", e1, e2);
+        }
+
+        //tpm_log_diff_interpret(&[1, 4, 14], good, bad)?;
         Ok(())
     }
 }

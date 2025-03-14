@@ -11,16 +11,19 @@ use super::{
     tcg_tpmlog::{TcgTpmEvent, TcgTpmEventType},
 };
 use anyhow::{anyhow, Context, Result};
+use log::debug;
 use regex::Regex;
 
 pub trait TpmEventDescribe {
     fn semantic_key(&self) -> String;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum TpmEvent {
     EfiAction(String),
-    EnterBiosSetup,
+    ActionEnterBiosSetup,
+    CallingEfiAppFromBootOption,
+    FailedToStartEfiAppFromBootOption,
     BootEntry {
         boot_num: u16,
         description: String,
@@ -67,9 +70,13 @@ impl TpmEventDescribe for TpmEvent {
                 hash: _,
                 exists: _,
             } => file.clone(),
-            TpmEvent::EnterBiosSetup => "EnterBiosSetup".to_string(),
+            TpmEvent::ActionEnterBiosSetup => "EnterBiosSetupAction".to_string(),
             TpmEvent::MeasureRoot { rootfs: _, hash: _ } => "MeasureRootFs".to_string(),
-            TpmEvent::BootApplication(_) => "BootApplication".to_string(), //FIXME: use DevicePath here
+            TpmEvent::BootApplication(dp) => format!("BootApplication: {}", dp.display(false)),
+            TpmEvent::CallingEfiAppFromBootOption => "Calling app from boot option".to_string(),
+            TpmEvent::FailedToStartEfiAppFromBootOption => {
+                "Failed to start app from boot option".to_string()
+            }
         }
     }
 }
@@ -130,14 +137,32 @@ fn parse_grub_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
     }
 }
 
+fn parse_efi_action_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+    let action_event = TcgEfiActionEvent::try_from(event)?;
+    let action_value = action_event.get();
+
+    match event.pcr_index {
+        4 => match action_value {
+            "Calling EFI Application from Boot Option" => Ok(TpmEvent::CallingEfiAppFromBootOption),
+            "Returning from EFI Application from Boot Option" => {
+                Ok(TpmEvent::FailedToStartEfiAppFromBootOption)
+            }
+            _ => Ok(TpmEvent::EfiAction(action_value.to_string())),
+        },
+        5 | 7 => Ok(TpmEvent::EfiAction(action_value.to_string())),
+        _ => Err(anyhow::anyhow!(
+            "Invalid PCR index for TpmEventType::EfiAction {}",
+            event.pcr_index
+        )),
+    }
+}
+
 fn parse_action_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
     let action_event = TcgEfiActionEvent::try_from(event)?;
     let action_value = action_event.get();
 
     match event.pcr_index {
-        // e.g file:/config/authorized_keys exist:true content-hash:61e3c4e3aaee97c87c12d4dfbd699b11007e3a5900b02d53f18d978f31cfcaf8
-        // content-hash can be omitted if file does not exist
-        1 | 3 if action_value == "Entering ROM Based Setup" => Ok(TpmEvent::EnterBiosSetup),
+        1 | 3 if action_value == "Entering ROM Based Setup" => Ok(TpmEvent::ActionEnterBiosSetup),
         1 | 3 | 4 | 5 | 7 => Ok(TpmEvent::EfiAction(action_value.to_string())),
         _ => Err(anyhow::anyhow!(
             "Invalid PCR index for TpmEventType::Action {}",
@@ -212,7 +237,7 @@ impl TpmEvent {
             TcgTpmEventType::EfiAction if event.pcr_index == 14 => {
                 parse_measure_config_event(event)
             }
-            TcgTpmEventType::EfiAction => parse_action_event(event),
+            TcgTpmEventType::EfiAction => parse_efi_action_event(event),
             TcgTpmEventType::EfiVariableBoot | TcgTpmEventType::EfiVariableBoot2 => {
                 if let Some(efi_vars) = efi_vars {
                     parse_efi_boot_variable(event, efi_vars)
@@ -227,15 +252,17 @@ impl TpmEvent {
             TcgTpmEventType::EfiBootServicesApplication => {
                 let image_load_event = TcgUefiImageLoadEvent::try_from(event)?;
                 let device_path = DevicePath::try_from(image_load_event.device_path.as_slice())?;
+                debug!(
+                    "TcgTpmEventType::EfiBootServicesApplication: dp={}",
+                    device_path.display(false)
+                );
                 Ok(TpmEvent::BootApplication(device_path))
             }
-            TcgTpmEventType::NoAction => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
+            TcgTpmEventType::Action => parse_efi_action_event(event),
             TcgTpmEventType::Separator => {
                 Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
             }
-            TcgTpmEventType::Action => {
+            TcgTpmEventType::NoAction => {
                 Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
             }
             TcgTpmEventType::CPUMicrocode => {

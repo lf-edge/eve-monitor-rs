@@ -16,6 +16,7 @@ use serde_with::serde_as;
 use serde_with::DefaultOnNull;
 use serde_with::FromInto;
 use serde_with::NoneAsEmptyString;
+use std::fs::File;
 use std::net::IpAddr;
 use strum::Display;
 use uuid::Uuid;
@@ -1524,4 +1525,28 @@ pub struct TpmLogs {
     pub backup_good_log: Option<Vec<u8>>,
     pub efi_vars_success: Option<Vec<EfiVariable>>,
     pub efi_vars_failed: Option<Vec<EfiVariable>>,
+}
+
+use anyhow::Result;
+use std::io::Write;
+impl TpmLogs {
+    pub fn save_raw_binary_logs(&self, path: &str) -> Result<()> {
+        if let Some(ref last_failed_log) = self.last_failed_log {
+            let mut file = File::create(format!("{}/last_failed_log.bin", path))?;
+            file.write_all(last_failed_log)?;
+        }
+        if let Some(ref last_good_log) = self.last_good_log {
+            let mut file = File::create(format!("{}/last_good_log.bin", path))?;
+            file.write_all(last_good_log)?;
+        }
+        if let Some(ref backup_failed_log) = self.backup_failed_log {
+            let mut file = File::create(format!("{}/backup_failed_log.bin", path))?;
+            file.write_all(backup_failed_log)?;
+        }
+        if let Some(ref backup_good_log) = self.backup_good_log {
+            let mut file = File::create(format!("{}/backup_good_log.bin", path))?;
+            file.write_all(backup_good_log)?;
+        }
+        Ok(())
+    }
 }

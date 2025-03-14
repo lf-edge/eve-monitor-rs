@@ -17,8 +17,11 @@ enum NodeSubTypeMedia {
     Vendor = 0x3,
     FilePath = 0x4,
     MediaProtocol = 0x5,
-    PiwgFvFile = 0x6,
-    PiwgFv = 0x7,
+    // Following 2 types are not defined in UEFI 2.8 specification. See
+    // Platform Initialization (PI) Specification  Volume 1:  Pre-EFI Initialization Core Interface
+    // 8.3 Firmware File Media Device Path,
+    FwVolFile = 0x6,
+    FwVol = 0x7,
     RelativeOffsetRange = 0x8,
     RamDisk = 0x9,
 }
@@ -31,8 +34,8 @@ impl NodeTypeValidator for NodeSubTypeMedia {
             NodeSubTypeMedia::Vendor => NodeExpectedLength::Min(20),
             NodeSubTypeMedia::FilePath => NodeExpectedLength::Min(4),
             NodeSubTypeMedia::MediaProtocol => NodeExpectedLength::Exact(20),
-            NodeSubTypeMedia::PiwgFvFile => NodeExpectedLength::Exact(20),
-            NodeSubTypeMedia::PiwgFv => NodeExpectedLength::Exact(20),
+            NodeSubTypeMedia::FwVolFile => NodeExpectedLength::Exact(20),
+            NodeSubTypeMedia::FwVol => NodeExpectedLength::Exact(20),
             NodeSubTypeMedia::RelativeOffsetRange => NodeExpectedLength::Exact(24),
             NodeSubTypeMedia::RamDisk => NodeExpectedLength::Exact(38),
         }
@@ -78,13 +81,9 @@ impl std::fmt::Display for PartitionSignature {
         match self {
             PartitionSignature::None => write!(f, ""),
             PartitionSignature::Mbr(value) => write!(f, "{:04x}", value),
-            PartitionSignature::Guid(value) => write!(
-                f,
-                "{}",
-                value
-                    .as_hyphenated()
-                    .encode_lower(&mut uuid::Uuid::encode_buffer())
-            ),
+            PartitionSignature::Guid(value) => {
+                write!(f, "{}", value.as_hyphenated().to_string().to_lowercase())
+            }
         }
     }
 }
@@ -94,7 +93,13 @@ impl PartitionSignature {
         if kind == 1 {
             PartitionSignature::Mbr(u16::from_le_bytes([value[0], value[1]]))
         } else {
-            PartitionSignature::Guid(uuid::Uuid::from_slice(value).unwrap())
+            //FIXME: would be better to create a Cursor and call DevicePathTypeReader::read_efi_guid
+            // but i need to implement DevicePathTypeReader for &[u8:16] first which doesnt make too much sense
+            let d1 = u32::from_le_bytes([value[0], value[1], value[2], value[3]]);
+            let d2 = u16::from_le_bytes([value[4], value[5]]);
+            let d3 = u16::from_le_bytes([value[6], value[7]]);
+            let d4: [u8; 8] = value[8..16].try_into().unwrap();
+            PartitionSignature::Guid(uuid::Uuid::from_fields(d1, d2, d3, &d4))
         }
     }
 }
@@ -118,8 +123,8 @@ pub(crate) enum MediaNode {
         vendor_data: Vec<u8>,
     },
     FilePath(String),
-    PiwgFvFile(uuid::Uuid), // TODO: implement
-    PiwgFv(uuid::Uuid),
+    FvFile(uuid::Uuid),
+    Fv(uuid::Uuid),
     Unknown(Node),
 }
 
@@ -171,8 +176,12 @@ impl DevicePathDisplay for MediaNode {
                 }
             }
             MediaNode::FilePath(path) => path.clone(),
-            MediaNode::PiwgFvFile(guid) => format!("FvFile({})", guid),
-            MediaNode::PiwgFv(guid) => format!("Fv({})", guid),
+            MediaNode::FvFile(guid) => {
+                format!("FvFile({})", guid.hyphenated().to_string().to_uppercase())
+            }
+            MediaNode::Fv(guid) => {
+                format!("Fv({})", guid.hyphenated().to_string().to_uppercase())
+            }
             MediaNode::Unknown(node) => format!(
                 "MediaPath({},{})",
                 node.node_sub_type,
@@ -215,16 +224,15 @@ impl TryFrom<&Node> for MediaNode {
                     }),
                     NodeSubTypeMedia::Vendor => {
                         let mut vendor_data = Vec::new();
-                        let guid = cursor.read_guid()?;
+                        let guid = cursor.read_efi_guid()?;
                         let _data_size = cursor.read_to_end(&mut vendor_data)?;
                         Ok(MediaNode::Vendor { guid, vendor_data })
                     }
-                    NodeSubTypeMedia::FilePath => {
-                        let path = cursor.read_ucs16_null_terminated_to_string()?;
-                        Ok(MediaNode::FilePath(path))
-                    }
-                    NodeSubTypeMedia::PiwgFvFile => Ok(MediaNode::PiwgFvFile(cursor.read_guid()?)),
-                    NodeSubTypeMedia::PiwgFv => Ok(MediaNode::PiwgFv(cursor.read_guid()?)),
+                    NodeSubTypeMedia::FilePath => Ok(MediaNode::FilePath(
+                        cursor.read_ucs16_null_terminated_to_string()?,
+                    )),
+                    NodeSubTypeMedia::FwVolFile => Ok(MediaNode::FvFile(cursor.read_efi_guid()?)),
+                    NodeSubTypeMedia::FwVol => Ok(MediaNode::Fv(cursor.read_efi_guid()?)),
                     NodeSubTypeMedia::RelativeOffsetRange => todo!(),
                     NodeSubTypeMedia::RamDisk => todo!(),
                     NodeSubTypeMedia::MediaProtocol => todo!(),

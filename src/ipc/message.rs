@@ -116,6 +116,17 @@ impl IpcMessage {
             match serde_json::from_str(s.as_str()) {
                 Ok(message) => {
                     dump_to_file(s.as_str(), false);
+                    // dumpt raw binary TPM logs to file
+                    if let Self::TpmLogs(logs) = &message {
+                        if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {
+                            match logs.save_raw_binary_logs(&log_dir) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!("Failed to save raw binary logs: {}", e);
+                                }
+                            }
+                        }
+                    }
                     message
                 }
                 Err(e) => {

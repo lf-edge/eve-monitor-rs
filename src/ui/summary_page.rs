@@ -136,7 +136,7 @@ impl IPresenter for SummaryPage {
         self.render_app_summary(model, frame, app_summary_rect);
 
         self.render_vault_status(model, frame, vault_status_rect);
-        self.render_pcr_decoder(model, frame, pcr_decoder_rect);
+        //self.render_pcr_decoder(model, frame, pcr_decoder_rect);
     }
 }
 
@@ -381,95 +381,95 @@ impl SummaryPage {
         frame.render_widget(vault_status_widget, status_rect);
     }
 
-    fn table_pcr14<'a>(data: &'a Vec<InterpretedTpmEvent>) -> (Table<'a>, u16) {
-        let width = [Constraint::Length(10), Constraint::Length(10)];
-        let raws = data
-            .iter()
-            .filter_map(|e| match e {
-                InterpretedTpmEvent::ConfigFileModified { file, status } => {
-                    Some(Row::new(vec![Text::from(file.clone()), status.to_text()]))
-                }
-                // InterpretedTpmEvent::Error(tpm_event) => todo!(),
-                _ => None,
-            })
-            .collect::<Vec<Row<'_>>>();
-        let height = raws.len() as u16 + 4;
-        let table = Table::new(raws, width)
-            .header(
-                Row::new(vec!["File", "Status"])
-                    .style(Style::new().bold())
-                    .bottom_margin(1),
-            )
-            .block(
-                ratatui::widgets::Block::default()
-                    .borders(ratatui::widgets::Borders::ALL)
-                    .title("PCR 14"),
-            )
-            .widths(&width)
-            .style(Style::default().fg(Color::White));
-        (table, height)
-    }
-    fn table_pcr8<'a>(data: &'a Vec<InterpretedTpmEvent>) -> (Table<'a>, u16) {
-        let width = [Constraint::Length(10), Constraint::Length(10)];
-        let raws = data
-            .iter()
-            .filter_map(|e| match e {
-                InterpretedTpmEvent::KernelCmdLineModified { old, new } => Some(Row::new(vec![
-                    Cell::new(old.as_str()),
-                    Cell::new(new.as_str()),
-                ])),
-                // InterpretedTpmEvent::Error(tpm_event) => todo!(),
-                _ => None,
-            })
-            .collect::<Vec<Row<'_>>>();
-        let height = raws.len() as u16 + 4;
-        let table = Table::new(raws, width)
-            .header(
-                Row::new(vec!["Old value", "new value"])
-                    .style(Style::new().bold())
-                    .bottom_margin(1),
-            )
-            .block(
-                ratatui::widgets::Block::default()
-                    .borders(ratatui::widgets::Borders::ALL)
-                    .title("Grub configuration modified"),
-            )
-            .widths(&width)
-            .style(Style::default().fg(Color::White));
-        (table, height)
-    }
+    // fn table_pcr14<'a>(data: &'a Vec<InterpretedTpmEvent>) -> (Table<'a>, u16) {
+    //     let width = [Constraint::Length(10), Constraint::Length(10)];
+    //     let raws = data
+    //         .iter()
+    //         .filter_map(|e| match e {
+    //             InterpretedTpmEvent::ConfigFileModified { file, status } => {
+    //                 Some(Row::new(vec![Text::from(file.clone()), status.to_text()]))
+    //             }
+    //             // InterpretedTpmEvent::Error(tpm_event) => todo!(),
+    //             _ => None,
+    //         })
+    //         .collect::<Vec<Row<'_>>>();
+    //     let height = raws.len() as u16 + 4;
+    //     let table = Table::new(raws, width)
+    //         .header(
+    //             Row::new(vec!["File", "Status"])
+    //                 .style(Style::new().bold())
+    //                 .bottom_margin(1),
+    //         )
+    //         .block(
+    //             ratatui::widgets::Block::default()
+    //                 .borders(ratatui::widgets::Borders::ALL)
+    //                 .title("PCR 14"),
+    //         )
+    //         .widths(&width)
+    //         .style(Style::default().fg(Color::White));
+    //     (table, height)
+    // }
+    // fn table_pcr8<'a>(data: &'a Vec<InterpretedTpmEvent>) -> (Table<'a>, u16) {
+    //     let width = [Constraint::Length(10), Constraint::Length(10)];
+    //     let raws = data
+    //         .iter()
+    //         .filter_map(|e| match e {
+    //             InterpretedTpmEvent::KernelCmdLineModified { old, new } => Some(Row::new(vec![
+    //                 Cell::new(old.as_str()),
+    //                 Cell::new(new.as_str()),
+    //             ])),
+    //             // InterpretedTpmEvent::Error(tpm_event) => todo!(),
+    //             _ => None,
+    //         })
+    //         .collect::<Vec<Row<'_>>>();
+    //     let height = raws.len() as u16 + 4;
+    //     let table = Table::new(raws, width)
+    //         .header(
+    //             Row::new(vec!["Old value", "new value"])
+    //                 .style(Style::new().bold())
+    //                 .bottom_margin(1),
+    //         )
+    //         .block(
+    //             ratatui::widgets::Block::default()
+    //                 .borders(ratatui::widgets::Borders::ALL)
+    //                 .title("Grub configuration modified"),
+    //         )
+    //         .widths(&width)
+    //         .style(Style::default().fg(Color::White));
+    //     (table, height)
+    // }
 
     // using ratauil
-    fn render_pcr_decoder(&self, model: &Rc<Model>, frame: &mut Frame<'_>, status_rect: Rect) {
-        let model = model.borrow();
-        let vault_status = &model.vault_status;
-        let tpm = &model.tpm_log_parse_result;
-        let mut tables = Vec::new();
-        let mut heights = Vec::new();
-        if vault_status.is_vault_locked() {
-            if let Some(tpm) = tpm {
-                for e in tpm {
-                    match e {
-                        (14, events) => {
-                            let (table, height) = Self::table_pcr14(events);
-                            tables.push(table);
-                            heights.push(Constraint::Length(height));
-                        }
-                        (8, events) => {
-                            let (table, height) = Self::table_pcr8(events);
-                            tables.push(table);
-                            heights.push(Constraint::Length(height));
-                        }
-                        _ => {}
-                    }
-                }
-                // create a layout
-                let layout = Layout::vertical(heights).margin(1);
-                let layout = layout.split(status_rect);
-                for (table, rect) in tables.into_iter().zip(layout.into_iter()) {
-                    frame.render_widget(table, *rect);
-                }
-            }
-        }
-    }
+    // fn render_pcr_decoder(&self, model: &Rc<Model>, frame: &mut Frame<'_>, status_rect: Rect) {
+    //     let model = model.borrow();
+    //     let vault_status = &model.vault_status;
+    //     let tpm = &model.tpm_log_parse_result;
+    //     let mut tables = Vec::new();
+    //     let mut heights = Vec::new();
+    //     if vault_status.is_vault_locked() {
+    //         if let Some(tpm) = tpm {
+    //             for e in tpm {
+    //                 match e {
+    //                     (14, events) => {
+    //                         let (table, height) = Self::table_pcr14(events);
+    //                         tables.push(table);
+    //                         heights.push(Constraint::Length(height));
+    //                     }
+    //                     (8, events) => {
+    //                         let (table, height) = Self::table_pcr8(events);
+    //                         tables.push(table);
+    //                         heights.push(Constraint::Length(height));
+    //                     }
+    //                     _ => {}
+    //                 }
+    //             }
+    //             // create a layout
+    //             let layout = Layout::vertical(heights).margin(1);
+    //             let layout = layout.split(status_rect);
+    //             for (table, rect) in tables.into_iter().zip(layout.into_iter()) {
+    //                 frame.render_widget(table, *rect);
+    //             }
+    //         }
+    //     }
+    // }
 }

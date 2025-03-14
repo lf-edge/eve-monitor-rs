@@ -50,6 +50,12 @@ pub enum TpmEvent {
     BootApplication(DevicePath),
 }
 
+#[derive(Debug, Clone)]
+pub struct TpmEventRef {
+    pub original_index: usize,
+    pub event: TpmEvent,
+}
+
 impl TpmEventDescribe for TpmEvent {
     fn semantic_key(&self) -> String {
         match self {

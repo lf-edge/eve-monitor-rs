@@ -1505,7 +1505,7 @@ pub enum ConfigGetStatus {
 }
 
 #[serde_as]
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct EfiVariable {
     pub name: String,
     #[serde_as(as = "Base64")]

@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::{borrow::Borrow, collections::HashMap};
 
 use super::{
-    tcg_tpmlog::{TPMLog, TcgTpmEvent},
-    tpmlog::{TpmEvent, TpmEventDescribe},
+    tcg_tpmlog::{TPMLog, TcgTpmEvent, TcgTpmEventRef},
+    tpmlog::{TpmEvent, TpmEventDescribe, TpmEventRef},
 };
 use crate::{
     efi::{
@@ -17,6 +17,7 @@ use log::{info, trace};
 use strum::Display;
 use uuid::uuid;
 
+#[derive(Debug, Clone)]
 pub struct EveTpmLog {
     pub log: TPMLog,
     pub efi_vars: Option<Vec<EfiVariable>>,
@@ -30,7 +31,7 @@ impl EveTpmLog {
             efi_vars: None,
         }
     }
-    pub fn get_events_for_pcr_ref(&self, pcr: u32) -> Vec<&TcgTpmEvent> {
+    pub fn get_events_for_pcr_ref(&self, pcr: u32) -> Vec<TcgTpmEventRef> {
         self.log.events_for_pcr_ref(pcr)
     }
 }
@@ -62,15 +63,18 @@ pub fn get_logs_pair(raw_logs: TpmLogs) -> Result<(EveTpmLog, EveTpmLog)> {
 }
 
 pub(super) fn tcg_tpm_log_translate(
-    tcg_log: Vec<&&TcgTpmEvent>,
+    tcg_log: Vec<&TcgTpmEventRef>,
     efi_vars: Option<&Vec<EfiVariable>>,
-) -> Result<Vec<TpmEvent>> {
+) -> Result<Vec<TpmEventRef>> {
     let mut events = Vec::new();
 
-    for event in tcg_log {
-        let tpm_event =
-            TpmEvent::try_from_tcg_event(event, efi_vars).context("try_from_tcg_event failed")?;
-        events.push(tpm_event);
+    for event_ref in tcg_log {
+        let tpm_event = TpmEvent::try_from_tcg_event(event_ref.event, efi_vars)
+            .context("try_from_tcg_event failed")?;
+        events.push(TpmEventRef {
+            original_index: event_ref.original_index,
+            event: tpm_event,
+        });
     }
 
     Ok(events)
@@ -81,25 +85,29 @@ pub(super) fn tcg_tpm_log_translate(
 // e.g. BootOrder changed from [1, 2, 3] to [1, 3, 2]. It is marked as deleted in
 // good log and inserted in bad log. However this is the same event with different data.
 pub(super) fn tpm_log_diff_semantic<'a>(
-    added_events: Vec<TpmEvent>,
-    deleted_events: Vec<TpmEvent>,
-) -> (Vec<TpmEvent>, Vec<TpmEvent>, Vec<(TpmEvent, TpmEvent)>) {
+    added_events: Vec<TpmEventRef>,
+    deleted_events: Vec<TpmEventRef>,
+) -> (
+    Vec<TpmEventRef>,
+    Vec<TpmEventRef>,
+    Vec<(TpmEventRef, TpmEventRef)>,
+) {
     let mut mods = Vec::new();
     let mut new_events = Vec::new();
 
     let mut del_map: HashMap<_, _> = deleted_events
         .into_iter()
         .map(|e| {
-            let key = e.semantic_key();
+            let key = e.event.semantic_key();
             (key, e)
         })
         .collect();
 
     for new_event in added_events.into_iter() {
-        if let Some(old_event) = del_map.remove(&new_event.semantic_key()) {
+        if let Some(old_event) = del_map.remove(&new_event.event.semantic_key()) {
             // LCS is not good when events were reordered
             // only add to mods if events are different
-            if old_event != new_event {
+            if old_event.event != new_event.event {
                 mods.push((old_event, new_event));
             }
         } else {
@@ -148,22 +156,24 @@ pub enum InterpretedTpmEvent {
         new: Vec<InterpretedBootEntry>,
     },
     EnterBios,
-    Error(TpmEvent),
+    Error,
 }
 
-#[derive(Debug, Display, Clone)]
-pub enum DecodedTpmEvent {
-    Raw(TpmEvent),
-    Interpreted(InterpretedTpmEvent, TpmEvent),
+#[derive(Debug, Clone)]
+pub struct InterpretedTpmEventRef {
+    pub pcr: u32,
+    pub old_original_index: usize,
+    pub new_original_index: usize,
+    pub event: InterpretedTpmEvent,
 }
 
 pub fn tpm_log_diff_interpret(
     pcrs: &[u32],
-    old_good: EveTpmLog,
-    new: EveTpmLog,
-) -> Result<Vec<(u32, Vec<InterpretedTpmEvent>)>> {
+    old_good: &EveTpmLog,
+    new: &EveTpmLog,
+) -> Result<Vec<InterpretedTpmEventRef>> {
     info!("tpm_log_diff_interpret");
-    let mut interpretations: HashMap<u32, Vec<InterpretedTpmEvent>> = HashMap::new();
+    let mut interpretations: Vec<InterpretedTpmEventRef> = Vec::new();
 
     for pcr in pcrs {
         let (deleted, added, mods) = tpm_log_diff_for_pcr(&old_good, &new, *pcr)?;
@@ -174,7 +184,7 @@ pub fn tpm_log_diff_interpret(
         }
         // print added
         for e in &added {
-            match e {
+            match &e.event {
                 TpmEvent::BootApplication(dp) => {
                     info!("BootApplication dp {}", dp.display(false));
                 }
@@ -189,38 +199,38 @@ pub fn tpm_log_diff_interpret(
 
         match pcr {
             13 => {
-                interpretations.insert(13, interpret_pcr14(deleted, added, mods));
+                interpretations.extend(interpret_pcr14(deleted, added, mods));
             }
             8 => {
-                interpretations.insert(8, interpret_pcr8(deleted, added, mods));
+                interpretations.extend(interpret_pcr8(deleted, added, mods));
             }
             1 => {
-                interpretations.insert(
-                    1,
-                    interpret_pcr1(deleted, added, mods, &old_good.efi_vars, &new.efi_vars),
-                );
+                interpretations.extend(interpret_pcr1(
+                    deleted,
+                    added,
+                    mods,
+                    &old_good.efi_vars,
+                    &new.efi_vars,
+                ));
             }
             14 => {
-                interpretations.insert(14, interpret_pcr14(deleted, added, mods));
+                interpretations.extend(interpret_pcr14(deleted, added, mods));
             }
             4 => {
-                interpretations.insert(4, interpret_pcr4(deleted, added, mods));
+                interpretations.extend(interpret_pcr4(deleted, added, mods));
             }
             _ => {
-                let errors = deleted
-                    .into_iter()
-                    .chain(added)
-                    .map(|e| InterpretedTpmEvent::Error(e))
-                    .collect::<Vec<InterpretedTpmEvent>>();
-                if !errors.is_empty() {
-                    interpretations.insert(*pcr, errors);
-                }
+                // let errors = deleted
+                //     .into_iter()
+                //     .chain(added)
+                //     .map(|e| InterpretedTpmEvent::Error(e.event))
+                //     .collect::<Vec<InterpretedTpmEvent>>();
+                // if !errors.is_empty() {
+                //     interpretations.insert(*pcr, errors);
+                // }
             }
         }
     }
-
-    let mut interpretations = interpretations.into_iter().collect::<Vec<_>>();
-    interpretations.sort_by_key(|e| e.0);
 
     Ok(interpretations)
 }
@@ -229,10 +239,17 @@ pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
     old_good: &'a EveTpmLog,
     new: &'b EveTpmLog,
     pcr: u32,
-) -> Result<(Vec<TpmEvent>, Vec<TpmEvent>, Vec<(TpmEvent, TpmEvent)>), anyhow::Error> {
+) -> Result<
+    (
+        Vec<TpmEventRef>,
+        Vec<TpmEventRef>,
+        Vec<(TpmEventRef, TpmEventRef)>,
+    ),
+    anyhow::Error,
+> {
     let good_events = old_good.get_events_for_pcr_ref(pcr);
     let bad_events = new.get_events_for_pcr_ref(pcr);
-    let lcs = compute_lcs::<TcgTpmEvent, _>(&good_events, &bad_events);
+    let lcs = compute_lcs(&good_events, &bad_events);
 
     // print LCS
     info!("==== LCS ====");
@@ -240,8 +257,7 @@ pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
         trace!("{:?}", e);
     }
 
-    let (deleted_events, added_events) =
-        collect_diff::<&TcgTpmEvent, _>(&good_events, &bad_events, &lcs);
+    let (deleted_events, added_events) = collect_diff(&good_events, &bad_events, &lcs);
 
     // print deleted
     info!("==== DELETED ====");
@@ -263,6 +279,17 @@ pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
     Ok((deleted, added, mods))
 }
 
+impl Default for InterpretedTpmEventRef {
+    fn default() -> Self {
+        Self {
+            pcr: 255,
+            old_original_index: 0,
+            new_original_index: 0,
+            event: InterpretedTpmEvent::Error,
+        }
+    }
+}
+
 // a pair of events represents a single file.
 // 1. file may be deleted (exists true->false)
 // 2. file may be added (exists false->true)
@@ -272,14 +299,19 @@ pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
 // detions and insertions are impossible. Only files measure-config cares about are recoded in PCR14
 // if an arbitrary file appears on /config partition it is not recorded in PCR14
 pub(super) fn interpret_pcr14(
-    _deleted_events: Vec<TpmEvent>,
-    _added_events: Vec<TpmEvent>,
-    mods: Vec<(TpmEvent, TpmEvent)>,
-) -> Vec<InterpretedTpmEvent> {
+    _deleted_events: Vec<TpmEventRef>,
+    _added_events: Vec<TpmEventRef>,
+    mods: Vec<(TpmEventRef, TpmEventRef)>,
+) -> Vec<InterpretedTpmEventRef> {
     let mut results = Vec::new();
 
     for (e1, e2) in mods.into_iter() {
-        match (e1, e2) {
+        let mut event_ref = InterpretedTpmEventRef::default();
+
+        event_ref.pcr = 14;
+        event_ref.old_original_index = e1.original_index;
+        event_ref.new_original_index = e2.original_index;
+        match (e1.event, e2.event) {
             (
                 TpmEvent::MeasureConfig {
                     file: file1,
@@ -293,41 +325,29 @@ pub(super) fn interpret_pcr14(
                 },
             ) => {
                 if file1 != file2 {
-                    results.push(InterpretedTpmEvent::Error(TpmEvent::MeasureConfig {
-                        file: file1,
-                        hash: hash1,
-                        exists: exists1,
-                    }));
-                    results.push(InterpretedTpmEvent::Error(TpmEvent::MeasureConfig {
-                        file: file2,
-                        hash: hash2,
-                        exists: exists2,
-                    }));
-                    continue;
-                }
-
-                if exists1 && !exists2 {
-                    results.push(InterpretedTpmEvent::ConfigFileModified {
+                    event_ref.event = InterpretedTpmEvent::Error;
+                } else if exists1 && !exists2 {
+                    event_ref.event = InterpretedTpmEvent::ConfigFileModified {
                         file: file1,
                         status: ConfigFileStatus::Deleted,
-                    });
+                    };
                 } else if !exists1 && exists2 {
-                    results.push(InterpretedTpmEvent::ConfigFileModified {
+                    event_ref.event = InterpretedTpmEvent::ConfigFileModified {
                         file: file1,
                         status: ConfigFileStatus::Added,
-                    });
+                    };
                 } else if exists1 && exists2 && hash1 != hash2 {
-                    results.push(InterpretedTpmEvent::ConfigFileModified {
+                    event_ref.event = InterpretedTpmEvent::ConfigFileModified {
                         file: file1,
                         status: ConfigFileStatus::Modified,
-                    });
+                    };
                 }
             }
             (a, b) => {
-                results.push(InterpretedTpmEvent::Error(a));
-                results.push(InterpretedTpmEvent::Error(b));
+                event_ref.event = InterpretedTpmEvent::Error;
             }
         }
+        results.push(event_ref);
     }
 
     results
@@ -349,12 +369,12 @@ fn parse_boot_variable(var: &EfiVariable) -> Result<InterpretedBootEntry> {
 }
 
 fn interpret_pcr1(
-    deleted_events: Vec<TpmEvent>,
-    new_events: Vec<TpmEvent>,
-    mods: Vec<(TpmEvent, TpmEvent)>,
+    deleted_events: Vec<TpmEventRef>,
+    new_events: Vec<TpmEventRef>,
+    mods: Vec<(TpmEventRef, TpmEventRef)>,
     old_efi_vars: &Option<Vec<EfiVariable>>,
     new_efi_vars: &Option<Vec<EfiVariable>>,
-) -> Vec<InterpretedTpmEvent> {
+) -> Vec<InterpretedTpmEventRef> {
     let mut boot_options_changed = false;
 
     let mut result = Vec::new();
@@ -385,7 +405,7 @@ fn interpret_pcr1(
     });
 
     for e in deleted_events {
-        match e {
+        match e.event {
             TpmEvent::BootEntry {
                 boot_num: _,
                 description: _,
@@ -395,13 +415,16 @@ fn interpret_pcr1(
                 boot_options_changed = true;
             }
             _ => {
-                result.push(InterpretedTpmEvent::Error(e));
+                let mut event_ref = InterpretedTpmEventRef::default();
+                event_ref.pcr = 1;
+                event_ref.old_original_index = e.original_index;
+                result.push(event_ref);
             }
         }
     }
 
     for e in new_events {
-        match e {
+        match e.event {
             TpmEvent::BootEntry {
                 boot_num: _,
                 description: _,
@@ -411,14 +434,24 @@ fn interpret_pcr1(
                 boot_options_changed = true;
             }
             _ => {
-                result.push(InterpretedTpmEvent::Error(e));
+                let mut event_ref = InterpretedTpmEventRef::default();
+                event_ref.new_original_index = e.original_index;
+                event_ref.pcr = 1;
+                result.push(event_ref);
             }
         }
     }
 
+    let mut old_boot_option_indexes = Vec::new();
+    let mut new_boot_option_indexes = Vec::new();
+
     // modified events
     for (e1, e2) in mods.iter() {
-        match (e1, e2) {
+        let mut event_ref = InterpretedTpmEventRef::default();
+        event_ref.pcr = 1;
+        event_ref.old_original_index = e1.original_index;
+        event_ref.new_original_index = e2.original_index;
+        match (&e1.event, &e2.event) {
             (
                 TpmEvent::BootEntry {
                     boot_num: boot_num1,
@@ -434,26 +467,37 @@ fn interpret_pcr1(
                 },
             ) => {
                 boot_options_changed = true;
+                old_boot_option_indexes.push(e1.original_index);
+                new_boot_option_indexes.push(e2.original_index);
             }
             (TpmEvent::BootOrder(o1), TpmEvent::BootOrder(o2)) => {
-                result.push(InterpretedTpmEvent::BootOrderModified {
+                event_ref.event = InterpretedTpmEvent::BootOrderModified {
                     old: o1.clone(),
                     new: o2.clone(),
-                });
+                };
             }
             _ => {
-                result.push(InterpretedTpmEvent::Error(e1.clone()));
-                result.push(InterpretedTpmEvent::Error(e2.clone()));
+                event_ref.event = InterpretedTpmEvent::Error;
             }
         }
+        result.push(event_ref);
     }
 
     if boot_options_changed {
         let old_boot_entries = old_boot_entries.unwrap_or_default();
         let new_boot_entries = new_boot_entries.unwrap_or_default();
-        result.push(InterpretedTpmEvent::BootOptionsModified {
-            old: old_boot_entries,
-            new: new_boot_entries,
+
+        let min_old_index = old_boot_option_indexes.iter().min().unwrap_or(&0);
+        let min_new_index = new_boot_option_indexes.iter().min().unwrap_or(&0);
+
+        result.push(InterpretedTpmEventRef {
+            pcr: 1,
+            old_original_index: *min_old_index,
+            new_original_index: *min_new_index,
+            event: InterpretedTpmEvent::BootOptionsModified {
+                old: old_boot_entries,
+                new: new_boot_entries,
+            },
         });
     }
 
@@ -480,18 +524,23 @@ fn interpret_pcr1(
 // when eve is updated this evet is updated
 // - EV_IPL grub_cmd setparams Boot 0.0.0-rucoder_monitor-tpm-log-15ec5037-dirty-2025-03-04.10.17-kvm-amd64
 fn interpret_pcr8(
-    _deletions: Vec<TpmEvent>,
-    _insertions: Vec<TpmEvent>,
-    mods: Vec<(TpmEvent, TpmEvent)>,
-) -> Vec<InterpretedTpmEvent> {
+    _deletions: Vec<TpmEventRef>,
+    _insertions: Vec<TpmEventRef>,
+    mods: Vec<(TpmEventRef, TpmEventRef)>,
+) -> Vec<InterpretedTpmEventRef> {
     let mut results = Vec::new();
 
     let mut grub_cfg_changed = false;
 
     for (e1, e2) in mods {
-        match (e1, e2) {
+        let mut event_ref = InterpretedTpmEventRef::default();
+        event_ref.pcr = 8;
+        event_ref.old_original_index = e1.original_index;
+        event_ref.new_original_index = e2.original_index;
+        match (e1.event, e2.event) {
             (TpmEvent::GrubKernelCmdline(d1), TpmEvent::GrubKernelCmdline(d2)) => {
-                results.push(InterpretedTpmEvent::KernelCmdLineModified { old: d1, new: d2 });
+                event_ref.event = InterpretedTpmEvent::KernelCmdLineModified { old: d1, new: d2 };
+                results.push(event_ref);
             }
             (TpmEvent::GrubCmd { cmd: _, params: _ }, TpmEvent::GrubCmd { cmd: _, params: _ }) => {
                 grub_cfg_changed = true;
@@ -500,27 +549,32 @@ fn interpret_pcr8(
                 grub_cfg_changed = true;
             }
             (e1, e2) => {
-                results.push(InterpretedTpmEvent::Error(e1));
-                results.push(InterpretedTpmEvent::Error(e2));
+                event_ref.event = InterpretedTpmEvent::Error;
             }
         }
     }
 
     if grub_cfg_changed {
-        results.push(InterpretedTpmEvent::GrubCfgModified);
+        let mut event_ref = InterpretedTpmEventRef::default();
+        event_ref.event = InterpretedTpmEvent::GrubCfgModified;
+        results.push(event_ref);
     }
 
     results
 }
 
 fn interpret_pcr4(
-    _deletions: Vec<TpmEvent>,
-    insertions: Vec<TpmEvent>,
-    _mods: Vec<(TpmEvent, TpmEvent)>,
-) -> Vec<InterpretedTpmEvent> {
+    _deletions: Vec<TpmEventRef>,
+    insertions: Vec<TpmEventRef>,
+    _mods: Vec<(TpmEventRef, TpmEventRef)>,
+) -> Vec<InterpretedTpmEventRef> {
     let mut reult = Vec::new();
     for e in insertions {
-        match e {
+        let mut event_ref = InterpretedTpmEventRef::default();
+        event_ref.new_original_index = e.original_index;
+        event_ref.pcr = 4;
+
+        match e.event {
             TpmEvent::CallingEfiAppFromBootOption | TpmEvent::FailedToStartEfiAppFromBootOption => {
                 // just skip it. there is no easy way to know which app exactly so we cannot
                 // reliably distinguish between two identical events
@@ -539,16 +593,17 @@ fn interpret_pcr4(
                     }
                 });
                 if is_bios {
-                    reult.push(InterpretedTpmEvent::EnterBios);
+                    event_ref.event = InterpretedTpmEvent::EnterBios;
                 } else {
-                    reult.push(InterpretedTpmEvent::Error(e));
+                    event_ref.event = InterpretedTpmEvent::Error;
                 }
             }
             _ => {
                 info!("I {:?}", e);
-                reult.push(InterpretedTpmEvent::Error(e));
+                event_ref.event = InterpretedTpmEvent::Error;
             }
         }
+        reult.push(event_ref);
     }
 
     reult

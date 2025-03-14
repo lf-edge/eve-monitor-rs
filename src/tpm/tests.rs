@@ -268,7 +268,10 @@ fn test_pcr14_file_removed() {
     assert_eq!(deleted.len(), 0);
     assert_eq!(mods.len(), 1);
 
-    let interpretation = interpret_pcr14(deleted, added, mods);
+    let interpretation = interpret_pcr14(deleted, added, mods)
+        .into_iter()
+        .map(|e| e.event)
+        .collect::<Vec<_>>();
 
     assert_eq!(interpretation.len(), 1);
     if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {
@@ -293,7 +296,10 @@ fn test_pcr14_new_file() {
     assert_eq!(added.len(), 0);
     assert_eq!(mods.len(), 1);
 
-    let interpretation = interpret_pcr14(deleted, added, mods);
+    let interpretation = interpret_pcr14(deleted, added, mods)
+        .into_iter()
+        .map(|e| e.event)
+        .collect::<Vec<_>>();
     assert_eq!(interpretation.len(), 1);
 
     if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {
@@ -321,7 +327,10 @@ fn test_pcr14_new_file_with_hash() {
     assert_eq!(deleted.len(), 0);
     assert_eq!(added.len(), 0);
 
-    let interpretation = interpret_pcr14(deleted, added, mods);
+    let interpretation = interpret_pcr14(deleted, added, mods)
+        .into_iter()
+        .map(|e| e.event)
+        .collect::<Vec<_>>();
 
     assert_eq!(interpretation.len(), 1);
     if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {
@@ -354,7 +363,10 @@ fn test_pcr14_file_modified() {
     assert_eq!(deleted.len(), 0);
     assert_eq!(mods.len(), 1);
 
-    let interpretation = interpret_pcr14(deleted, added, mods);
+    let interpretation = interpret_pcr14(deleted, added, mods)
+        .into_iter()
+        .map(|e| e.event)
+        .collect::<Vec<_>>();
 
     assert_eq!(interpretation.len(), 1);
     if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {
@@ -380,7 +392,10 @@ fn test_pcr14_real_log_1() {
     assert_eq!(deleted.len(), 0);
     assert_eq!(mods.len(), 2);
 
-    let interpretation = interpret_pcr14(deleted, added, mods);
+    let interpretation = interpret_pcr14(deleted, added, mods)
+        .into_iter()
+        .map(|e| e.event)
+        .collect::<Vec<_>>();
 
     assert_eq!(interpretation.len(), 2);
     if let InterpretedTpmEvent::ConfigFileModified { file, status } = &interpretation[0] {

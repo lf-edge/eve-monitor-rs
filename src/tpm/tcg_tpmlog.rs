@@ -289,8 +289,21 @@ impl TryFrom<TcgTpmEvent> for LogSpec {
 
 // struct SpecId00Event {}
 
+#[derive(Debug, Clone)]
 pub struct TPMLog {
     pub events: Vec<TcgTpmEvent>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TcgTpmEventRef<'a> {
+    pub original_index: usize,
+    pub event: &'a TcgTpmEvent,
+}
+
+impl PartialEq for TcgTpmEventRef<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        *self.event == *other.event
+    }
 }
 
 impl TPMLog {
@@ -382,10 +395,20 @@ impl TPMLog {
         Ok(events)
     }
 
-    pub fn events_for_pcr_ref(&self, pcr_index: u32) -> Vec<&TcgTpmEvent> {
+    pub fn events_for_pcr_ref(&self, pcr_index: u32) -> Vec<TcgTpmEventRef> {
         self.events
             .iter()
-            .filter(|e| e.pcr_index == pcr_index)
+            .enumerate()
+            .filter_map(|(index, e)| {
+                if e.pcr_index == pcr_index {
+                    Some(TcgTpmEventRef {
+                        original_index: index,
+                        event: e,
+                    })
+                } else {
+                    None
+                }
+            })
             .collect()
     }
 

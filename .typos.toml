@@ -1,2 +1,4 @@
 [default.extend-words]
-"ratatui" = "ratatui" # for ratatui crate
+ratatui = "ratatui"
+[default.extend-identifiers]
+ratatui = "ratatui"

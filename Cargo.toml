@@ -12,6 +12,11 @@ authors = [
 repository = "https://github.com/lf-edge/eve-monitor-rs"
 rust-version = "1.84"
 
+[package.metadata.typos.default.extend-identifiers]
+ratatui = "ratatui"
+[package.metadata.typos.default.extend-words]
+ratatui = "ratatui"
+
 [profile.release]
 strip = "debuginfo" # Automatically strip symbols from the binary.
 opt-level = "z"     # Optimize for size.
@@ -24,7 +29,7 @@ lto = true          # Enable link-time optimization.
 crossterm = { version = "0.28.1", default-features = false, features = [
     "event-stream",
     "use-dev-tty",
-    # we do not nees libc feature however 0.28.1 has a bug that requires it
+    # we do not need libc feature however 0.28.1 has a bug that requires it
     # https://github.com/crossterm-rs/crossterm/issues/935
     "libc",
 ] }
@@ -66,3 +71,10 @@ color-eyre = "0.6.3"
 human-panic = "2.0.2"
 libc = "0.2.161"
 strip-ansi-escapes = "0.2.0"
+byteorder = "1.5.0"
+num_enum = "0.7.3"
+sha2 = "0.10.8"
+regex = "1.11.1"
+hex = "0.4.3"
+[dev-dependencies]
+env_logger = "0.11.7"

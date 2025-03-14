@@ -183,6 +183,7 @@ impl IPresenter for ApplicationsPage {
 }
 
 impl ISelector for ApplicationsPage {
+    type Item = String;
     fn select_next(&mut self) {
         if let Some(selected) = self.list.state.selected() {
             if selected < self.list.size - 1 {

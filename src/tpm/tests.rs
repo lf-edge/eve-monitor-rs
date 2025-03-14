@@ -114,10 +114,7 @@ fn test_lcs_insertion() {
     ];
 
     // --- Compute LCS ---
-    let lcs = compute_lcs(
-        &good_events.iter().collect::<Vec<_>>(),
-        &bad_events.iter().collect::<Vec<_>>(),
-    );
+    let lcs = compute_lcs(&good_events, &bad_events);
 
     // --- Verify LCS ---
     // Expected LCS: A, B, C, D (excluding inserted E)
@@ -128,11 +125,7 @@ fn test_lcs_insertion() {
     assert_eq!(lcs[3].event_data, b"EventD");
 
     // --- Find Differences ---
-    let (deletions, insertions) = collect_diff(
-        &good_events.iter().collect::<Vec<_>>(),
-        &bad_events.iter().collect::<Vec<_>>(),
-        &lcs,
-    );
+    let (deletions, insertions) = collect_diff(&good_events, &bad_events, &lcs);
 
     // --- Assertions ---
     // 1. No deletions expected
@@ -169,21 +162,14 @@ fn test_added_boot_entry() {
     ];
 
     // --- Compute LCS ---
-    let lcs = compute_lcs(
-        &good_log.iter().collect::<Vec<_>>(),
-        &bad_log.iter().collect::<Vec<_>>(),
-    );
+    let lcs = compute_lcs(&good_log, &bad_log);
 
     // --- Find Differences ---
     // Find deletions and insertions
     // Note: We don't care about modifications in this test
     // since we are only adding a new boot entry
     // and not modifying an existing one
-    let (deletions, insertions) = collect_diff(
-        &good_log.iter().collect::<Vec<_>>(),
-        &bad_log.iter().collect::<Vec<_>>(),
-        &lcs,
-    );
+    let (deletions, insertions) = collect_diff(&good_log, &bad_log, &lcs);
 
     // --- Assertions ---
     // 1. No deletions expected
@@ -213,8 +199,8 @@ fn test_modified_boot_order() {
     let bad_event = mock_boot_order_event(&[0x0001, 0x0000], false);
 
     // Create logs with just the BootOrder event
-    let good_log = vec![&good_event];
-    let bad_log = vec![&bad_event];
+    let good_log = vec![good_event];
+    let bad_log = vec![bad_event];
 
     // --- Compute LCS ---
     let lcs = compute_lcs(&good_log, &bad_log);

@@ -173,7 +173,7 @@ impl IPresenter for VaultPage {
             info!("Loags not empty");
             // create  a layout
             let [top_part, user_tips] =
-                Layout::vertical([Constraint::Percentage(70), Constraint::Percentage(30)])
+                Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
                     .areas(*area);
 
             let [pcr_event_list_rect, decoding_rect] =
@@ -241,14 +241,14 @@ impl TpmEventDecode for InterpretedTpmEvent {
             InterpretedTpmEvent::ConfigFileModified { file, status } => {
                 Line::default().spans(vec![format!("{}: ", file).white(), status.to_span()])
             }
-            InterpretedTpmEvent::KernelCmdLineModified { old, new } => {
+            InterpretedTpmEvent::KernelCmdLineModified { old: _, new: _ } => {
                 Line::from("Kernel command line modified")
             }
             InterpretedTpmEvent::GrubCfgModified => Line::from("Grub settings were changed"),
-            InterpretedTpmEvent::BootOrderModified { old, new } => {
+            InterpretedTpmEvent::BootOrderModified { old: _, new: _ } => {
                 Line::from("Boot order was changed")
             }
-            InterpretedTpmEvent::BootOptionsModified { old, new } => {
+            InterpretedTpmEvent::BootOptionsModified { old: _, new: _ } => {
                 Line::from("Boot options were changed")
             }
             InterpretedTpmEvent::Error(tpm_event) => {

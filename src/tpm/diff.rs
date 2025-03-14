@@ -5,12 +5,14 @@ use super::{
     tpmlog::{TpmEvent, TpmEventDescribe},
 };
 use crate::{
-    efi::device_path::{media::MediaNode, PathNode},
+    efi::{
+        device_path::{media::MediaNode, PathNode},
+        vars::EfiLoadOption,
+    },
     ipc::eve_types::{EfiVariable, TpmLogs},
     lcs::{collect_diff, compute_lcs},
 };
 use anyhow::{anyhow, Context, Result};
-use color_eyre::owo_colors::OwoColorize;
 use log::{info, trace};
 use strum::Display;
 use uuid::uuid;
@@ -60,7 +62,7 @@ pub fn get_logs_pair(raw_logs: TpmLogs) -> Result<(EveTpmLog, EveTpmLog)> {
 }
 
 pub(super) fn tcg_tpm_log_translate(
-    tcg_log: &[&TcgTpmEvent],
+    tcg_log: Vec<&&TcgTpmEvent>,
     efi_vars: Option<&Vec<EfiVariable>>,
 ) -> Result<Vec<TpmEvent>> {
     let mut events = Vec::new();
@@ -119,6 +121,13 @@ pub enum ConfigFileStatus {
     Modified,
 }
 
+#[derive(Debug, Clone)]
+pub struct InterpretedBootEntry {
+    pub boot_num: u16,
+    pub description: String,
+    pub from_usb: bool,
+}
+
 #[derive(Debug, Display, Clone)]
 pub enum InterpretedTpmEvent {
     ConfigFileModified {
@@ -135,11 +144,17 @@ pub enum InterpretedTpmEvent {
         new: Vec<u16>,
     },
     BootOptionsModified {
-        old: Vec<String>,
-        new: Vec<String>,
+        old: Vec<InterpretedBootEntry>,
+        new: Vec<InterpretedBootEntry>,
     },
     EnterBios,
     Error(TpmEvent),
+}
+
+#[derive(Debug, Display, Clone)]
+pub enum DecodedTpmEvent {
+    Raw(TpmEvent),
+    Interpreted(InterpretedTpmEvent, TpmEvent),
 }
 
 pub fn tpm_log_diff_interpret(
@@ -180,7 +195,10 @@ pub fn tpm_log_diff_interpret(
                 interpretations.insert(8, interpret_pcr8(deleted, added, mods));
             }
             1 => {
-                interpretations.insert(1, interpret_pcr1(deleted, added, mods));
+                interpretations.insert(
+                    1,
+                    interpret_pcr1(deleted, added, mods, &old_good.efi_vars, &new.efi_vars),
+                );
             }
             14 => {
                 interpretations.insert(14, interpret_pcr14(deleted, added, mods));
@@ -214,15 +232,16 @@ pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
 ) -> Result<(Vec<TpmEvent>, Vec<TpmEvent>, Vec<(TpmEvent, TpmEvent)>), anyhow::Error> {
     let good_events = old_good.get_events_for_pcr_ref(pcr);
     let bad_events = new.get_events_for_pcr_ref(pcr);
-    let lcs = compute_lcs(&good_events, &bad_events);
+    let lcs = compute_lcs::<TcgTpmEvent, _>(&good_events, &bad_events);
 
     // print LCS
     info!("==== LCS ====");
-    for (e) in &lcs {
+    for e in &lcs {
         trace!("{:?}", e);
     }
 
-    let (deleted_events, added_events) = collect_diff(&good_events, &bad_events, &lcs);
+    let (deleted_events, added_events) =
+        collect_diff::<&TcgTpmEvent, _>(&good_events, &bad_events, &lcs);
 
     // print deleted
     info!("==== DELETED ====");
@@ -236,9 +255,9 @@ pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
         trace!("{:?}", e);
     }
 
-    let deleted_events = tcg_tpm_log_translate(&deleted_events, old_good.efi_vars.as_ref())
+    let deleted_events = tcg_tpm_log_translate(deleted_events, old_good.efi_vars.as_ref())
         .context("cannot translate deleted events")?;
-    let added_events = tcg_tpm_log_translate(&added_events, new.efi_vars.as_ref())
+    let added_events = tcg_tpm_log_translate(added_events, new.efi_vars.as_ref())
         .context("cannot translate added events")?;
     let (deleted, added, mods) = tpm_log_diff_semantic(added_events, deleted_events);
     Ok((deleted, added, mods))
@@ -314,30 +333,69 @@ pub(super) fn interpret_pcr14(
     results
 }
 
+fn is_usb_device_path(dp: &Vec<PathNode>) -> bool {
+    true
+}
+
+fn parse_boot_variable(var: &EfiVariable) -> Result<InterpretedBootEntry> {
+    let efi_load_options = EfiLoadOption::try_from(var.value.as_slice())
+        .context(format!("cannot parse {}", var.name))?;
+
+    Ok(InterpretedBootEntry {
+        boot_num: u16::from_str_radix(&var.name[4..], 16)?,
+        description: efi_load_options.description,
+        from_usb: is_usb_device_path(&efi_load_options.device_path_list.nodes),
+    })
+}
+
 fn interpret_pcr1(
     deleted_events: Vec<TpmEvent>,
     new_events: Vec<TpmEvent>,
     mods: Vec<(TpmEvent, TpmEvent)>,
+    old_efi_vars: &Option<Vec<EfiVariable>>,
+    new_efi_vars: &Option<Vec<EfiVariable>>,
 ) -> Vec<InterpretedTpmEvent> {
-    //println!("Interpreting [PCR 1]");
+    let mut boot_options_changed = false;
 
     let mut result = Vec::new();
+
+    // collect old and new boot entries
+    let old_boot_entries = old_efi_vars.as_ref().map(|v| {
+        v.iter()
+            .filter_map(|var| {
+                if var.name != "BootOrder" {
+                    parse_boot_variable(var).ok()
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    });
+
+    let new_boot_entries = new_efi_vars.as_ref().map(|v| {
+        v.iter()
+            .filter_map(|var| {
+                if var.name != "BootOrder" {
+                    parse_boot_variable(var).ok()
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    });
 
     for e in deleted_events {
         match e {
             TpmEvent::BootEntry {
-                boot_num,
-                description,
-                device_path,
-                attributes,
+                boot_num: _,
+                description: _,
+                device_path: _,
+                attributes: _,
             } => {
-                //println!("D {} {} {:?}", boot_num, description, device_path);
+                boot_options_changed = true;
             }
-            // TpmEvent::BootOrder(items) => {
-            //     // println!("D {:?}", items);
-            // }
             _ => {
-                //println!("D {:?}", e);
+                result.push(InterpretedTpmEvent::Error(e));
             }
         }
     }
@@ -345,21 +403,21 @@ fn interpret_pcr1(
     for e in new_events {
         match e {
             TpmEvent::BootEntry {
-                boot_num,
-                description,
-                device_path,
-                attributes,
+                boot_num: _,
+                description: _,
+                device_path: _,
+                attributes: _,
             } => {
-                //println!("I {} {} {:?}", boot_num, description, device_path);
+                boot_options_changed = true;
             }
             _ => {
-                //println!("I {:?}", e);
+                result.push(InterpretedTpmEvent::Error(e));
             }
         }
     }
 
-    // modifed events
-    for (e1, e2) in mods {
+    // modified events
+    for (e1, e2) in mods.iter() {
         match (e1, e2) {
             (
                 TpmEvent::BootEntry {
@@ -375,51 +433,30 @@ fn interpret_pcr1(
                     attributes: attributes2,
                 },
             ) => {
-                //println!("M {} {} {:?}", boot_num1, description1, device_path1);
-                //println!("M {} {} {:?}", boot_num2, description2, device_path2);
+                boot_options_changed = true;
             }
             (TpmEvent::BootOrder(o1), TpmEvent::BootOrder(o2)) => {
-                result.push(InterpretedTpmEvent::BootOrderModified { old: o1, new: o2 });
+                result.push(InterpretedTpmEvent::BootOrderModified {
+                    old: o1.clone(),
+                    new: o2.clone(),
+                });
             }
             _ => {
-                //println!("M {:?} -> {:?}", e1, e2);
+                result.push(InterpretedTpmEvent::Error(e1.clone()));
+                result.push(InterpretedTpmEvent::Error(e2.clone()));
             }
         }
     }
 
-    // parse inserted events
-    // Bootorder cannot be here
-    // for e in insertions {
-    //     if e.event_type.is_efi_boot_variable() {
-    //         // we can unwrap since this is how we got to this point. these events are parsable
-    //         let efi_var_name = TcgEfiVariableEvent::try_from(e).unwrap().unicode_name;
+    if boot_options_changed {
+        let old_boot_entries = old_boot_entries.unwrap_or_default();
+        let new_boot_entries = new_boot_entries.unwrap_or_default();
+        result.push(InterpretedTpmEvent::BootOptionsModified {
+            old: old_boot_entries,
+            new: new_boot_entries,
+        });
+    }
 
-    //         // find EFI variable with the same name
-    //         let efi_var = bad_efi_vars
-    //             .unwrap()
-    //             .iter()
-    //             .find(|v| v.name == efi_var_name)
-    //             .unwrap();
-
-    //         if efi_var_name.starts_with("Boot") {
-    //             let boot_var = EfiLoadOption::parse(&efi_var.value).unwrap().description;
-    //         }
-    //     } else {
-    //         println!("I {:?}", e.event_type);
-    //     }
-    // }
-
-    // e1 and e2 describe the same variable by design
-    // for (e1, e2) in mods {
-    //     if e1.event_type == TcgTpmEventType::EfiVariableBoot
-    //         || e1.event_type == TcgTpmEventType::EfiVariableBoot2
-    //     {
-    //         // we can unwrap since this is how we got to this point. these events are parsable
-    //         let efi_var_name = TcgEfiVariableEvent::try_from(*e1).unwrap().unicode_name;
-    //     } else {
-    //         println!("M {:?} -> {:?}", e1.event_type, e2.event_type);
-    //     }
-    // }
     result
 }
 
@@ -448,8 +485,6 @@ fn interpret_pcr8(
     mods: Vec<(TpmEvent, TpmEvent)>,
 ) -> Vec<InterpretedTpmEvent> {
     let mut results = Vec::new();
-
-    //println!("Interpreting [PCR 8]");
 
     let mut grub_cfg_changed = false;
 

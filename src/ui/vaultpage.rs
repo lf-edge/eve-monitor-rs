@@ -18,11 +18,13 @@ use crate::{
     efi::vars::EfiLoadOption,
     events::Event,
     ipc::eve_types::EfiVariable,
+    lcs::DiffOp,
     model::model::MonitorModel,
     tpm::{
-        diff::{ConfigFileStatus, EveTpmLog, InterpretedTpmEvent, InterpretedTpmEventRef},
+        diff::{ConfigFileStatus, InterpretedTpmEvent, InterpretedTpmEventRef},
         tcg_events::{TcgEfiActionEvent, TcgIPLEvent},
-        tcg_tpmlog::{TcgTpmEvent, TcgTpmEventType},
+        tcg_tpmlog::{TcgRawTpmEvent, TcgTpmEventType},
+        tpmlog::TpmEventRef,
     },
     traits::{IEventHandler, IPresenter, IWindow},
 };
@@ -37,6 +39,7 @@ trait TpmEventDecode {
 pub struct TpmEventList {
     state: TableState,
     size: usize,
+    page_size: usize,
 }
 
 impl ISelectable for TpmEventList {
@@ -65,6 +68,21 @@ pub struct VaultPage {
     expert_list_new: TpmEventList,
     expert_mode: bool,
     expert_selected_old: bool,
+    expert_diff_only: bool,
+}
+
+impl VaultPage {
+    fn get_page_size(&self) -> usize {
+        if self.expert_mode {
+            if self.expert_selected_old {
+                self.expert_list_old.page_size
+            } else {
+                self.expert_list_new.page_size
+            }
+        } else {
+            self.user_mode_list.page_size
+        }
+    }
 }
 
 impl IWindow for VaultPage {}
@@ -87,7 +105,7 @@ fn decoding_error_message(t: &TcgTpmEventType, e: String) -> String {
     format!("Error decoding event: {} : {}", t, e)
 }
 
-fn decode_tcg_tpm_event(event: &TcgTpmEvent) -> String {
+fn decode_tcg_tpm_event(event: &TcgRawTpmEvent) -> String {
     match event.event_type {
         TcgTpmEventType::PrebootCert => data_omitted_message(&event.event_type),
         TcgTpmEventType::PostCode => data_omitted_message(&event.event_type),
@@ -143,17 +161,21 @@ impl VaultPage {
             user_mode_list: TpmEventList {
                 state: TableState::default(),
                 size: 0,
+                page_size: 1,
             },
             expert_list_old: TpmEventList {
                 state: TableState::default(),
                 size: 0,
+                page_size: 1,
             },
             expert_list_new: TpmEventList {
                 state: TableState::default(),
                 size: 0,
+                page_size: 1,
             },
             expert_mode: false,
             expert_selected_old: true,
+            expert_diff_only: false,
         }
     }
 
@@ -221,172 +243,172 @@ impl VaultPage {
         selected_event
     }
 
-    fn render_event_details(
-        &mut self,
-        area: &Rect,
-        frame: &mut Frame<'_>,
-        bar: &str,
-        tpm_event: &InterpretedTpmEventRef,
-        old_good_log: &EveTpmLog,
-        new_log: &EveTpmLog,
-    ) {
-        match &tpm_event.event {
-            InterpretedTpmEvent::ConfigFileModified { file, status } => todo!(),
-            InterpretedTpmEvent::KernelCmdLineModified { old, new } => {
-                //create a flex layout with 2 paragraphs
-                let [old_rect, new_rect] =
-                    Layout::horizontal([Constraint::Max(5), Constraint::Max(5)])
-                        .flex(Flex::Start)
-                        .areas(*area);
-                // just display 2 paragpaths with wrapped text for old and new kernel command line
-                let old = Paragraph::new(old.as_str())
-                    .wrap(Wrap { trim: true })
-                    .block(
-                        ratatui::widgets::Block::default()
-                            .title("Old kernel command line")
-                            .borders(ratatui::widgets::Borders::ALL),
-                    );
+    // fn render_event_details(
+    //     &mut self,
+    //     area: &Rect,
+    //     frame: &mut Frame<'_>,
+    //     bar: &str,
+    //     tpm_event: &InterpretedTpmEventRef,
+    //     old_good_log: &EveTpmLog,
+    //     new_log: &EveTpmLog,
+    // ) {
+    //     match &tpm_event.event {
+    //         InterpretedTpmEvent::ConfigFileModified { file, status } => todo!(),
+    //         InterpretedTpmEvent::KernelCmdLineModified { old, new } => {
+    //             //create a flex layout with 2 paragraphs
+    //             let [old_rect, new_rect] =
+    //                 Layout::horizontal([Constraint::Max(5), Constraint::Max(5)])
+    //                     .flex(Flex::Start)
+    //                     .areas(*area);
+    //             // just display 2 paragpaths with wrapped text for old and new kernel command line
+    //             let old = Paragraph::new(old.as_str())
+    //                 .wrap(Wrap { trim: true })
+    //                 .block(
+    //                     ratatui::widgets::Block::default()
+    //                         .title("Old kernel command line")
+    //                         .borders(ratatui::widgets::Borders::ALL),
+    //                 );
 
-                let new = Paragraph::new(new.as_str())
-                    .wrap(Wrap { trim: true })
-                    .block(
-                        ratatui::widgets::Block::default()
-                            .title("New kernel command line")
-                            .borders(ratatui::widgets::Borders::ALL),
-                    );
+    //             let new = Paragraph::new(new.as_str())
+    //                 .wrap(Wrap { trim: true })
+    //                 .block(
+    //                     ratatui::widgets::Block::default()
+    //                         .title("New kernel command line")
+    //                         .borders(ratatui::widgets::Borders::ALL),
+    //                 );
 
-                frame.render_widget(old, old_rect);
-                frame.render_widget(new, new_rect);
-            }
-            InterpretedTpmEvent::GrubCfgModified => {
-                //just a paragraph with block explaining that /config/grub.cfg was modified by user
-                let w = Paragraph::new("file /config/grub.cfg was changed by user")
-                    .wrap(Wrap { trim: true })
-                    .block(
-                        ratatui::widgets::Block::default()
-                            .title("Event details")
-                            .borders(ratatui::widgets::Borders::ALL),
-                    );
-                frame.render_widget(w, *area);
-            }
-            InterpretedTpmEvent::BootOrderModified { old, new } => {
-                let old_vars = old_good_log.efi_vars.as_ref().unwrap();
-                let new_vars = new_log.efi_vars.as_ref().unwrap();
-                let old = old
-                    .iter()
-                    .map(|i| {
-                        // look for variable with name and get display string
-                        get_boot_efi_var_description(*i, &old_vars)
-                    })
-                    .collect::<Vec<_>>();
+    //             frame.render_widget(old, old_rect);
+    //             frame.render_widget(new, new_rect);
+    //         }
+    //         InterpretedTpmEvent::GrubCfgModified => {
+    //             //just a paragraph with block explaining that /config/grub.cfg was modified by user
+    //             let w = Paragraph::new("file /config/grub.cfg was changed by user")
+    //                 .wrap(Wrap { trim: true })
+    //                 .block(
+    //                     ratatui::widgets::Block::default()
+    //                         .title("Event details")
+    //                         .borders(ratatui::widgets::Borders::ALL),
+    //                 );
+    //             frame.render_widget(w, *area);
+    //         }
+    //         InterpretedTpmEvent::BootOrderModified { old, new } => {
+    //             let old_vars = old_good_log.efi_vars.as_ref().unwrap();
+    //             let new_vars = new_log.efi_vars.as_ref().unwrap();
+    //             let old = old
+    //                 .iter()
+    //                 .map(|i| {
+    //                     // look for variable with name and get display string
+    //                     get_boot_efi_var_description(*i, &old_vars)
+    //                 })
+    //                 .collect::<Vec<_>>();
 
-                let new = new
-                    .iter()
-                    .map(|i| {
-                        // look for variable with name and get display string
-                        get_boot_efi_var_description(*i, &new_vars)
-                    })
-                    .collect::<Vec<_>>();
+    //             let new = new
+    //                 .iter()
+    //                 .map(|i| {
+    //                     // look for variable with name and get display string
+    //                     get_boot_efi_var_description(*i, &new_vars)
+    //                 })
+    //                 .collect::<Vec<_>>();
 
-                let mut rows = vec![];
+    //             let mut rows = vec![];
 
-                for (i, (old, new)) in old.iter().zip(new.iter()).enumerate() {
-                    rows.push(Row::new(vec![
-                        Cell::from(i.to_string()).green(),
-                        Cell::from(old.as_ref().unwrap().as_str()),
-                        Cell::from(new.as_ref().unwrap().as_str()),
-                    ]));
-                }
+    //             for (i, (old, new)) in old.iter().zip(new.iter()).enumerate() {
+    //                 rows.push(Row::new(vec![
+    //                     Cell::from(i.to_string()).green(),
+    //                     Cell::from(old.as_ref().unwrap().as_str()),
+    //                     Cell::from(new.as_ref().unwrap().as_str()),
+    //                 ]));
+    //             }
 
-                let width = &[
-                    Constraint::Length(4),
-                    Constraint::Percentage(50),
-                    Constraint::Percentage(50),
-                ];
+    //             let width = &[
+    //                 Constraint::Length(4),
+    //                 Constraint::Percentage(50),
+    //                 Constraint::Percentage(50),
+    //             ];
 
-                let header = Row::new(vec!["#", "Expected", "Current"])
-                    .style(Style::default().fg(Color::Yellow))
-                    .height(1);
+    //             let header = Row::new(vec!["#", "Expected", "Current"])
+    //                 .style(Style::default().fg(Color::Yellow))
+    //                 .height(1);
 
-                let table = ratatui::widgets::Table::new(rows, width)
-                    .header(header)
-                    .block(
-                        ratatui::widgets::Block::default()
-                            .title("Event details")
-                            .borders(ratatui::widgets::Borders::ALL),
-                    )
-                    .column_spacing(1)
-                    .highlight_symbol(Text::from(vec![
-                        // "".into(),
-                        bar.into(),
-                        bar.into(),
-                        bar.into(),
-                        bar.into(),
-                        // "".into(),
-                    ]))
-                    .highlight_spacing(HighlightSpacing::Always)
-                    .row_highlight_style(
-                        ratatui::style::Style::default().fg(ratatui::style::Color::Yellow),
-                    );
+    //             let table = ratatui::widgets::Table::new(rows, width)
+    //                 .header(header)
+    //                 .block(
+    //                     ratatui::widgets::Block::default()
+    //                         .title("Event details")
+    //                         .borders(ratatui::widgets::Borders::ALL),
+    //                 )
+    //                 .column_spacing(1)
+    //                 .highlight_symbol(Text::from(vec![
+    //                     // "".into(),
+    //                     bar.into(),
+    //                     bar.into(),
+    //                     bar.into(),
+    //                     bar.into(),
+    //                     // "".into(),
+    //                 ]))
+    //                 .highlight_spacing(HighlightSpacing::Always)
+    //                 .row_highlight_style(
+    //                     ratatui::style::Style::default().fg(ratatui::style::Color::Yellow),
+    //                 );
 
-                frame.render_widget(table, *area);
-            }
-            InterpretedTpmEvent::BootOptionsModified { old, new } => todo!(),
-            InterpretedTpmEvent::EnterBios => {
-                let rows = vec![Row::new(vec![
-                    Cell::from("1"),
-                    Cell::from("User entered BIOS setup"),
-                ])];
+    //             frame.render_widget(table, *area);
+    //         }
+    //         InterpretedTpmEvent::BootOptionsModified { old, new } => todo!(),
+    //         InterpretedTpmEvent::EnterBios => {
+    //             let rows = vec![Row::new(vec![
+    //                 Cell::from("1"),
+    //                 Cell::from("User entered BIOS setup"),
+    //             ])];
 
-                let width = &[Constraint::Length(4), Constraint::Fill(1)];
+    //             let width = &[Constraint::Length(4), Constraint::Fill(1)];
 
-                let header = Row::new(vec!["#", "Description"])
-                    .style(Style::default().fg(Color::Yellow))
-                    .height(1);
+    //             let header = Row::new(vec!["#", "Description"])
+    //                 .style(Style::default().fg(Color::Yellow))
+    //                 .height(1);
 
-                let table = ratatui::widgets::Table::new(rows, width)
-                    .header(header)
-                    .block(
-                        ratatui::widgets::Block::default()
-                            .title("Event details")
-                            .borders(ratatui::widgets::Borders::ALL),
-                    )
-                    .column_spacing(1)
-                    .highlight_symbol(Text::from(vec![
-                        // "".into(),
-                        bar.into(),
-                        bar.into(),
-                        bar.into(),
-                        bar.into(),
-                        // "".into(),
-                    ]))
-                    .highlight_spacing(HighlightSpacing::Always)
-                    .row_highlight_style(
-                        ratatui::style::Style::default().fg(ratatui::style::Color::Yellow),
-                    );
+    //             let table = ratatui::widgets::Table::new(rows, width)
+    //                 .header(header)
+    //                 .block(
+    //                     ratatui::widgets::Block::default()
+    //                         .title("Event details")
+    //                         .borders(ratatui::widgets::Borders::ALL),
+    //                 )
+    //                 .column_spacing(1)
+    //                 .highlight_symbol(Text::from(vec![
+    //                     // "".into(),
+    //                     bar.into(),
+    //                     bar.into(),
+    //                     bar.into(),
+    //                     bar.into(),
+    //                     // "".into(),
+    //                 ]))
+    //                 .highlight_spacing(HighlightSpacing::Always)
+    //                 .row_highlight_style(
+    //                     ratatui::style::Style::default().fg(ratatui::style::Color::Yellow),
+    //                 );
 
-                frame.render_widget(table, *area);
-            }
-            InterpretedTpmEvent::Error => {
-                // find original TPM events using indexes
-                let old_event = old_good_log
-                    .log
-                    .events
-                    .get(tpm_event.old_original_index)
-                    .unwrap();
+    //             frame.render_widget(table, *area);
+    //         }
+    //         InterpretedTpmEvent::Error => {
+    //             // // find original TPM events using indexes
+    //             // let old_event = old_good_log
+    //             //     .log
+    //             //     .events
+    //             //     .get(tpm_event.old_original_index)
+    //             //     .unwrap();
 
-                let w = Paragraph::new(decoding_error_message(&old_event.event, tpm_event.error))
-                    .wrap(Wrap { trim: true })
-                    .block(
-                        ratatui::widgets::Block::default()
-                            .title("Event details")
-                            .borders(ratatui::widgets::Borders::ALL),
-                    );
+    //             // let w = Paragraph::new(decoding_error_message(&old_event.event, tpm_event.error))
+    //             //     .wrap(Wrap { trim: true })
+    //             //     .block(
+    //             //         ratatui::widgets::Block::default()
+    //             //             .title("Event details")
+    //             //             .borders(ratatui::widgets::Borders::ALL),
+    //             //     );
 
-                frame.render_widget(table, *area);
-            }
-        }
-    }
+    //             // frame.render_widget(table, *area);
+    //         }
+    //     }
+    // }
 
     fn render_user_mode(
         &mut self,
@@ -397,33 +419,33 @@ impl VaultPage {
         let bar = " █ ";
         let model = model.borrow();
         info!("Rendering VaultPage");
-        if let Some(tpm_events) = model.tpm_log_parse_result.as_ref() {
-            let old_good_log = model.old_good_tpm_log.as_ref().unwrap();
-            let new_log = model.new_tpm_log.as_ref().unwrap();
+        // if let Some(tpm_events) = model.tpm_log_parse_result.as_ref() {
+        //     let old_good_log = model.old_good_tpm_log.as_ref().unwrap();
+        //     let new_log = model.new_tpm_log.as_ref().unwrap();
 
-            info!("Logs not empty");
-            // create  a layout
-            let [top_part, user_tips] =
-                Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
-                    .areas(*area);
+        //     info!("Logs not empty");
+        //     // create  a layout
+        //     let [top_part, user_tips] =
+        //         Layout::vertical([Constraint::Percentage(50), Constraint::Percentage(50)])
+        //             .areas(*area);
 
-            let [pcr_event_list_rect, decoding_rect] =
-                Layout::horizontal([Constraint::Length(40), Constraint::Fill(1)]).areas(top_part);
+        //     let [pcr_event_list_rect, decoding_rect] =
+        //         Layout::horizontal([Constraint::Length(40), Constraint::Fill(1)]).areas(top_part);
 
-            let g_m = is_grub_cfg_modified(tpm_events);
-            if let Some(selected) =
-                self.render_event_list(&pcr_event_list_rect, frame, bar, tpm_events)
-            {
-                self.render_event_details(
-                    &decoding_rect,
-                    frame,
-                    bar,
-                    &selected,
-                    old_good_log,
-                    new_log,
-                );
-            }
-        }
+        //     let g_m = is_grub_cfg_modified(tpm_events);
+        //     if let Some(selected) =
+        //         self.render_event_list(&pcr_event_list_rect, frame, bar, tpm_events)
+        //     {
+        //         self.render_event_details(
+        //             &decoding_rect,
+        //             frame,
+        //             bar,
+        //             &selected,
+        //             old_good_log,
+        //             new_log,
+        //         );
+        //     }
+        // }
     }
 
     fn render_expert_mode(
@@ -439,48 +461,102 @@ impl VaultPage {
         let [left, right] =
             Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
                 .areas(top_part);
+        self.expert_list_old.page_size = left.height as usize;
+        self.expert_list_new.page_size = right.height as usize;
 
-        self.expert_list_old.size = model.old_good_tpm_log.as_ref().unwrap().log.events.len();
-        self.expert_list_new.size = model.new_tpm_log.as_ref().unwrap().log.events.len();
+        self.expert_list_old.size = model
+            .tpm
+            .as_ref()
+            .unwrap()
+            .diff_ops_old
+            .as_ref()
+            .unwrap()
+            .len();
+        self.expert_list_new.size = model
+            .tpm
+            .as_ref()
+            .unwrap()
+            .diff_ops_new
+            .as_ref()
+            .unwrap()
+            .len();
 
         Self::render_tpm_log_expert(
             left,
             frame,
-            model.old_good_tpm_log.as_ref().unwrap(),
+            &model.tpm.as_ref().unwrap().parsed_old.as_ref().unwrap(),
+            &model.tpm.as_ref().unwrap().diff_ops_old.as_ref().unwrap(),
             "Expected",
             self.expert_selected_old,
             &mut self.expert_list_old.state,
+            self.expert_diff_only,
         );
         Self::render_tpm_log_expert(
             right,
             frame,
-            model.new_tpm_log.as_ref().unwrap(),
+            &model.tpm.as_ref().unwrap().parsed_new.as_ref().unwrap(),
+            &model.tpm.as_ref().unwrap().diff_ops_new.as_ref().unwrap(),
             "Current",
             !self.expert_selected_old,
             &mut self.expert_list_new.state,
+            self.expert_diff_only,
         );
+    }
+
+    fn cell_for_event_op<'a, 'b>(event: &'a TpmEventRef, op: &'a DiffOp) -> Cell<'b> {
+        match op {
+            DiffOp::Unchanged(_) => Cell::from("=".to_string()),
+            DiffOp::Add(_) => Cell::from("+".to_string()),
+            DiffOp::Del(_) => Cell::from("-".to_string()),
+            DiffOp::Mod(_, _) => Cell::from("~".to_string()),
+        }
+    }
+
+    fn style_for_event_op<'a, 'b>(op: &'a DiffOp) -> Style {
+        match op {
+            DiffOp::Unchanged(_) => Style::default().fg(Color::White),
+            DiffOp::Add(_) => Style::default().fg(Color::Green),
+            DiffOp::Del(_) => Style::default().fg(Color::Red),
+            DiffOp::Mod(_, _) => Style::default().fg(Color::Blue),
+        }
+    }
+
+    pub fn row_for_tpm_event_expert<'a, 'b>(
+        event: &'a TpmEventRef,
+        op: &'a DiffOp,
+    ) -> ratatui::widgets::Row<'b> {
+        let style = Self::style_for_event_op(op);
+        let cells = vec![
+            Cell::from(event.pcr.to_string()).style(style),
+            Cell::from(event.event.event_type().to_string()).style(style),
+            Self::cell_for_event_op(event, op).style(style),
+        ];
+        ratatui::widgets::Row::new(cells)
     }
 
     fn render_tpm_log_expert(
         area: Rect,
         frame: &mut Frame<'_>,
-        evelt_log: &EveTpmLog,
+        evelt_log: &Vec<TpmEventRef>,
+        edit_ops: &Vec<DiffOp>,
         caption: &str,
         selected: bool,
         list_state: &mut TableState,
+        diff_only: bool,
     ) {
         let bar = " █ ";
-        let tpm_events = &evelt_log.log.events;
+        let tpm_events = &evelt_log;
         let rows = tpm_events
             .iter()
-            .map(|event| {
-                let cells = vec![
-                    Cell::from(event.pcr_index.to_string()).green(),
-                    Cell::from(event.event_type.to_string()),
-                    Cell::from(decode_tcg_tpm_event(event)).gray(),
-                ];
-                ratatui::widgets::Row::new(cells)
+            .zip(edit_ops.iter())
+            .filter(|(_, op)| {
+                if diff_only {
+                    !matches!(op, DiffOp::Unchanged(_))
+                } else {
+                    true
+                }
             })
+            .map(|(event, op)| Self::row_for_tpm_event_expert(event, op))
             .collect::<Vec<ratatui::widgets::Row>>();
 
         let width = &[
@@ -587,6 +663,30 @@ impl ISelector for VaultPage {
             self.user_mode_list.selected()
         }
     }
+
+    fn select_forward_by(&mut self, count: usize) {
+        if self.expert_mode {
+            if self.expert_selected_old {
+                self.expert_list_old.select_forward_by(count);
+            } else {
+                self.expert_list_new.select_forward_by(count);
+            }
+        } else {
+            self.user_mode_list.select_forward_by(count);
+        }
+    }
+
+    fn select_backward_by(&mut self, count: usize) {
+        if self.expert_mode {
+            if self.expert_selected_old {
+                self.expert_list_old.select_backward_by(count);
+            } else {
+                self.expert_list_new.select_backward_by(count);
+            }
+        } else {
+            self.user_mode_list.select_backward_by(count);
+        }
+    }
 }
 
 impl IPresenter for VaultPage {
@@ -631,11 +731,20 @@ impl IEventHandler for VaultPage {
                 KeyCode::End | KeyCode::PageDown if key.modifiers == KeyModifiers::CONTROL => {
                     self.select_last()
                 }
+                KeyCode::PageUp => {
+                    self.select_backward_by(self.get_page_size());
+                }
+                KeyCode::PageDown => {
+                    self.select_forward_by(self.get_page_size());
+                }
                 KeyCode::F(12) => {
                     self.expert_mode = !self.expert_mode;
                     if self.expert_mode {
                         self.expert_selected_old = true;
                     }
+                }
+                KeyCode::F(2) => {
+                    self.expert_diff_only = !self.expert_diff_only;
                 }
                 KeyCode::Tab => {
                     if self.expert_mode {

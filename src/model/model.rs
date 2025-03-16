@@ -14,10 +14,7 @@ use crate::{
         DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
         EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, TpmLogs, ZedAgentStatus,
     },
-    tpm::diff::{
-        get_logs_pair, tpm_log_diff_interpret, EveTpmLog, InterpretedTpmEvent,
-        InterpretedTpmEventRef,
-    },
+    tpm::diff::{InterpretedTpmEvent, InterpretedTpmEventRef, TpmLogDiff},
 };
 
 use super::device::network::NetworkInterfaceStatus;
@@ -102,9 +99,7 @@ pub struct MonitorModel {
     pub dpc_list: Option<DevicePortConfigList>,
     pub dpc_key: Option<String>,
     pub z_status: Option<ZedAgentStatus>,
-    pub tpm_log_parse_result: Option<Vec<InterpretedTpmEventRef>>,
-    pub old_good_tpm_log: Option<EveTpmLog>,
-    pub new_tpm_log: Option<EveTpmLog>,
+    pub tpm: Option<TpmLogDiff>,
     pub error_log: Vec<String>,
 }
 
@@ -244,13 +239,13 @@ impl MonitorModel {
         self.z_status = Some(status);
     }
 
-    fn parse_tpm_logs(
-        pcrs: &Vec<u32>,
-        old_good_log: &EveTpmLog,
-        new_log: &EveTpmLog,
-    ) -> Result<Vec<InterpretedTpmEventRef>> {
-        tpm_log_diff_interpret(pcrs, old_good_log, new_log)
-    }
+    // fn parse_tpm_logs(
+    //     pcrs: &Vec<u32>,
+    //     old_good_log: &EveTpmLog,
+    //     new_log: &EveTpmLog,
+    // ) -> Result<Vec<InterpretedTpmEventRef>> {
+    //     tpm_log_diff_interpret(pcrs, old_good_log, new_log)
+    // }
 
     pub fn update_tpm_logs(&mut self, logs: TpmLogs) {
         info!("Got TPM logs from EVE");
@@ -258,31 +253,45 @@ impl MonitorModel {
         // TODO: start async parsing
         match &self.vault_status {
             VaultStatus::Locked(_, Some(pcrs)) => {
-                if let Ok((old_good_log, new_log)) = get_logs_pair(logs) {
-                    self.old_good_tpm_log = Some(old_good_log);
-                    self.new_tpm_log = Some(new_log);
-                    match Self::parse_tpm_logs(
-                        &pcrs,
-                        self.old_good_tpm_log.as_ref().unwrap(),
-                        self.new_tpm_log.as_ref().unwrap(),
-                    ) {
-                        Ok(mut logs) => {
-                            // sort tpm_events by new_original_index
-                            // TODO: add sorting by PCR
-                            logs.sort_by_key(|e| e.new_original_index);
-                            self.tpm_log_parse_result = Some(logs);
-                        }
-                        Err(e) => {
-                            error!("Error parsing TPM logs: {:?}", e);
-                            self.error_log
-                                .push(format!("Error parsing TPM logs: {:?}", e));
-                        }
+                let diff = TpmLogDiff::try_from(logs);
+                match diff {
+                    Ok(mut diff) => {
+                        diff.set_affected_pcrs(pcrs);
+                        diff.translate_logs();
+                        diff.diff();
+                        self.tpm = Some(diff);
                     }
-                } else {
-                    error!("Failed to get TPM logs pair");
-                    self.error_log
-                        .push("Failed to get TPM logs pair".to_string());
+                    Err(e) => {
+                        error!("Error parsing TPM logs: {:?}", e);
+                        self.error_log
+                            .push(format!("Error parsing TPM logs: {:?}", e));
+                    }
                 }
+                // if let Ok((old_good_log, new_log)) = get_logs_pair(logs) {
+                //     self.old_good_tpm_log = Some(old_good_log);
+                //     self.new_tpm_log = Some(new_log);
+                //     match Self::parse_tpm_logs(
+                //         &pcrs,
+                //         self.old_good_tpm_log.as_ref().unwrap(),
+                //         self.new_tpm_log.as_ref().unwrap(),
+                //     ) {
+                //         Ok(mut logs) => {
+                //             // sort tpm_events by new_original_index
+                //             // TODO: add sorting by PCR
+                //             logs.sort_by_key(|e| e.new_original_index);
+                //             self.tpm_log_parse_result = Some(logs);
+                //         }
+                //         Err(e) => {
+                //             error!("Error parsing TPM logs: {:?}", e);
+                //             self.error_log
+                //                 .push(format!("Error parsing TPM logs: {:?}", e));
+                //         }
+                //     }
+                // } else {
+                //     error!("Failed to get TPM logs pair");
+                //     self.error_log
+                //         .push("Failed to get TPM logs pair".to_string());
+                // }
             }
             _ => {
                 error!("TPM logs received while vault is not locked");
@@ -305,9 +314,7 @@ impl Default for MonitorModel {
             dpc_list: None,
             dpc_key: None,
             z_status: None,
-            tpm_log_parse_result: None,
-            old_good_tpm_log: None,
-            new_tpm_log: None,
+            tpm: None,
             error_log: Vec::new(),
         }
     }

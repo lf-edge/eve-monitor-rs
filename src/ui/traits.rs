@@ -21,6 +21,8 @@ pub trait ISelector {
     fn select_previous(&mut self);
     fn select_first(&mut self);
     fn select_last(&mut self);
+    fn select_forward_by(&mut self, count: usize) {}
+    fn select_backward_by(&mut self, count: usize) {}
     fn selected(&self) -> Option<Self::Item>;
 }
 
@@ -60,5 +62,25 @@ where
     fn selected(&self) -> Option<Self::Item> {
         // call selected from ISelectable
         self.selected_item()
+    }
+
+    fn select_forward_by(&mut self, count: usize) {
+        if let Some(index) = self.current_index() {
+            let next_index = (index + count) % self.selection_size();
+            self.select(next_index);
+        } else {
+            self.select_first();
+        }
+    }
+
+    fn select_backward_by(&mut self, count: usize) {
+        if let Some(index) = self.current_index() {
+            let previous_index = if index == 0 {
+                self.selection_size().saturating_sub(count)
+            } else {
+                index.saturating_sub(count)
+            };
+            self.select(previous_index);
+        }
     }
 }

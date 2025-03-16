@@ -7,21 +7,32 @@ use std::io::{Cursor, Read};
 use byteorder::{LittleEndian, ReadBytesExt};
 use uuid::Uuid;
 
-use super::tcg_tpmlog::{TcgTpmEvent, TcgTpmEventType};
+use super::tcg_tpmlog::{TcgRawTpmEvent, TcgTpmEventType};
 
-// typedef struct tdUEFI_IMAGE_LOAD_EVENT {
-// UEFI_PHYSICAL_ADDRESS ImageLocationInMemory; // PE/COFF image
-// UINT64
-//  ImageLengthInMemory;
-// UINT64
-//  ImageLinkTimeAddress;
-// UINT64
-//  LengthOfDevicePath;
-// UEFI_DEVICE_PATH
-//  DevicePath[LengthOfDevicePath];
-// // SeeUEFI spec for
-// // the encodings.
-// } UEFI_IMAGE_LOAD_EVENT
+// pub enum TcgTpmEvent {
+//     UefiImageLoad(TcgUefiImageLoadEvent),
+//     IPL(TcgIPLEvent),
+//     EfiAction(TcgEfiActionEvent),
+//     EfiVariable(TcgEfiVariableEvent),
+//     RawEvent(TcgRawTpmEvent),
+// }
+
+// impl TryFrom<TcgRawTpmEvent> for TcgTpmEvent {
+//     type Error = anyhow::Error;
+
+//     fn try_from(value: TcgRawTpmEvent) -> std::result::Result<Self, Self::Error> {
+//         match value.event_type {
+//             TcgTpmEventType::EfiBootServicesApplication => Ok(TcgTpmEvent::UefiImageLoad(
+//                 TcgUefiImageLoadEvent::try_from(value)?,
+//             )),
+//             TcgTpmEventType::IPL => Ok(TcgTpmEvent::IPL(TcgIPLEvent::try_from(value)?)),
+//             TcgTpmEventType::EfiAction => {
+//                 Ok(TcgTpmEvent::EfiAction(TcgEfiActionEvent::try_from(value)?))
+//             }
+//             _ => Ok(TcgTpmEvent::RawEvent(value)),
+//         }
+//     }
+// }
 
 pub struct TcgUefiImageLoadEvent {
     pub image_location_in_memory: u64,
@@ -38,18 +49,18 @@ pub struct TcgEfiVariableEvent {
     pub variable_data: Vec<u8>,
 }
 
-impl TryFrom<TcgTpmEvent> for TcgUefiImageLoadEvent {
+impl TryFrom<TcgRawTpmEvent> for TcgUefiImageLoadEvent {
     type Error = anyhow::Error;
 
-    fn try_from(value: TcgTpmEvent) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: TcgRawTpmEvent) -> std::result::Result<Self, Self::Error> {
         Self::try_from(&value)
     }
 }
 
-impl TryFrom<&TcgTpmEvent> for TcgUefiImageLoadEvent {
+impl TryFrom<&TcgRawTpmEvent> for TcgUefiImageLoadEvent {
     type Error = anyhow::Error;
 
-    fn try_from(value: &TcgTpmEvent) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &TcgRawTpmEvent) -> std::result::Result<Self, Self::Error> {
         // the event is valid for PCR 2,4 only
         if value.pcr_index != 2 && value.pcr_index != 4 {
             return Err(anyhow::anyhow!(
@@ -95,10 +106,10 @@ impl TcgIPLEvent {
     }
 }
 
-impl TryFrom<&TcgTpmEvent> for TcgIPLEvent {
+impl TryFrom<&TcgRawTpmEvent> for TcgIPLEvent {
     type Error = anyhow::Error;
 
-    fn try_from(value: &TcgTpmEvent) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &TcgRawTpmEvent) -> std::result::Result<Self, Self::Error> {
         if value.event_type != TcgTpmEventType::IPL {
             return Err(anyhow::anyhow!(
                 "Invalid event type for IPL event {}",
@@ -121,18 +132,18 @@ impl TcgEfiActionEvent {
     }
 }
 
-impl TryFrom<TcgTpmEvent> for TcgEfiActionEvent {
+impl TryFrom<TcgRawTpmEvent> for TcgEfiActionEvent {
     type Error = anyhow::Error;
 
-    fn try_from(value: TcgTpmEvent) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: TcgRawTpmEvent) -> std::result::Result<Self, Self::Error> {
         Self::try_from(&value)
     }
 }
 
-impl TryFrom<&TcgTpmEvent> for TcgEfiActionEvent {
+impl TryFrom<&TcgRawTpmEvent> for TcgEfiActionEvent {
     type Error = anyhow::Error;
 
-    fn try_from(value: &TcgTpmEvent) -> Result<Self> {
+    fn try_from(value: &TcgRawTpmEvent) -> Result<Self> {
         if value.event_type != TcgTpmEventType::EfiAction {
             return Err(anyhow::anyhow!(
                 "Invalid event type for action event {}",
@@ -147,18 +158,18 @@ impl TryFrom<&TcgTpmEvent> for TcgEfiActionEvent {
     }
 }
 
-impl TryFrom<TcgTpmEvent> for TcgEfiVariableEvent {
+impl TryFrom<TcgRawTpmEvent> for TcgEfiVariableEvent {
     type Error = anyhow::Error;
 
-    fn try_from(value: TcgTpmEvent) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: TcgRawTpmEvent) -> std::result::Result<Self, Self::Error> {
         Self::try_from(&value)
     }
 }
 
-impl TryFrom<&TcgTpmEvent> for TcgEfiVariableEvent {
+impl TryFrom<&TcgRawTpmEvent> for TcgEfiVariableEvent {
     type Error = anyhow::Error;
 
-    fn try_from(value: &TcgTpmEvent) -> std::result::Result<Self, Self::Error> {
+    fn try_from(value: &TcgRawTpmEvent) -> std::result::Result<Self, Self::Error> {
         if !value.event_type.is_efi_boot_variable() {
             return Err(anyhow::anyhow!(
                 "Invalid event type for EFI variable boot event {}",

@@ -1,3 +1,5 @@
+use std::path::Display;
+
 use crate::{
     efi::{
         device_path::DevicePath,
@@ -7,16 +9,59 @@ use crate::{
 };
 
 use super::{
+    diff::LcsSemanticKey,
     tcg_events::{TcgEfiActionEvent, TcgEfiVariableEvent, TcgIPLEvent, TcgUefiImageLoadEvent},
-    tcg_tpmlog::{TcgTpmEvent, TcgTpmEventType},
+    tcg_tpmlog::{TcgRawTpmEvent, TcgTpmEventRef, TcgTpmEventType, TcgTpmLog},
 };
 use anyhow::{anyhow, Context, Result};
 use log::debug;
 use regex::Regex;
+use uuid::Uuid;
 
-pub trait TpmEventDescribe {
-    fn semantic_key(&self) -> String;
+#[derive(Debug)]
+pub struct EveTpmLog {
+    log: TcgTpmLog,
+    efi_vars: Vec<EfiVariable>,
 }
+
+impl EveTpmLog {
+    pub fn new(log: TcgTpmLog, efi_vars: Vec<EfiVariable>) -> Self {
+        Self { log, efi_vars }
+    }
+
+    // ONLY FOR TESTING
+    // pub fn from_events(events: Vec<TcgTpmEvent>) -> Self {
+    //     let log = TPMLog::from_events(events);
+    //     Self {
+    //         log,
+    //         efi_vars: None,
+    //     }
+    // }
+    pub fn get_events_for_pcr_ref(&self, pcr: u32) -> Vec<TcgTpmEventRef> {
+        self.log.events_for_pcr_ref(pcr)
+    }
+
+    pub fn tcg_tpm_log_translate(&mut self) -> Result<Vec<TpmEventRef>> {
+        let mut events = Vec::new();
+
+        for event_ref in self.log.events.iter().enumerate() {
+            let pcr = event_ref.1.pcr_index;
+            let tpm_event = TpmEvent::try_from_tcg_event(event_ref.1, &self.efi_vars)
+                .context("try_from_tcg_event failed")?;
+            events.push(TpmEventRef {
+                original_index: event_ref.0,
+                event: tpm_event,
+                pcr,
+            });
+        }
+
+        Ok(events)
+    }
+}
+
+// pub trait TpmEventDescribe {
+//     fn semantic_key(&self) -> String;
+// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TpmEvent {
@@ -31,6 +76,11 @@ pub enum TpmEvent {
         attributes: LoadOptionAttributes,
     },
     BootOrder(Vec<u16>),
+    EfiVariable {
+        name: String,
+        guid: Uuid,
+        value: Vec<u8>,
+    },
     MeasureRoot {
         rootfs: String,
         hash: String,
@@ -48,16 +98,61 @@ pub enum TpmEvent {
     GrubLinuxEfi(String),
     GrubGenericEvent(String, String),
     BootApplication(DevicePath),
+    UnparsedEvent(TcgTpmEventType),
 }
 
 #[derive(Debug, Clone)]
 pub struct TpmEventRef {
     pub original_index: usize,
+    pub pcr: u32,
     pub event: TpmEvent,
 }
 
-impl TpmEventDescribe for TpmEvent {
-    fn semantic_key(&self) -> String {
+impl PartialEq for TpmEventRef {
+    fn eq(&self, other: &Self) -> bool {
+        self.event == other.event
+    }
+}
+
+impl std::fmt::Display for TpmEventRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}: pcr={} {}",
+            self.original_index,
+            self.pcr,
+            self.event.semantic_key()
+        )
+    }
+}
+
+impl<'a> LcsSemanticKey<'a, String> for TpmEventRef {
+    fn semantic_key(&'a self) -> String {
+        self.event.semantic_key()
+    }
+}
+
+impl TpmEvent {
+    pub fn event_type(&self) -> TcgTpmEventType {
+        match self {
+            TpmEvent::EfiAction(_) => TcgTpmEventType::EfiAction,
+            TpmEvent::ActionEnterBiosSetup => TcgTpmEventType::Action,
+            TpmEvent::CallingEfiAppFromBootOption => TcgTpmEventType::EfiAction,
+            TpmEvent::FailedToStartEfiAppFromBootOption => TcgTpmEventType::EfiAction,
+            TpmEvent::BootEntry { .. } => TcgTpmEventType::EfiVariableBoot,
+            TpmEvent::BootOrder(_) => TcgTpmEventType::EfiVariableBoot,
+            TpmEvent::EfiVariable { .. } => TcgTpmEventType::EfiVariableBoot,
+            TpmEvent::MeasureRoot { .. } => TcgTpmEventType::IPL,
+            TpmEvent::MeasureConfig { .. } => TcgTpmEventType::EfiAction,
+            TpmEvent::GrubCmd { .. } => TcgTpmEventType::IPL,
+            TpmEvent::GrubKernelCmdline(_) => TcgTpmEventType::IPL,
+            TpmEvent::GrubLinuxEfi(_) => TcgTpmEventType::IPL,
+            TpmEvent::GrubGenericEvent(_, _) => TcgTpmEventType::IPL,
+            TpmEvent::BootApplication(_) => TcgTpmEventType::EfiBootServicesApplication,
+            TpmEvent::UnparsedEvent(t) => t.clone(),
+        }
+    }
+    pub fn semantic_key(&self) -> String {
         match self {
             TpmEvent::EfiAction(s) => s.clone(),
             TpmEvent::BootEntry {
@@ -83,40 +178,65 @@ impl TpmEventDescribe for TpmEvent {
             TpmEvent::FailedToStartEfiAppFromBootOption => {
                 "Failed to start app from boot option".to_string()
             }
+            TpmEvent::EfiVariable {
+                name,
+                guid,
+                value: _,
+            } => {
+                format!("EfiVariable-{}-{}", name, guid)
+            }
+            TpmEvent::UnparsedEvent(name) => {
+                format!("UnparsedEvent-{}", name)
+            }
         }
     }
 }
 
-fn parse_efi_boot_variable(event: &TcgTpmEvent, efi_vars: &Vec<EfiVariable>) -> Result<TpmEvent> {
-    let var = TcgEfiVariableEvent::try_from(event)?;
-    let name = var.unicode_name;
-    let var = efi_vars
-        .into_iter()
-        .find(|v| v.name == name)
-        .ok_or_else(|| anyhow!("No variable found for boot event"))?;
+fn parse_efi_boot_variable(
+    event: &TcgRawTpmEvent,
+    efi_vars: &Vec<EfiVariable>,
+) -> Result<TpmEvent> {
+    let var_event = TcgEfiVariableEvent::try_from(event)?;
+    let name_from_event = var_event.unicode_name;
+    let guid_from_event = var_event.vendor_guid;
+    let efi_var = efi_vars.into_iter().find(|v| v.name == name_from_event);
 
-    let re = Regex::new(r"Boot[0-9A-F]{4}").unwrap();
+    if let Some(efi_var) = efi_var {
+        let re = Regex::new(r"Boot[0-9A-F]{4}").unwrap();
 
-    if name == "BootOrder" {
-        let efi_boot_order =
-            EfiBootOrder::try_from(var.value.as_slice()).context("cannot parse BootOrder")?;
-        Ok(TpmEvent::BootOrder(efi_boot_order.boot_order))
-    } else if re.is_match(&name) {
-        let efi_load_options = EfiLoadOption::try_from(var.value.as_slice())
-            .context(format!("cannot parse {}", name))?;
-        Ok(TpmEvent::BootEntry {
-            boot_num: u16::from_str_radix(&name[4..], 16)?,
-            description: efi_load_options.description,
-            device_path: efi_load_options.device_path_list,
-            attributes: efi_load_options.attributes,
-        })
+        if name_from_event == "BootOrder" {
+            let efi_boot_order = EfiBootOrder::try_from(efi_var.value.as_slice())
+                .context("cannot parse BootOrder")?;
+            Ok(TpmEvent::BootOrder(efi_boot_order.boot_order))
+        } else if re.is_match(&name_from_event) {
+            let efi_load_options = EfiLoadOption::try_from(efi_var.value.as_slice())
+                .context(format!("cannot parse {}", name_from_event))?;
+            Ok(TpmEvent::BootEntry {
+                boot_num: u16::from_str_radix(&name_from_event[4..], 16)?,
+                description: efi_load_options.description,
+                device_path: efi_load_options.device_path_list,
+                attributes: efi_load_options.attributes,
+            })
+        } else {
+            // this may happen if and only if we have not implemented support
+            // for this specific variable in rust code but eve is sending it
+            Ok(TpmEvent::EfiVariable {
+                name: name_from_event,
+                guid: guid_from_event,
+                value: efi_var.value.clone(),
+            })
+        }
     } else {
-        Err(anyhow!("Unsupported Boot variable `{}'", name))
+        Ok(TpmEvent::EfiVariable {
+            name: name_from_event,
+            guid: guid_from_event,
+            value: var_event.variable_data.clone(),
+        })
     }
 }
 
 // IPL event may appear in several PCRs: 8 and 13
-fn parse_grub_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+fn parse_grub_event(event: &TcgRawTpmEvent) -> Result<TpmEvent> {
     let efi_grub_event = TcgIPLEvent::try_from(event)?;
 
     // split by first space and keep both parts
@@ -143,7 +263,7 @@ fn parse_grub_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
     }
 }
 
-fn parse_efi_action_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+fn parse_efi_action_event(event: &TcgRawTpmEvent) -> Result<TpmEvent> {
     let action_event = TcgEfiActionEvent::try_from(event)?;
     let action_value = action_event.get();
 
@@ -163,7 +283,7 @@ fn parse_efi_action_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
     }
 }
 
-fn parse_action_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+fn parse_action_event(event: &TcgRawTpmEvent) -> Result<TpmEvent> {
     let action_event = TcgEfiActionEvent::try_from(event)?;
     let action_value = action_event.get();
 
@@ -177,7 +297,7 @@ fn parse_action_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
     }
 }
 
-fn parse_measure_config_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+fn parse_measure_config_event(event: &TcgRawTpmEvent) -> Result<TpmEvent> {
     if event.pcr_index != 14 {
         return Err(anyhow::anyhow!(
             "Invalid PCR index for measure config event"
@@ -207,7 +327,7 @@ fn parse_measure_config_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
     })
 }
 
-fn parse_rootfs_measurement_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
+fn parse_rootfs_measurement_event(event: &TcgRawTpmEvent) -> Result<TpmEvent> {
     if event.pcr_index != 13 {
         return Err(anyhow::anyhow!(
             "Invalid PCR index for rootfs measurement event"
@@ -235,26 +355,17 @@ fn parse_rootfs_measurement_event(event: &TcgTpmEvent) -> Result<TpmEvent> {
 }
 
 impl TpmEvent {
-    pub fn try_from_tcg_event(
-        event: &TcgTpmEvent,
-        efi_vars: Option<&Vec<EfiVariable>>,
-    ) -> Result<Self> {
+    pub fn try_from_tcg_event(event: &TcgRawTpmEvent, efi_vars: &Vec<EfiVariable>) -> Result<Self> {
         match event.event_type {
             TcgTpmEventType::EfiAction if event.pcr_index == 14 => {
                 parse_measure_config_event(event)
             }
             TcgTpmEventType::EfiAction => parse_efi_action_event(event),
             TcgTpmEventType::EfiVariableBoot | TcgTpmEventType::EfiVariableBoot2 => {
-                if let Some(efi_vars) = efi_vars {
-                    parse_efi_boot_variable(event, efi_vars)
-                        .context("parse_efi_boot_variable failed")
-                } else {
-                    return Err(anyhow!("No EFI variables provided for boot event"));
-                }
+                parse_efi_boot_variable(event, efi_vars).context("parse_efi_boot_variable failed")
             }
             TcgTpmEventType::IPL if event.pcr_index == 8 => parse_grub_event(event),
             TcgTpmEventType::IPL if event.pcr_index == 13 => parse_rootfs_measurement_event(event),
-            //EfiBootServicesApplication
             TcgTpmEventType::EfiBootServicesApplication => {
                 let image_load_event = TcgUefiImageLoadEvent::try_from(event)?;
                 let device_path = DevicePath::try_from(image_load_event.device_path.as_slice())?;
@@ -265,47 +376,7 @@ impl TpmEvent {
                 Ok(TpmEvent::BootApplication(device_path))
             }
             TcgTpmEventType::Action => parse_efi_action_event(event),
-            TcgTpmEventType::Separator => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-            TcgTpmEventType::NoAction => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-            TcgTpmEventType::CPUMicrocode => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-
-            TcgTpmEventType::PrebootCert => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-            TcgTpmEventType::PostCode => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-            TcgTpmEventType::EfiVariableDriverConfig => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-            TcgTpmEventType::EfiGPTEvent => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-            TcgTpmEventType::EfiHandoffTables => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-            TcgTpmEventType::EfiHandoffTables2 => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-            TcgTpmEventType::EfiGPTEvent2 => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-            TcgTpmEventType::EfiVariableAuthority => {
-                Err(anyhow!("Unimplemented event type: {:?}", event.event_type))
-            }
-
-            // FIXME: we should not error here
-            _ => Err(anyhow!(
-                "Unsupported event type: {:?} for PCR {}",
-                event.event_type,
-                event.pcr_index
-            )),
+            _ => Ok(TpmEvent::UnparsedEvent(event.event_type.clone())),
         }
     }
 }

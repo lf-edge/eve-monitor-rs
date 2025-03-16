@@ -1,8 +1,8 @@
 use std::{borrow::Borrow, collections::HashMap};
 
 use super::{
-    tcg_tpmlog::{TPMLog, TcgTpmEvent, TcgTpmEventRef},
-    tpmlog::{TpmEvent, TpmEventDescribe, TpmEventRef},
+    tcg_tpmlog::{TcgRawTpmEvent, TcgTpmEventRef, TcgTpmLog},
+    tpmlog::{EveTpmLog, TpmEvent, TpmEventRef},
 };
 use crate::{
     efi::{
@@ -10,74 +10,108 @@ use crate::{
         vars::EfiLoadOption,
     },
     ipc::eve_types::{EfiVariable, TpmLogs},
-    lcs::{collect_diff, compute_lcs},
+    lcs::{collect_diff, compute_lcs, produce_diff_ops3_no_reorder, DiffOp},
 };
 use anyhow::{anyhow, Context, Result};
 use log::{info, trace};
 use strum::Display;
 use uuid::uuid;
 
-#[derive(Debug, Clone)]
-pub struct EveTpmLog {
-    pub log: TPMLog,
-    pub efi_vars: Option<Vec<EfiVariable>>,
+pub trait LcsSemanticKey<'a, S>
+where
+    S: Eq,
+{
+    fn semantic_key(&'a self) -> S;
 }
 
-impl EveTpmLog {
-    pub fn from_events(events: Vec<TcgTpmEvent>) -> Self {
-        let log = TPMLog::from_events(events);
-        Self {
-            log,
-            efi_vars: None,
+#[derive(Debug)]
+pub struct TpmLogDiff {
+    tpm_log_parse_result: Option<Vec<InterpretedTpmEventRef>>,
+    old_good_tpm_log: EveTpmLog,
+    new_tpm_log: EveTpmLog,
+    affected_pcrs: Vec<u32>,
+    pub parsed_old: Option<Vec<TpmEventRef>>,
+    pub parsed_new: Option<Vec<TpmEventRef>>,
+    pub diff_ops_old: Option<Vec<DiffOp>>,
+    pub diff_ops_new: Option<Vec<DiffOp>>,
+}
+
+impl TpmLogDiff {
+    pub fn set_affected_pcrs(&mut self, pcrs: &Vec<u32>) {
+        self.affected_pcrs = pcrs.clone();
+    }
+    fn get_logs_pair(raw_logs: TpmLogs) -> Result<(EveTpmLog, EveTpmLog)> {
+        if raw_logs.efi_vars_success.is_none() || raw_logs.efi_vars_failed.is_none() {
+            return Err(anyhow!("EFI vars are missing in TPM logs from EVE"));
         }
+        let good = raw_logs
+            .last_good_log
+            .or(raw_logs.backup_good_log)
+            .ok_or(anyhow!("'goog' log is missing"))
+            .map(|raw_log| -> Result<EveTpmLog> {
+                Ok(EveTpmLog::new(
+                    TcgTpmLog::from_slice(&raw_log)?,
+                    raw_logs.efi_vars_success.unwrap(),
+                ))
+            })??;
+
+        let bad = raw_logs
+            .last_failed_log
+            .or(raw_logs.backup_failed_log)
+            .ok_or(anyhow!("'bad' log is missing"))
+            .map(|raw_log| -> Result<EveTpmLog> {
+                Ok(EveTpmLog::new(
+                    TcgTpmLog::from_slice(&raw_log)?,
+                    raw_logs.efi_vars_failed.unwrap(),
+                ))
+            })??;
+
+        Ok((good, bad))
     }
-    pub fn get_events_for_pcr_ref(&self, pcr: u32) -> Vec<TcgTpmEventRef> {
-        self.log.events_for_pcr_ref(pcr)
+    pub fn translate_logs(&mut self) {
+        self.parsed_old = Some(self.old_good_tpm_log.tcg_tpm_log_translate().unwrap());
+        self.parsed_new = Some(self.new_tpm_log.tcg_tpm_log_translate().unwrap());
+    }
+
+    pub fn diff(&mut self) {
+        let lcs = compute_lcs(
+            self.parsed_old.as_ref().unwrap(),
+            self.parsed_new.as_ref().unwrap(),
+        );
+        let (del, ins) = collect_diff(
+            self.parsed_old.as_ref().unwrap(),
+            self.parsed_new.as_ref().unwrap(),
+            &lcs,
+        );
+        let (del, new, mods) = diff_semantic_simple(
+            self.parsed_old.as_ref().unwrap(),
+            self.parsed_new.as_ref().unwrap(),
+            &del,
+            &ins,
+        );
+        let (diff_ops_old, diff_ops_new) = produce_diff_ops3_no_reorder(&lcs, &new, &del, &mods);
+        self.diff_ops_old = Some(diff_ops_old);
+        self.diff_ops_new = Some(diff_ops_new);
     }
 }
 
-pub fn get_logs_pair(raw_logs: TpmLogs) -> Result<(EveTpmLog, EveTpmLog)> {
-    let good = raw_logs
-        .last_good_log
-        .or(raw_logs.backup_good_log)
-        .ok_or(anyhow!("'goog' log is missing"))
-        .map(|raw_log| -> Result<EveTpmLog> {
-            Ok(EveTpmLog {
-                log: TPMLog::from_slice(&raw_log)?,
-                efi_vars: raw_logs.efi_vars_success,
-            })
-        })??;
+impl TryFrom<TpmLogs> for TpmLogDiff {
+    type Error = anyhow::Error;
 
-    let bad = raw_logs
-        .last_failed_log
-        .or(raw_logs.backup_failed_log)
-        .ok_or(anyhow!("'bad' log is missing"))
-        .map(|raw_log| -> Result<EveTpmLog> {
-            Ok(EveTpmLog {
-                log: TPMLog::from_slice(&raw_log)?,
-                efi_vars: raw_logs.efi_vars_failed,
-            })
-        })??;
+    fn try_from(value: TpmLogs) -> std::result::Result<Self, Self::Error> {
+        let (old_good_tpm_log, new_tpm_log) = Self::get_logs_pair(value)?;
 
-    Ok((good, bad))
-}
-
-pub(super) fn tcg_tpm_log_translate(
-    tcg_log: Vec<&TcgTpmEventRef>,
-    efi_vars: Option<&Vec<EfiVariable>>,
-) -> Result<Vec<TpmEventRef>> {
-    let mut events = Vec::new();
-
-    for event_ref in tcg_log {
-        let tpm_event = TpmEvent::try_from_tcg_event(event_ref.event, efi_vars)
-            .context("try_from_tcg_event failed")?;
-        events.push(TpmEventRef {
-            original_index: event_ref.original_index,
-            event: tpm_event,
-        });
+        Ok(TpmLogDiff {
+            tpm_log_parse_result: None,
+            old_good_tpm_log,
+            new_tpm_log,
+            affected_pcrs: Vec::new(),
+            parsed_old: None,
+            parsed_new: None,
+            diff_ops_old: None,
+            diff_ops_new: None,
+        })
     }
-
-    Ok(events)
 }
 
 // Detect simanctic Modifications
@@ -112,6 +146,49 @@ pub(super) fn tpm_log_diff_semantic<'a>(
             }
         } else {
             new_events.push(new_event);
+        }
+    }
+
+    // what is left in hashmap are real deleted events
+    // FIXME: do we care about the order?
+    let deleted_events = del_map.into_values().collect::<Vec<_>>();
+
+    (deleted_events, new_events, mods)
+}
+
+pub fn diff_semantic_simple<'a, T, S>(
+    old: &'a [T],
+    new: &'a [T],
+    deleted_events: &[usize],
+    added_events: &[usize],
+) -> (Vec<usize>, Vec<usize>, Vec<(usize, usize)>)
+where
+    T: LcsSemanticKey<'a, S> + PartialEq + std::fmt::Display,
+    S: Eq + std::hash::Hash + std::fmt::Display,
+{
+    let mut mods = Vec::new();
+    let mut new_events = Vec::new();
+
+    let mut del_map = deleted_events
+        .iter()
+        .map(|e| {
+            let key = old[*e].semantic_key();
+            (key, *e)
+        })
+        .collect::<HashMap<S, usize>>();
+
+    for new_event in added_events.iter() {
+        trace!("key: {}", new[*new_event].semantic_key());
+        if let Some(old_event) = del_map.remove(&new[*new_event].semantic_key()) {
+            // trace!("old[old_event]={}", old[old_event]);
+            // trace!("new[*new_event]={}", new[*new_event]);
+            // LCS is not good when events were reordered
+            // only add to mods if events are different
+            if old[old_event] != new[*new_event] {
+                mods.push((old_event, *new_event));
+            }
+        } else {
+            new_events.push(*new_event);
         }
     }
 
@@ -167,117 +244,117 @@ pub struct InterpretedTpmEventRef {
     pub event: InterpretedTpmEvent,
 }
 
-pub fn tpm_log_diff_interpret(
-    pcrs: &[u32],
-    old_good: &EveTpmLog,
-    new: &EveTpmLog,
-) -> Result<Vec<InterpretedTpmEventRef>> {
-    info!("tpm_log_diff_interpret");
-    let mut interpretations: Vec<InterpretedTpmEventRef> = Vec::new();
+// pub fn tpm_log_diff_interpret(
+//     pcrs: &[u32],
+//     old_good: &EveTpmLog,
+//     new: &EveTpmLog,
+// ) -> Result<Vec<InterpretedTpmEventRef>> {
+//     info!("tpm_log_diff_interpret");
+//     let mut interpretations: Vec<InterpretedTpmEventRef> = Vec::new();
 
-    for pcr in pcrs {
-        let (deleted, added, mods) = tpm_log_diff_for_pcr(&old_good, &new, *pcr)?;
-        info!("====  PCR: {:?} ====", pcr);
-        // print deleted
-        for e in &deleted {
-            info!("D {:?}", e);
-        }
-        // print added
-        for e in &added {
-            match &e.event {
-                TpmEvent::BootApplication(dp) => {
-                    info!("BootApplication dp {}", dp.display(false));
-                }
-                _ => {}
-            }
-            info!("I {:?}", e);
-        }
-        // print mods
-        for (e1, e2) in &mods {
-            info!("M {:?} -> {:?}", e1, e2);
-        }
+//     for pcr in pcrs {
+//         let (deleted, added, mods) = tpm_log_diff_for_pcr(&old_good, &new, *pcr)?;
+//         info!("====  PCR: {:?} ====", pcr);
+//         // print deleted
+//         for e in &deleted {
+//             info!("D {:?}", e);
+//         }
+//         // print added
+//         for e in &added {
+//             match &e.event {
+//                 TpmEvent::BootApplication(dp) => {
+//                     info!("BootApplication dp {}", dp.display(false));
+//                 }
+//                 _ => {}
+//             }
+//             info!("I {:?}", e);
+//         }
+//         // print mods
+//         for (e1, e2) in &mods {
+//             info!("M {:?} -> {:?}", e1, e2);
+//         }
 
-        match pcr {
-            13 => {
-                interpretations.extend(interpret_pcr14(deleted, added, mods));
-            }
-            8 => {
-                interpretations.extend(interpret_pcr8(deleted, added, mods));
-            }
-            1 => {
-                interpretations.extend(interpret_pcr1(
-                    deleted,
-                    added,
-                    mods,
-                    &old_good.efi_vars,
-                    &new.efi_vars,
-                ));
-            }
-            14 => {
-                interpretations.extend(interpret_pcr14(deleted, added, mods));
-            }
-            4 => {
-                interpretations.extend(interpret_pcr4(deleted, added, mods));
-            }
-            _ => {
-                // let errors = deleted
-                //     .into_iter()
-                //     .chain(added)
-                //     .map(|e| InterpretedTpmEvent::Error(e.event))
-                //     .collect::<Vec<InterpretedTpmEvent>>();
-                // if !errors.is_empty() {
-                //     interpretations.insert(*pcr, errors);
-                // }
-            }
-        }
-    }
+//         match pcr {
+//             13 => {
+//                 interpretations.extend(interpret_pcr14(deleted, added, mods));
+//             }
+//             8 => {
+//                 interpretations.extend(interpret_pcr8(deleted, added, mods));
+//             }
+//             1 => {
+//                 // interpretations.extend(interpret_pcr1(
+//                 //     deleted,
+//                 //     added,
+//                 //     mods,
+//                 //     &old_good.efi_vars,
+//                 //     &new.efi_vars,
+//                 // ));
+//             }
+//             14 => {
+//                 interpretations.extend(interpret_pcr14(deleted, added, mods));
+//             }
+//             4 => {
+//                 interpretations.extend(interpret_pcr4(deleted, added, mods));
+//             }
+//             _ => {
+//                 // let errors = deleted
+//                 //     .into_iter()
+//                 //     .chain(added)
+//                 //     .map(|e| InterpretedTpmEvent::Error(e.event))
+//                 //     .collect::<Vec<InterpretedTpmEvent>>();
+//                 // if !errors.is_empty() {
+//                 //     interpretations.insert(*pcr, errors);
+//                 // }
+//             }
+//         }
+//     }
 
-    Ok(interpretations)
-}
+//     Ok(interpretations)
+// }
 
-pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
-    old_good: &'a EveTpmLog,
-    new: &'b EveTpmLog,
-    pcr: u32,
-) -> Result<
-    (
-        Vec<TpmEventRef>,
-        Vec<TpmEventRef>,
-        Vec<(TpmEventRef, TpmEventRef)>,
-    ),
-    anyhow::Error,
-> {
-    let good_events = old_good.get_events_for_pcr_ref(pcr);
-    let bad_events = new.get_events_for_pcr_ref(pcr);
-    let lcs = compute_lcs(&good_events, &bad_events);
+// pub(super) fn tpm_log_diff_for_pcr<'a, 'b>(
+//     old_good: &'a EveTpmLog,
+//     new: &'b EveTpmLog,
+//     pcr: u32,
+// ) -> Result<
+//     (
+//         Vec<TpmEventRef>,
+//         Vec<TpmEventRef>,
+//         Vec<(TpmEventRef, TpmEventRef)>,
+//     ),
+//     anyhow::Error,
+// > {
+//     let good_events = old_good.get_events_for_pcr_ref(pcr);
+//     let bad_events = new.get_events_for_pcr_ref(pcr);
+//     let lcs = compute_lcs(&good_events, &bad_events);
 
-    // print LCS
-    info!("==== LCS ====");
-    for e in &lcs {
-        trace!("{:?}", e);
-    }
+//     // print LCS
+//     info!("==== LCS ====");
+//     for e in &lcs {
+//         trace!("{:?}", e);
+//     }
 
-    let (deleted_events, added_events) = collect_diff(&good_events, &bad_events, &lcs);
+//     let (deleted_events, added_events) = collect_diff(&good_events, &bad_events, &lcs);
 
-    // print deleted
-    info!("==== DELETED ====");
-    for e in &deleted_events {
-        trace!("{:?}", e);
-    }
+//     // print deleted
+//     info!("==== DELETED ====");
+//     for e in &deleted_events {
+//         trace!("{:?}", e);
+//     }
 
-    // print added
-    info!("==== ADDED ====");
-    for e in &added_events {
-        trace!("{:?}", e);
-    }
+//     // print added
+//     info!("==== ADDED ====");
+//     for e in &added_events {
+//         trace!("{:?}", e);
+//     }
 
-    let deleted_events = tcg_tpm_log_translate(deleted_events, old_good.efi_vars.as_ref())
-        .context("cannot translate deleted events")?;
-    let added_events = tcg_tpm_log_translate(added_events, new.efi_vars.as_ref())
-        .context("cannot translate added events")?;
-    let (deleted, added, mods) = tpm_log_diff_semantic(added_events, deleted_events);
-    Ok((deleted, added, mods))
-}
+//     let deleted_events = tcg_tpm_log_translate(deleted_events, old_good.efi_vars.as_ref())
+//         .context("cannot translate deleted events")?;
+//     let added_events = tcg_tpm_log_translate(added_events, new.efi_vars.as_ref())
+//         .context("cannot translate added events")?;
+//     let (deleted, added, mods) = tpm_log_diff_semantic(added_events, deleted_events);
+//     Ok((deleted, added, mods))
+// }
 
 impl Default for InterpretedTpmEventRef {
     fn default() -> Self {
@@ -609,61 +686,61 @@ fn interpret_pcr4(
     reult
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
 
-    fn moc_tpm_log(path: &str) -> TPMLog {
-        let data = std::fs::read(path).unwrap();
-        TPMLog::from_slice(&data).unwrap()
-    }
+//     fn moc_tpm_log(path: &str) -> TcgTpmLog {
+//         let data = std::fs::read(path).unwrap();
+//         TcgTpmLog::from_slice(&data).unwrap()
+//     }
 
-    #[test]
-    fn test_decode_tpm_logs_message() -> Result<()> {
-        // init logger
-        let _ = env_logger::builder()
-            .is_test(true)
-            .filter_level(log::LevelFilter::Trace)
-            .try_init();
+//     #[test]
+//     fn test_decode_tpm_logs_message() -> Result<()> {
+//         // init logger
+//         let _ = env_logger::builder()
+//             .is_test(true)
+//             .filter_level(log::LevelFilter::Trace)
+//             .try_init();
 
-        // load src/tpm/test_data/pcr8-14/2025-03-04-10-52-35/eve_ipc_message-6.json
-        // and deserialize to TpmLogs
-        // let message =
-        //     std::fs::read("src/tpm/test_data/pcr8/log/2025-03-04-12-25-31/eve_ipc_message-6.json")
-        //         .unwrap();
+//         // load src/tpm/test_data/pcr8-14/2025-03-04-10-52-35/eve_ipc_message-6.json
+//         // and deserialize to TpmLogs
+//         // let message =
+//         //     std::fs::read("src/tpm/test_data/pcr8/log/2025-03-04-12-25-31/eve_ipc_message-6.json")
+//         //         .unwrap();
 
-        let message =
-            std::fs::read("/home/mikem/projects/monitor/eve-monitor-rs/persist/monitor/log/2025-03-13-00-07-35/eve_ipc_message-7.json")
-                .unwrap();
+//         let message =
+//             std::fs::read("/home/mikem/projects/monitor/eve-monitor-rs/persist/monitor/log/2025-03-13-00-07-35/eve_ipc_message-7.json")
+//                 .unwrap();
 
-        let mut json_data: serde_json::Value = serde_json::from_slice(&message).unwrap();
+//         let mut json_data: serde_json::Value = serde_json::from_slice(&message).unwrap();
 
-        let raw_logs: TpmLogs =
-            serde_json::from_value::<TpmLogs>(json_data["message"].take()).unwrap();
+//         let raw_logs: TpmLogs =
+//             serde_json::from_value::<TpmLogs>(json_data["message"].take()).unwrap();
 
-        raw_logs.save_raw_binary_logs(
-            "/home/mikem/projects/monitor/eve-monitor-rs/persist/monitor/log",
-        )?;
+//         raw_logs.save_raw_binary_logs(
+//             "/home/mikem/projects/monitor/eve-monitor-rs/persist/monitor/log",
+//         )?;
 
-        let (good, bad) = get_logs_pair(raw_logs).unwrap();
+//         let (good, bad) = get_logs_pair(raw_logs).unwrap();
 
-        let (deleted, added, mods) = tpm_log_diff_for_pcr(&good, &bad, 1).unwrap();
+//         let (deleted, added, mods) = tpm_log_diff_for_pcr(&good, &bad, 1).unwrap();
 
-        // print deleted
-        for e in &deleted {
-            info!("D {:?}", e);
-        }
+//         // print deleted
+//         for e in &deleted {
+//             info!("D {:?}", e);
+//         }
 
-        // print added
-        for e in &added {
-            info!("I {:?}", e);
-        }
-        // print mods
-        for (e1, e2) in &mods {
-            info!("M {:?} -> {:?}", e1, e2);
-        }
+//         // print added
+//         for e in &added {
+//             info!("I {:?}", e);
+//         }
+//         // print mods
+//         for (e1, e2) in &mods {
+//             info!("M {:?} -> {:?}", e1, e2);
+//         }
 
-        //tpm_log_diff_interpret(&[1, 4, 14], good, bad)?;
-        Ok(())
-    }
-}
+//         //tpm_log_diff_interpret(&[1, 4, 14], good, bad)?;
+//         Ok(())
+//     }
+// }

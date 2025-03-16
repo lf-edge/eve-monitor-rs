@@ -218,4 +218,8 @@ impl ISelector for ApplicationsPage {
         //     .map(|index| self[index].clone())
         None
     }
+
+    fn select_forward_by(&mut self, count: usize) {}
+
+    fn select_backward_by(&mut self, count: usize) {}
 }

@@ -132,7 +132,7 @@ impl TpmAlgorithmId {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct TcgTpmEvent {
+pub struct TcgRawTpmEvent {
     pub pcr_index: u32,
     pub event_type: TcgTpmEventType,
     pub digests: Vec<Digest>,
@@ -197,7 +197,7 @@ impl Digest {
     }
 }
 
-impl TcgTpmEvent {
+impl TcgRawTpmEvent {
     pub fn new(pcr_index: u32, event_type: TcgTpmEventType, event_data: Vec<u8>) -> Self {
         let digests = Digest::new_sha256(&event_data);
         Self {
@@ -209,10 +209,10 @@ impl TcgTpmEvent {
     }
 }
 
-impl TryFrom<TcgTpmEvent> for LogSpec {
+impl TryFrom<TcgRawTpmEvent> for LogSpec {
     type Error = anyhow::Error;
 
-    fn try_from(event: TcgTpmEvent) -> std::result::Result<Self, Self::Error> {
+    fn try_from(event: TcgRawTpmEvent) -> std::result::Result<Self, Self::Error> {
         if event.event_type != TcgTpmEventType::NoAction {
             return Err(anyhow!("Not a NoAction event"));
         }
@@ -290,14 +290,14 @@ impl TryFrom<TcgTpmEvent> for LogSpec {
 // struct SpecId00Event {}
 
 #[derive(Debug, Clone)]
-pub struct TPMLog {
-    pub events: Vec<TcgTpmEvent>,
+pub struct TcgTpmLog {
+    pub events: Vec<TcgRawTpmEvent>,
 }
 
 #[derive(Debug, Clone)]
 pub struct TcgTpmEventRef<'a> {
     pub original_index: usize,
-    pub event: &'a TcgTpmEvent,
+    pub event: &'a TcgRawTpmEvent,
 }
 
 impl PartialEq for TcgTpmEventRef<'_> {
@@ -306,8 +306,8 @@ impl PartialEq for TcgTpmEventRef<'_> {
     }
 }
 
-impl TPMLog {
-    pub fn from_events(events: Vec<TcgTpmEvent>) -> Self {
+impl TcgTpmLog {
+    pub fn from_events(events: Vec<TcgRawTpmEvent>) -> Self {
         Self { events }
     }
 
@@ -316,7 +316,7 @@ impl TPMLog {
         Ok(Self { events })
     }
 
-    fn read_event(cursor: &mut Cursor<&[u8]>, efi_2_0: bool) -> Result<TcgTpmEvent> {
+    fn read_event(cursor: &mut Cursor<&[u8]>, efi_2_0: bool) -> Result<TcgRawTpmEvent> {
         let pcr_index = cursor.read_u32::<LittleEndian>()?;
         let event_type = cursor.read_u32::<LittleEndian>()?;
         let event_type = TcgTpmEventType::try_from(event_type).map_err(|e| {
@@ -370,7 +370,7 @@ impl TPMLog {
         let mut event_data = vec![0u8; event_data_size as usize];
         cursor.read_exact(&mut event_data)?;
 
-        Ok(TcgTpmEvent {
+        Ok(TcgRawTpmEvent {
             pcr_index,
             event_type,
             digests,
@@ -378,7 +378,7 @@ impl TPMLog {
         })
     }
 
-    fn deserialize_tpm_event_log(data: &[u8]) -> Result<Vec<TcgTpmEvent>> {
+    fn deserialize_tpm_event_log(data: &[u8]) -> Result<Vec<TcgRawTpmEvent>> {
         let mut cursor = Cursor::new(data);
         let mut events = Vec::new();
 
@@ -412,7 +412,7 @@ impl TPMLog {
             .collect()
     }
 
-    pub fn into_events_for_pcr(self, pcr_index: u32) -> Vec<TcgTpmEvent> {
+    pub fn into_events_for_pcr(self, pcr_index: u32) -> Vec<TcgRawTpmEvent> {
         self.events
             .into_iter()
             .filter(|e| e.pcr_index == pcr_index)

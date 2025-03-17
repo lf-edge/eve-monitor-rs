@@ -9,6 +9,7 @@ pub enum UiActions {
     RadioGroup { selected: usize },
     SpinBox { selected: usize },
     Input { text: String },
+    LabelText { text: String },
     ButtonClicked(String),
     DismissDialog,
     AppAction(MonActions),

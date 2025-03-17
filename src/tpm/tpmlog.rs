@@ -5,7 +5,7 @@ use crate::{
         device_path::DevicePath,
         vars::{EfiBootOrder, EfiLoadOption, LoadOptionAttributes},
     },
-    ipc::eve_types::EfiVariable,
+    ipc::eve_types::EveEfiVariable,
 };
 
 use super::{
@@ -21,11 +21,11 @@ use uuid::Uuid;
 #[derive(Debug)]
 pub struct EveTpmLog {
     log: TcgTpmLog,
-    efi_vars: Vec<EfiVariable>,
+    pub efi_vars: Vec<EveEfiVariable>,
 }
 
 impl EveTpmLog {
-    pub fn new(log: TcgTpmLog, efi_vars: Vec<EfiVariable>) -> Self {
+    pub fn new(log: TcgTpmLog, efi_vars: Vec<EveEfiVariable>) -> Self {
         Self { log, efi_vars }
     }
 
@@ -41,7 +41,7 @@ impl EveTpmLog {
         self.log.events_for_pcr_ref(pcr)
     }
 
-    pub fn tcg_tpm_log_translate(&mut self) -> Result<Vec<TpmEventRef>> {
+    pub fn tcg_tpm_log_translate(&self) -> Result<Vec<TpmEventRef>> {
         let mut events = Vec::new();
 
         for event_ref in self.log.events.iter().enumerate() {
@@ -58,10 +58,6 @@ impl EveTpmLog {
         Ok(events)
     }
 }
-
-// pub trait TpmEventDescribe {
-//     fn semantic_key(&self) -> String;
-// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TpmEvent {
@@ -98,7 +94,7 @@ pub enum TpmEvent {
     GrubLinuxEfi(String),
     GrubGenericEvent(String, String),
     BootApplication(DevicePath),
-    UnparsedEvent(TcgTpmEventType),
+    RawEvent(TcgTpmEventType),
 }
 
 #[derive(Debug, Clone)]
@@ -132,6 +128,12 @@ impl<'a> LcsSemanticKey<'a, String> for TpmEventRef {
     }
 }
 
+impl<'a> LcsSemanticKey<'a, String> for &TpmEventRef {
+    fn semantic_key(&'a self) -> String {
+        self.event.semantic_key()
+    }
+}
+
 impl TpmEvent {
     pub fn event_type(&self) -> TcgTpmEventType {
         match self {
@@ -149,7 +151,7 @@ impl TpmEvent {
             TpmEvent::GrubLinuxEfi(_) => TcgTpmEventType::IPL,
             TpmEvent::GrubGenericEvent(_, _) => TcgTpmEventType::IPL,
             TpmEvent::BootApplication(_) => TcgTpmEventType::EfiBootServicesApplication,
-            TpmEvent::UnparsedEvent(t) => t.clone(),
+            TpmEvent::RawEvent(t) => t.clone(),
         }
     }
     pub fn semantic_key(&self) -> String {
@@ -185,7 +187,7 @@ impl TpmEvent {
             } => {
                 format!("EfiVariable-{}-{}", name, guid)
             }
-            TpmEvent::UnparsedEvent(name) => {
+            TpmEvent::RawEvent(name) => {
                 format!("UnparsedEvent-{}", name)
             }
         }
@@ -194,7 +196,7 @@ impl TpmEvent {
 
 fn parse_efi_boot_variable(
     event: &TcgRawTpmEvent,
-    efi_vars: &Vec<EfiVariable>,
+    efi_vars: &Vec<EveEfiVariable>,
 ) -> Result<TpmEvent> {
     let var_event = TcgEfiVariableEvent::try_from(event)?;
     let name_from_event = var_event.unicode_name;
@@ -355,7 +357,10 @@ fn parse_rootfs_measurement_event(event: &TcgRawTpmEvent) -> Result<TpmEvent> {
 }
 
 impl TpmEvent {
-    pub fn try_from_tcg_event(event: &TcgRawTpmEvent, efi_vars: &Vec<EfiVariable>) -> Result<Self> {
+    pub fn try_from_tcg_event(
+        event: &TcgRawTpmEvent,
+        efi_vars: &Vec<EveEfiVariable>,
+    ) -> Result<Self> {
         match event.event_type {
             TcgTpmEventType::EfiAction if event.pcr_index == 14 => {
                 parse_measure_config_event(event)
@@ -376,7 +381,7 @@ impl TpmEvent {
                 Ok(TpmEvent::BootApplication(device_path))
             }
             TcgTpmEventType::Action => parse_efi_action_event(event),
-            _ => Ok(TpmEvent::UnparsedEvent(event.event_type.clone())),
+            _ => Ok(TpmEvent::RawEvent(event.event_type.clone())),
         }
     }
 }

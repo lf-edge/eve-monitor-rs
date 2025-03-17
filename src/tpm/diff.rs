@@ -7,13 +7,14 @@ use super::{
 use crate::{
     efi::{
         device_path::{media::MediaNode, PathNode},
-        vars::EfiLoadOption,
+        vars::{EfiBootOrder, EfiLoadOption},
     },
-    ipc::eve_types::{EfiVariable, TpmLogs},
-    lcs::{collect_diff, compute_lcs, produce_diff_ops3_no_reorder, DiffOp},
+    ipc::eve_types::{EveEfiVariable, TpmLogs},
+    lcs::{collect_diff, compute_lcs, produce_diff_ops, DiffOp},
 };
 use anyhow::{anyhow, Context, Result};
 use log::{info, trace};
+use regex::Regex;
 use strum::Display;
 use uuid::uuid;
 
@@ -25,15 +26,50 @@ where
 }
 
 #[derive(Debug)]
+pub enum ParsedEfiVariable {
+    BoorOrder(EfiBootOrder),
+    BootEntry(EfiLoadOption),
+    Unparsed(EveEfiVariable),
+}
+
+#[derive(Debug)]
+pub struct ParsingResults {
+    pub parsed_old: Vec<TpmEventRef>,
+    pub parsed_new: Vec<TpmEventRef>,
+    pub parsed_efi_vars_old: HashMap<String, ParsedEfiVariable>,
+    pub parsed_efi_vars_new: HashMap<String, ParsedEfiVariable>,
+    pub diff_ops_old: Vec<DiffOp>,
+    pub diff_ops_new: Vec<DiffOp>,
+    pub tpm_log_parse_result: Vec<InterpretedTpmEventRef>,
+}
+
+impl ParsingResults {
+    pub fn get_boot_entry_description(&self, entry: u16, new: bool) -> Option<String> {
+        let var_name = format!("Boot{:04x}", entry);
+        if new {
+            match self.parsed_efi_vars_new.get(&var_name) {
+                Some(ParsedEfiVariable::BootEntry(boot_entry)) => {
+                    Some(boot_entry.description.clone())
+                }
+                _ => None,
+            }
+        } else {
+            match self.parsed_efi_vars_old.get(&var_name) {
+                Some(ParsedEfiVariable::BootEntry(boot_entry)) => {
+                    Some(boot_entry.description.clone())
+                }
+                _ => None,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct TpmLogDiff {
-    tpm_log_parse_result: Option<Vec<InterpretedTpmEventRef>>,
     old_good_tpm_log: EveTpmLog,
     new_tpm_log: EveTpmLog,
     affected_pcrs: Vec<u32>,
-    pub parsed_old: Option<Vec<TpmEventRef>>,
-    pub parsed_new: Option<Vec<TpmEventRef>>,
-    pub diff_ops_old: Option<Vec<DiffOp>>,
-    pub diff_ops_new: Option<Vec<DiffOp>>,
+    pub result: Option<ParsingResults>,
 }
 
 impl TpmLogDiff {
@@ -68,30 +104,147 @@ impl TpmLogDiff {
 
         Ok((good, bad))
     }
-    pub fn translate_logs(&mut self) {
-        self.parsed_old = Some(self.old_good_tpm_log.tcg_tpm_log_translate().unwrap());
-        self.parsed_new = Some(self.new_tpm_log.tcg_tpm_log_translate().unwrap());
+
+    fn parse_efi_vars(
+        &self,
+        vars: &Vec<EveEfiVariable>,
+    ) -> Result<HashMap<String, ParsedEfiVariable>> {
+        let re = Regex::new(r"Boot[0-9A-F]{4}").unwrap();
+
+        let mut efi_vars = HashMap::new();
+
+        for var in vars {
+            let var_name = var.name.clone();
+            if var_name == "BootOrder" {
+                let efi_boot_order = EfiBootOrder::try_from(var.value.as_slice())
+                    .context("cannot parse EfiBootOrder")?;
+                efi_vars.insert(var_name, ParsedEfiVariable::BoorOrder(efi_boot_order));
+            } else if re.is_match(&var_name) {
+                let efi_load_options = EfiLoadOption::try_from(var.value.as_slice())
+                    .context(format!("cannot parse EfiLoadOption for {}", var_name))?;
+                efi_vars.insert(var_name, ParsedEfiVariable::BootEntry(efi_load_options));
+            } else {
+                efi_vars.insert(var_name, ParsedEfiVariable::Unparsed(var.clone()));
+            }
+        }
+        Ok(efi_vars)
     }
 
-    pub fn diff(&mut self) {
-        let lcs = compute_lcs(
-            self.parsed_old.as_ref().unwrap(),
-            self.parsed_new.as_ref().unwrap(),
-        );
-        let (del, ins) = collect_diff(
-            self.parsed_old.as_ref().unwrap(),
-            self.parsed_new.as_ref().unwrap(),
-            &lcs,
-        );
-        let (del, new, mods) = diff_semantic_simple(
-            self.parsed_old.as_ref().unwrap(),
-            self.parsed_new.as_ref().unwrap(),
-            &del,
-            &ins,
-        );
-        let (diff_ops_old, diff_ops_new) = produce_diff_ops3_no_reorder(&lcs, &new, &del, &mods);
-        self.diff_ops_old = Some(diff_ops_old);
-        self.diff_ops_new = Some(diff_ops_new);
+    pub fn parse(&self) -> Result<ParsingResults> {
+        let parsed_old = self.old_good_tpm_log.tcg_tpm_log_translate()?;
+        let parsed_new = self.new_tpm_log.tcg_tpm_log_translate()?;
+        let parsed_efi_vars_old = self.parse_efi_vars(&self.old_good_tpm_log.efi_vars)?;
+        let parsed_efi_vars_new = self.parse_efi_vars(&self.new_tpm_log.efi_vars)?;
+        let lcs = compute_lcs(&parsed_old, &parsed_new);
+        let (del, ins) = collect_diff(&parsed_old, &parsed_new, &lcs);
+        let (del, new, mods) = diff_semantic_simple(&parsed_old, &parsed_new, &del, &ins);
+        let (diff_ops_old, diff_ops_new) = produce_diff_ops(&lcs, &new, &del, &mods);
+        let tpm_log_parse_result = self.interpret(
+            &parsed_old,
+            &parsed_new,
+            &parsed_efi_vars_old,
+            &parsed_efi_vars_new,
+        )?;
+        Ok(ParsingResults {
+            parsed_old,
+            parsed_new,
+            parsed_efi_vars_old,
+            parsed_efi_vars_new,
+            diff_ops_old,
+            diff_ops_new,
+            tpm_log_parse_result,
+        })
+    }
+
+    fn diff_for_pcr<'a, 'b>(
+        &'a self,
+        old: &'b Vec<TpmEventRef>,
+        new: &'b Vec<TpmEventRef>,
+        pcr: u32,
+    ) -> (
+        Vec<&'b TpmEventRef>,
+        Vec<&'b TpmEventRef>,
+        Vec<(&'b TpmEventRef, &'b TpmEventRef)>,
+    ) {
+        let old_filtered = old.iter().filter(|e| e.pcr == pcr).collect::<Vec<_>>();
+        let new_filtered = new.iter().filter(|e| e.pcr == pcr).collect::<Vec<_>>();
+        // all indexes are for subset of events for pcr
+        let lcs = compute_lcs::<TpmEventRef, &TpmEventRef>(&old_filtered, &new_filtered);
+        let (del, ins) = collect_diff(&old_filtered, &new_filtered, &lcs);
+        let (del, ins, mods) = diff_semantic_simple(&old_filtered, &new_filtered, &del, &ins);
+        // collect original references
+        let del = del.iter().map(|i| old_filtered[*i]).collect::<Vec<_>>();
+        let ins = ins.iter().map(|i| new_filtered[*i]).collect::<Vec<_>>();
+        let mods = mods
+            .iter()
+            .map(|(i1, i2)| (old_filtered[*i1], new_filtered[*i2]))
+            .collect::<Vec<_>>();
+        (del, ins, mods)
+    }
+
+    pub fn interpret(
+        &self,
+        old: &Vec<TpmEventRef>,
+        new: &Vec<TpmEventRef>,
+        vars_old: &HashMap<String, ParsedEfiVariable>,
+        vars_new: &HashMap<String, ParsedEfiVariable>,
+    ) -> Result<Vec<InterpretedTpmEventRef>> {
+        info!("tpm_log_diff_interpret");
+        let mut interpretations: Vec<InterpretedTpmEventRef> = Vec::new();
+
+        for pcr in self.affected_pcrs.iter() {
+            let (deleted, added, mods) = self.diff_for_pcr(old, new, *pcr);
+            // info!("====  PCR: {:?} ====", pcr);
+            // // print deleted
+            // for e in &deleted {
+            //     info!("D {:?}", e);
+            // }
+            // // print added
+            // for e in &added {
+            //     match &e.event {
+            //         TpmEvent::BootApplication(dp) => {
+            //             info!("BootApplication dp {}", dp.display(false));
+            //         }
+            //         _ => {}
+            //     }
+            //     info!("I {:?}", e);
+            // }
+            // // print mods
+            // for (e1, e2) in &mods {
+            //     info!("M {:?} -> {:?}", e1, e2);
+            // }
+
+            match pcr {
+                13 => {
+                    interpretations.extend(interpret_pcr14(deleted, added, mods));
+                }
+                8 => {
+                    interpretations.extend(interpret_pcr8(deleted, added, mods));
+                }
+                1 => {
+                    interpretations
+                        .extend(interpret_pcr1(deleted, added, mods, vars_old, vars_new));
+                }
+                14 => {
+                    interpretations.extend(interpret_pcr14(deleted, added, mods));
+                }
+                4 => {
+                    interpretations.extend(interpret_pcr4(deleted, added, mods));
+                }
+                _ => {
+                    // let errors = deleted
+                    //     .into_iter()
+                    //     .chain(added)
+                    //     .map(|e| InterpretedTpmEvent::Error(e.event))
+                    //     .collect::<Vec<InterpretedTpmEvent>>();
+                    // if !errors.is_empty() {
+                    //     interpretations.insert(*pcr, errors);
+                    // }
+                }
+            }
+        }
+
+        Ok(interpretations)
     }
 }
 
@@ -102,14 +255,10 @@ impl TryFrom<TpmLogs> for TpmLogDiff {
         let (old_good_tpm_log, new_tpm_log) = Self::get_logs_pair(value)?;
 
         Ok(TpmLogDiff {
-            tpm_log_parse_result: None,
             old_good_tpm_log,
             new_tpm_log,
             affected_pcrs: Vec::new(),
-            parsed_old: None,
-            parsed_new: None,
-            diff_ops_old: None,
-            diff_ops_new: None,
+            result: None,
         })
     }
 }
@@ -245,9 +394,9 @@ pub struct InterpretedTpmEventRef {
 }
 
 // pub fn tpm_log_diff_interpret(
-//     pcrs: &[u32],
 //     old_good: &EveTpmLog,
 //     new: &EveTpmLog,
+//     pcrs: Vec<u32>,
 // ) -> Result<Vec<InterpretedTpmEventRef>> {
 //     info!("tpm_log_diff_interpret");
 //     let mut interpretations: Vec<InterpretedTpmEventRef> = Vec::new();
@@ -359,7 +508,7 @@ pub struct InterpretedTpmEventRef {
 impl Default for InterpretedTpmEventRef {
     fn default() -> Self {
         Self {
-            pcr: 255,
+            pcr: u32::MAX,
             old_original_index: 0,
             new_original_index: 0,
             event: InterpretedTpmEvent::Error,
@@ -376,9 +525,9 @@ impl Default for InterpretedTpmEventRef {
 // detions and insertions are impossible. Only files measure-config cares about are recoded in PCR14
 // if an arbitrary file appears on /config partition it is not recorded in PCR14
 pub(super) fn interpret_pcr14(
-    _deleted_events: Vec<TpmEventRef>,
-    _added_events: Vec<TpmEventRef>,
-    mods: Vec<(TpmEventRef, TpmEventRef)>,
+    _deleted_events: Vec<&TpmEventRef>,
+    _added_events: Vec<&TpmEventRef>,
+    mods: Vec<(&TpmEventRef, &TpmEventRef)>,
 ) -> Vec<InterpretedTpmEventRef> {
     let mut results = Vec::new();
 
@@ -388,7 +537,7 @@ pub(super) fn interpret_pcr14(
         event_ref.pcr = 14;
         event_ref.old_original_index = e1.original_index;
         event_ref.new_original_index = e2.original_index;
-        match (e1.event, e2.event) {
+        match (&e1.event, &e2.event) {
             (
                 TpmEvent::MeasureConfig {
                     file: file1,
@@ -403,19 +552,19 @@ pub(super) fn interpret_pcr14(
             ) => {
                 if file1 != file2 {
                     event_ref.event = InterpretedTpmEvent::Error;
-                } else if exists1 && !exists2 {
+                } else if *exists1 && !*exists2 {
                     event_ref.event = InterpretedTpmEvent::ConfigFileModified {
-                        file: file1,
+                        file: file1.clone(),
                         status: ConfigFileStatus::Deleted,
                     };
-                } else if !exists1 && exists2 {
+                } else if !*exists1 && *exists2 {
                     event_ref.event = InterpretedTpmEvent::ConfigFileModified {
-                        file: file1,
+                        file: file1.clone(),
                         status: ConfigFileStatus::Added,
                     };
-                } else if exists1 && exists2 && hash1 != hash2 {
+                } else if *exists1 && *exists2 && hash1 != hash2 {
                     event_ref.event = InterpretedTpmEvent::ConfigFileModified {
-                        file: file1,
+                        file: file1.clone(),
                         status: ConfigFileStatus::Modified,
                     };
                 }
@@ -434,7 +583,7 @@ fn is_usb_device_path(dp: &Vec<PathNode>) -> bool {
     true
 }
 
-fn parse_boot_variable(var: &EfiVariable) -> Result<InterpretedBootEntry> {
+fn parse_boot_variable(var: &EveEfiVariable) -> Result<InterpretedBootEntry> {
     let efi_load_options = EfiLoadOption::try_from(var.value.as_slice())
         .context(format!("cannot parse {}", var.name))?;
 
@@ -446,137 +595,112 @@ fn parse_boot_variable(var: &EfiVariable) -> Result<InterpretedBootEntry> {
 }
 
 fn interpret_pcr1(
-    deleted_events: Vec<TpmEventRef>,
-    new_events: Vec<TpmEventRef>,
-    mods: Vec<(TpmEventRef, TpmEventRef)>,
-    old_efi_vars: &Option<Vec<EfiVariable>>,
-    new_efi_vars: &Option<Vec<EfiVariable>>,
+    deleted_events: Vec<&TpmEventRef>,
+    new_events: Vec<&TpmEventRef>,
+    mods: Vec<(&TpmEventRef, &TpmEventRef)>,
+    vars_old: &HashMap<String, ParsedEfiVariable>,
+    vars_new: &HashMap<String, ParsedEfiVariable>,
 ) -> Vec<InterpretedTpmEventRef> {
     let mut boot_options_changed = false;
 
     let mut result = Vec::new();
 
-    // collect old and new boot entries
-    let old_boot_entries = old_efi_vars.as_ref().map(|v| {
-        v.iter()
-            .filter_map(|var| {
-                if var.name != "BootOrder" {
-                    parse_boot_variable(var).ok()
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
-    });
+    // for e in deleted_events {
+    //     match e.event {
+    //         TpmEvent::BootEntry {
+    //             boot_num: _,
+    //             description: _,
+    //             device_path: _,
+    //             attributes: _,
+    //         } => {
+    //             boot_options_changed = true;
+    //         }
+    //         _ => {
+    //             let mut event_ref = InterpretedTpmEventRef::default();
+    //             event_ref.pcr = 1;
+    //             event_ref.old_original_index = e.original_index;
+    //             result.push(event_ref);
+    //         }
+    //     }
+    // }
 
-    let new_boot_entries = new_efi_vars.as_ref().map(|v| {
-        v.iter()
-            .filter_map(|var| {
-                if var.name != "BootOrder" {
-                    parse_boot_variable(var).ok()
-                } else {
-                    None
-                }
-            })
-            .collect::<Vec<_>>()
-    });
+    // for e in new_events {
+    //     match e.event {
+    //         TpmEvent::BootEntry {
+    //             boot_num: _,
+    //             description: _,
+    //             device_path: _,
+    //             attributes: _,
+    //         } => {
+    //             boot_options_changed = true;
+    //         }
+    //         _ => {
+    //             let mut event_ref = InterpretedTpmEventRef::default();
+    //             event_ref.new_original_index = e.original_index;
+    //             event_ref.pcr = 1;
+    //             result.push(event_ref);
+    //         }
+    //     }
+    // }
 
-    for e in deleted_events {
-        match e.event {
-            TpmEvent::BootEntry {
-                boot_num: _,
-                description: _,
-                device_path: _,
-                attributes: _,
-            } => {
-                boot_options_changed = true;
-            }
-            _ => {
-                let mut event_ref = InterpretedTpmEventRef::default();
-                event_ref.pcr = 1;
-                event_ref.old_original_index = e.original_index;
-                result.push(event_ref);
-            }
-        }
-    }
+    // let mut old_boot_option_indexes = Vec::new();
+    // let mut new_boot_option_indexes = Vec::new();
 
-    for e in new_events {
-        match e.event {
-            TpmEvent::BootEntry {
-                boot_num: _,
-                description: _,
-                device_path: _,
-                attributes: _,
-            } => {
-                boot_options_changed = true;
-            }
-            _ => {
-                let mut event_ref = InterpretedTpmEventRef::default();
-                event_ref.new_original_index = e.original_index;
-                event_ref.pcr = 1;
-                result.push(event_ref);
-            }
-        }
-    }
+    // // modified events
+    // for (e1, e2) in mods.iter() {
+    //     let mut event_ref = InterpretedTpmEventRef::default();
+    //     event_ref.pcr = 1;
+    //     event_ref.old_original_index = e1.original_index;
+    //     event_ref.new_original_index = e2.original_index;
+    //     match (&e1.event, &e2.event) {
+    //         (
+    //             TpmEvent::BootEntry {
+    //                 boot_num: boot_num1,
+    //                 description: description1,
+    //                 device_path: device_path1,
+    //                 attributes: attributes1,
+    //             },
+    //             TpmEvent::BootEntry {
+    //                 boot_num: boot_num2,
+    //                 description: description2,
+    //                 device_path: device_path2,
+    //                 attributes: attributes2,
+    //             },
+    //         ) => {
+    //             boot_options_changed = true;
+    //             old_boot_option_indexes.push(e1.original_index);
+    //             new_boot_option_indexes.push(e2.original_index);
+    //         }
+    //         (TpmEvent::BootOrder(o1), TpmEvent::BootOrder(o2)) => {
+    //             event_ref.event = InterpretedTpmEvent::BootOrderModified {
+    //                 old: o1.clone(),
+    //                 new: o2.clone(),
+    //             };
+    //         }
+    //         _ => {
+    //             event_ref.event = InterpretedTpmEvent::Error;
+    //         }
+    //     }
+    //     result.push(event_ref);
+    // }
 
-    let mut old_boot_option_indexes = Vec::new();
-    let mut new_boot_option_indexes = Vec::new();
+    // if boot_options_changed {
+    //     let old_boot_entries = old_boot_entries.unwrap_or_default();
+    //     let new_boot_entries = new_boot_entries.unwrap_or_default();
 
-    // modified events
-    for (e1, e2) in mods.iter() {
-        let mut event_ref = InterpretedTpmEventRef::default();
-        event_ref.pcr = 1;
-        event_ref.old_original_index = e1.original_index;
-        event_ref.new_original_index = e2.original_index;
-        match (&e1.event, &e2.event) {
-            (
-                TpmEvent::BootEntry {
-                    boot_num: boot_num1,
-                    description: description1,
-                    device_path: device_path1,
-                    attributes: attributes1,
-                },
-                TpmEvent::BootEntry {
-                    boot_num: boot_num2,
-                    description: description2,
-                    device_path: device_path2,
-                    attributes: attributes2,
-                },
-            ) => {
-                boot_options_changed = true;
-                old_boot_option_indexes.push(e1.original_index);
-                new_boot_option_indexes.push(e2.original_index);
-            }
-            (TpmEvent::BootOrder(o1), TpmEvent::BootOrder(o2)) => {
-                event_ref.event = InterpretedTpmEvent::BootOrderModified {
-                    old: o1.clone(),
-                    new: o2.clone(),
-                };
-            }
-            _ => {
-                event_ref.event = InterpretedTpmEvent::Error;
-            }
-        }
-        result.push(event_ref);
-    }
+    //     let min_old_index = old_boot_option_indexes.iter().min().unwrap_or(&0);
+    //     let min_new_index = new_boot_option_indexes.iter().min().unwrap_or(&0);
 
-    if boot_options_changed {
-        let old_boot_entries = old_boot_entries.unwrap_or_default();
-        let new_boot_entries = new_boot_entries.unwrap_or_default();
-
-        let min_old_index = old_boot_option_indexes.iter().min().unwrap_or(&0);
-        let min_new_index = new_boot_option_indexes.iter().min().unwrap_or(&0);
-
-        result.push(InterpretedTpmEventRef {
-            pcr: 1,
-            old_original_index: *min_old_index,
-            new_original_index: *min_new_index,
-            event: InterpretedTpmEvent::BootOptionsModified {
-                old: old_boot_entries,
-                new: new_boot_entries,
-            },
-        });
-    }
+    //     result.push(InterpretedTpmEventRef {
+    //         pcr: 1,
+    //         old_original_index: *min_old_index,
+    //         new_original_index: *min_new_index,
+    //         event: InterpretedTpmEvent::BootOptionsModified {
+    //             old: old_boot_entries,
+    //             new: new_boot_entries,
+    //         },
+    //     });
+    // }
 
     result
 }
@@ -601,9 +725,9 @@ fn interpret_pcr1(
 // when eve is updated this evet is updated
 // - EV_IPL grub_cmd setparams Boot 0.0.0-rucoder_monitor-tpm-log-15ec5037-dirty-2025-03-04.10.17-kvm-amd64
 fn interpret_pcr8(
-    _deletions: Vec<TpmEventRef>,
-    _insertions: Vec<TpmEventRef>,
-    mods: Vec<(TpmEventRef, TpmEventRef)>,
+    _deletions: Vec<&TpmEventRef>,
+    _insertions: Vec<&TpmEventRef>,
+    mods: Vec<(&TpmEventRef, &TpmEventRef)>,
 ) -> Vec<InterpretedTpmEventRef> {
     let mut results = Vec::new();
 
@@ -614,9 +738,12 @@ fn interpret_pcr8(
         event_ref.pcr = 8;
         event_ref.old_original_index = e1.original_index;
         event_ref.new_original_index = e2.original_index;
-        match (e1.event, e2.event) {
+        match (&e1.event, &e2.event) {
             (TpmEvent::GrubKernelCmdline(d1), TpmEvent::GrubKernelCmdline(d2)) => {
-                event_ref.event = InterpretedTpmEvent::KernelCmdLineModified { old: d1, new: d2 };
+                event_ref.event = InterpretedTpmEvent::KernelCmdLineModified {
+                    old: d1.clone(),
+                    new: d2.clone(),
+                };
                 results.push(event_ref);
             }
             (TpmEvent::GrubCmd { cmd: _, params: _ }, TpmEvent::GrubCmd { cmd: _, params: _ }) => {
@@ -641,9 +768,9 @@ fn interpret_pcr8(
 }
 
 fn interpret_pcr4(
-    _deletions: Vec<TpmEventRef>,
-    insertions: Vec<TpmEventRef>,
-    _mods: Vec<(TpmEventRef, TpmEventRef)>,
+    _deletions: Vec<&TpmEventRef>,
+    insertions: Vec<&TpmEventRef>,
+    _mods: Vec<(&TpmEventRef, &TpmEventRef)>,
 ) -> Vec<InterpretedTpmEventRef> {
     let mut reult = Vec::new();
     for e in insertions {

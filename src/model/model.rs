@@ -239,30 +239,31 @@ impl MonitorModel {
         self.z_status = Some(status);
     }
 
-    // fn parse_tpm_logs(
-    //     pcrs: &Vec<u32>,
-    //     old_good_log: &EveTpmLog,
-    //     new_log: &EveTpmLog,
-    // ) -> Result<Vec<InterpretedTpmEventRef>> {
-    //     tpm_log_diff_interpret(pcrs, old_good_log, new_log)
-    // }
-
     pub fn update_tpm_logs(&mut self, logs: TpmLogs) {
         info!("Got TPM logs from EVE");
 
-        // TODO: start async parsing
         match &self.vault_status {
             VaultStatus::Locked(_, Some(pcrs)) => {
                 let diff = TpmLogDiff::try_from(logs);
                 match diff {
                     Ok(mut diff) => {
                         diff.set_affected_pcrs(pcrs);
-                        diff.translate_logs();
-                        diff.diff();
+                        // TODO: start async parsing
+                        match diff.parse() {
+                            Ok(result) => {
+                                diff.result = Some(result);
+                            }
+                            Err(e) => {
+                                error!("Error parsing TPM logs: {:?}", e);
+                                self.error_log
+                                    .push(format!("Error parsing TPM logs: {:?}", e));
+                            }
+                        }
+                        //FIXME: should I set it at all if parsing fails?
                         self.tpm = Some(diff);
                     }
                     Err(e) => {
-                        error!("Error parsing TPM logs: {:?}", e);
+                        error!("Error getting TPM logs from IPC event: {:?}", e);
                         self.error_log
                             .push(format!("Error parsing TPM logs: {:?}", e));
                     }

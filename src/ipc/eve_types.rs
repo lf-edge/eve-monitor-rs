@@ -1506,7 +1506,7 @@ pub enum ConfigGetStatus {
 
 #[serde_as]
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
-pub struct EfiVariable {
+pub struct EveEfiVariable {
     pub name: String,
     #[serde_as(as = "Base64")]
     pub value: Vec<u8>,
@@ -1523,8 +1523,8 @@ pub struct TpmLogs {
     pub backup_failed_log: Option<Vec<u8>>,
     #[serde_as(as = "Option<Base64>")]
     pub backup_good_log: Option<Vec<u8>>,
-    pub efi_vars_success: Option<Vec<EfiVariable>>,
-    pub efi_vars_failed: Option<Vec<EfiVariable>>,
+    pub efi_vars_success: Option<Vec<EveEfiVariable>>,
+    pub efi_vars_failed: Option<Vec<EveEfiVariable>>,
 }
 
 use anyhow::Result;

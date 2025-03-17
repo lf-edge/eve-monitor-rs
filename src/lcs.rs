@@ -170,7 +170,7 @@ pub fn collect_diff<'a, U>(
     (deletions, insertions)
 }
 
-pub fn produce_diff_ops3_no_reorder(
+pub fn produce_diff_ops(
     lcs: &[(usize, usize)],
     add: &[usize],
     del: &[usize],
@@ -192,7 +192,7 @@ pub fn produce_diff_ops3_no_reorder(
     mods_new.sort_by_key(|e| e.0);
 
     // Merge del, mods (old indices), and lcs (old indices) for old array
-    let (mut d, mut m, mut l, mut r) = (0, 0, 0, 0);
+    let (mut d, mut m, mut l) = (0, 0, 0);
     while d < del.len() || m < mods.len() || l < lcs.len() {
         let current_d = if d < del.len() { del[d] } else { usize::MAX };
         let current_m = if m < mods.len() {
@@ -223,14 +223,14 @@ pub fn produce_diff_ops3_no_reorder(
             old_diff.push(DiffOp::Mod(old, new));
             m += 1;
         } else {
-            let (old, new) = lcs[l];
+            let (old, _new) = lcs[l];
             old_diff.push(DiffOp::Unchanged(old));
             l += 1;
         }
     }
 
     // Merge add, mods (new indices), and lcs (new indices) for new array
-    let (mut a, mut m, mut l, mut r) = (0, 0, 0, 0);
+    let (mut a, mut m, mut l) = (0, 0, 0);
     while a < add.len() || m < mods.len() || l < lcs.len() {
         let current_a = if a < add.len() { add[a] } else { usize::MAX };
         let current_m = if m < mods.len() {

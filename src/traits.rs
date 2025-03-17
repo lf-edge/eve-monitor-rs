@@ -38,6 +38,9 @@ pub trait IElementEventHandler {
     fn handle_tick(&mut self) -> Option<Activity> {
         None
     }
+    fn handle_action(&mut self, _action: UiActions) -> Option<Action> {
+        None
+    }
 }
 
 pub trait IWidgetPresenter {
@@ -50,6 +53,9 @@ pub trait IWidgetPresenter {
 pub trait IWindow: IPresenter + IEventHandler {
     fn on_child_action(&mut self, source: String, action: UiActions) -> Option<Action> {
         info!("Window received child action: {:?} from {}", action, source);
+        None
+    }
+    fn status_bar_tips(&self) -> Option<String> {
         None
     }
 }

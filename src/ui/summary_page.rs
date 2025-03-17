@@ -103,11 +103,11 @@ impl IPresenter for SummaryPage {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
         self.update_attestation_state(model);
 
-        let [server, onboarding_status_and_app_sunnary_rect, vault_status_rect, pcr_decoder_rect] =
+        let [server, onboarding_status_and_app_sunnary_rect, vault_attest_status_rect, network_summary_rect] =
             Layout::vertical(vec![
                 Constraint::Length(3),
                 Constraint::Length(6),
-                Constraint::Length(10),
+                Constraint::Length(7),
                 Constraint::Fill(1),
             ])
             .areas(*area);
@@ -115,6 +115,10 @@ impl IPresenter for SummaryPage {
         let [onboarding_status_rect, app_summary_rect] =
             Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
                 .areas(onboarding_status_and_app_sunnary_rect);
+
+        let [vault_status_rect, attest_status_rect] =
+            Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Percentage(50)])
+                .areas(vault_attest_status_rect);
 
         let server_url = ratatui::widgets::Paragraph::new(
             model
@@ -136,7 +140,8 @@ impl IPresenter for SummaryPage {
         self.render_app_summary(model, frame, app_summary_rect);
 
         self.render_vault_status(model, frame, vault_status_rect);
-        //self.render_pcr_decoder(model, frame, pcr_decoder_rect);
+        self.render_attestation_status(model, frame, attest_status_rect);
+        self.render_connection_summary(model, frame, network_summary_rect);
     }
 }
 
@@ -264,7 +269,7 @@ impl SummaryPage {
     fn render_vault_status(&self, model: &Rc<Model>, frame: &mut Frame<'_>, status_rect: Rect) {
         let model = model.borrow();
         let vault_status = &model.vault_status;
-        let z_status = &model.z_status;
+        // let z_status = &model.z_status;
         let mut text = Vec::new();
         let mut spans = vec![];
         spans.push(Span::styled("Status: ", Style::default().fg(Color::White)));
@@ -316,60 +321,65 @@ impl SummaryPage {
             }
             VaultStatus::Locked(err, pcr) => {
                 text.push(Line::from(vec![
-                    Span::styled("Error: ", Style::default().fg(Color::Red)),
-                    Span::styled(&err.error, Style::default().fg(Color::White)),
-                ]));
-                text.push(Line::from(vec![
                     Span::styled("Affected PCRs: ", Style::default().fg(Color::White)),
                     if let Some(pcr) = pcr {
-                        Span::styled(format!("{:?}", pcr), Style::default().fg(Color::Green))
+                        let pcr = pcr
+                            .iter()
+                            .map(|p| format!("{:?}", p))
+                            .collect::<Vec<String>>()
+                            .join(",");
+                        Span::styled(format!("{}", pcr), Style::default().fg(Color::Green))
                     } else {
                         Span::styled("N/A", Style::default().fg(Color::Yellow))
                     },
+                ]));
+                text.push(Line::from(vec![
+                    Span::styled("Error: ", Style::default().fg(Color::Red)),
+                    Span::styled(&err.error, Style::default().fg(Color::White)),
                 ]));
                 // look at attestation status
                 // Basically we need to
                 // 1. show last attestation error
                 // 2. attestation will go through following states Wait -> InternalQuoteWait -> RestartWait -> Complete
                 // and some other. Show minimal information to the user
-                text.push(Line::from(vec![
-                    Span::styled("Attest: ", Style::default().fg(Color::Red)),
-                    Span::styled(&self.attestation_state, Style::default().fg(Color::White)),
-                ]));
-                text.push(Line::from(vec![
-                    Span::styled("Attest error: ", Style::default().fg(Color::Red)),
-                    Span::styled(&self.last_attest_error, Style::default().fg(Color::White)),
-                ]));
+                // text.push(Line::from(vec![
+                //     Span::styled("Attest: ", Style::default().fg(Color::Red)),
+                //     Span::styled(&self.attestation_state, Style::default().fg(Color::White)),
+                // ]));
+                // text.push(Line::from(vec![
+                //     Span::styled("Attest error: ", Style::default().fg(Color::Red)),
+                //     Span::styled(&self.last_attest_error, Style::default().fg(Color::White)),
+                // ]));
             }
         }
 
-        match z_status {
-            Some(status) => {
-                text.push(Line::from(vec![
-                    Span::styled("Attestation status: ", Style::default().fg(Color::White)),
-                    Span::styled(
-                        format!("{:#?}", status.attest_state),
-                        Style::default().fg(Color::Green),
-                    ),
-                ]));
-                text.push(Line::from(vec![
-                    Span::styled("Attestation error: ", Style::default().fg(Color::White)),
-                    Span::styled(
-                        format!("{:#?}", status.attest_error),
-                        Style::default().fg(Color::Green),
-                    ),
-                ]));
-                // is maintenance mode enabled
-                text.push(Line::from(vec![
-                    Span::styled("Maintenance mode: ", Style::default().fg(Color::White)),
-                    Span::styled(
-                        format!("{:#?}", status.maintenance_mode),
-                        Style::default().fg(Color::Green),
-                    ),
-                ]));
-            }
-            None => {}
-        }
+        // match z_status {
+        //     Some(status) => {
+        //         text.push(Line::from(vec![
+        //             Span::styled("Attestation status: ", Style::default().fg(Color::White)),
+        //             Span::styled(
+        //                 format!("{:#?}", status.attest_state),
+        //                 Style::default().fg(Color::Green),
+        //             ),
+        //         ]));
+        //         text.push(Line::from(vec![
+        //             Span::styled("Attestation error: ", Style::default().fg(Color::White)),
+        //             Span::styled(
+        //                 format!("{:#?}", status.attest_error),
+        //                 Style::default().fg(Color::Green),
+        //             ),
+        //         ]));
+        //         // is maintenance mode enabled
+        //         text.push(Line::from(vec![
+        //             Span::styled("Maintenance mode: ", Style::default().fg(Color::White)),
+        //             Span::styled(
+        //                 format!("{:#?}", status.maintenance_mode),
+        //                 Style::default().fg(Color::Green),
+        //             ),
+        //         ]));
+        //     }
+        //     None => {}
+        // }
 
         let vault_status_widget = ratatui::widgets::Paragraph::new(Text::from(text))
             .block(
@@ -381,95 +391,112 @@ impl SummaryPage {
         frame.render_widget(vault_status_widget, status_rect);
     }
 
-    // fn table_pcr14<'a>(data: &'a Vec<InterpretedTpmEvent>) -> (Table<'a>, u16) {
-    //     let width = [Constraint::Length(10), Constraint::Length(10)];
-    //     let raws = data
-    //         .iter()
-    //         .filter_map(|e| match e {
-    //             InterpretedTpmEvent::ConfigFileModified { file, status } => {
-    //                 Some(Row::new(vec![Text::from(file.clone()), status.to_text()]))
-    //             }
-    //             // InterpretedTpmEvent::Error(tpm_event) => todo!(),
-    //             _ => None,
-    //         })
-    //         .collect::<Vec<Row<'_>>>();
-    //     let height = raws.len() as u16 + 4;
-    //     let table = Table::new(raws, width)
-    //         .header(
-    //             Row::new(vec!["File", "Status"])
-    //                 .style(Style::new().bold())
-    //                 .bottom_margin(1),
-    //         )
-    //         .block(
-    //             ratatui::widgets::Block::default()
-    //                 .borders(ratatui::widgets::Borders::ALL)
-    //                 .title("PCR 14"),
-    //         )
-    //         .widths(&width)
-    //         .style(Style::default().fg(Color::White));
-    //     (table, height)
-    // }
-    // fn table_pcr8<'a>(data: &'a Vec<InterpretedTpmEvent>) -> (Table<'a>, u16) {
-    //     let width = [Constraint::Length(10), Constraint::Length(10)];
-    //     let raws = data
-    //         .iter()
-    //         .filter_map(|e| match e {
-    //             InterpretedTpmEvent::KernelCmdLineModified { old, new } => Some(Row::new(vec![
-    //                 Cell::new(old.as_str()),
-    //                 Cell::new(new.as_str()),
-    //             ])),
-    //             // InterpretedTpmEvent::Error(tpm_event) => todo!(),
-    //             _ => None,
-    //         })
-    //         .collect::<Vec<Row<'_>>>();
-    //     let height = raws.len() as u16 + 4;
-    //     let table = Table::new(raws, width)
-    //         .header(
-    //             Row::new(vec!["Old value", "new value"])
-    //                 .style(Style::new().bold())
-    //                 .bottom_margin(1),
-    //         )
-    //         .block(
-    //             ratatui::widgets::Block::default()
-    //                 .borders(ratatui::widgets::Borders::ALL)
-    //                 .title("Grub configuration modified"),
-    //         )
-    //         .widths(&width)
-    //         .style(Style::default().fg(Color::White));
-    //     (table, height)
-    // }
+    fn attestation_state(vault_status: &VaultStatus) -> String {
+        match vault_status {
+            VaultStatus::Unknown => "Checking...".into(),
+            VaultStatus::EncryptionDisabled(_, _) => "Disabled".into(),
+            VaultStatus::Unlocked(tpm) => {
+                if *tpm {
+                    "Enabled".into()
+                } else {
+                    "Disabled".into()
+                }
+            }
+            VaultStatus::Locked(_, _) => "Enabled".into(),
+        }
+    }
 
-    // using ratauil
-    // fn render_pcr_decoder(&self, model: &Rc<Model>, frame: &mut Frame<'_>, status_rect: Rect) {
-    //     let model = model.borrow();
-    //     let vault_status = &model.vault_status;
-    //     let tpm = &model.tpm_log_parse_result;
-    //     let mut tables = Vec::new();
-    //     let mut heights = Vec::new();
-    //     if vault_status.is_vault_locked() {
-    //         if let Some(tpm) = tpm {
-    //             for e in tpm {
-    //                 match e {
-    //                     (14, events) => {
-    //                         let (table, height) = Self::table_pcr14(events);
-    //                         tables.push(table);
-    //                         heights.push(Constraint::Length(height));
-    //                     }
-    //                     (8, events) => {
-    //                         let (table, height) = Self::table_pcr8(events);
-    //                         tables.push(table);
-    //                         heights.push(Constraint::Length(height));
-    //                     }
-    //                     _ => {}
-    //                 }
-    //             }
-    //             // create a layout
-    //             let layout = Layout::vertical(heights).margin(1);
-    //             let layout = layout.split(status_rect);
-    //             for (table, rect) in tables.into_iter().zip(layout.into_iter()) {
-    //                 frame.render_widget(table, *rect);
-    //             }
-    //         }
-    //     }
-    // }
+    fn render_attestation_status(
+        &self,
+        model: &Rc<Model>,
+        frame: &mut Frame<'_>,
+        status_rect: Rect,
+    ) {
+        let model = model.borrow();
+        let vault_status = &model.vault_status;
+        let mut text = Vec::new();
+
+        let attestation_state = Self::attestation_state(vault_status);
+        let is_enabled = attestation_state == "Enabled";
+        text.push(Line::from(vec![
+            Span::styled("State: ", Style::default().fg(Color::White)),
+            Span::styled(attestation_state, Style::default().fg(Color::Green)),
+        ]));
+
+        if is_enabled {
+            if !self.attestation_state.is_empty() {
+                text.push(Line::from(vec![
+                    Span::styled("Current state: ", Style::default().fg(Color::White)),
+                    Span::styled(&self.attestation_state, Style::default().fg(Color::White)),
+                ]));
+                if self.attestation_state != "Complete" {
+                    // map error to user friendly text
+                    let error = self.last_attest_error.replace("[ATTEST]", "");
+                    let error = match error.trim() {
+                        "Quote Mismatch" => {
+                            "PCR quote mismatch. Fix device configuration or PCR template on the controller"
+                                .to_string()
+                        }
+                        e => e.to_string(),
+                    };
+
+                    if !error.is_empty() {
+                        text.push(Line::from(vec![
+                            Span::styled("Error: ", Style::default().fg(Color::Red)),
+                            Span::styled(error, Style::default().fg(Color::White)),
+                        ]));
+                    }
+                }
+            }
+        }
+
+        let vault_status_widget = ratatui::widgets::Paragraph::new(Text::from(text))
+            .block(
+                ratatui::widgets::Block::default()
+                    .borders(ratatui::widgets::Borders::ALL)
+                    .title("Attestation status"),
+            )
+            .style(ratatui::style::Style::default().fg(ratatui::style::Color::White));
+        frame.render_widget(vault_status_widget, status_rect);
+    }
+    fn render_connection_summary(
+        &self,
+        model: &Rc<Model>,
+        frame: &mut Frame<'_>,
+        network_summary_rect: Rect,
+    ) {
+        let dpc_key = model
+            .borrow()
+            .dpc_key
+            .clone()
+            .unwrap_or("Configuration source unavailable".to_string());
+
+        let configuration_string = match dpc_key.as_str() {
+            "zedagent" => "Pushed from controller".green(),
+            "manual" => "Set by local user".yellow(),
+            "lastresort" => "Automatic DHCP (Last resort)".yellow(),
+            s => s.red(),
+        };
+
+        // convert DPC key into human readabel piece of information
+        let dpc_info = Line::default().spans(vec![
+            "Current networking configuration: ".white(),
+            configuration_string,
+        ]);
+
+        let mut text = Text::from(dpc_info);
+
+        if dpc_key == "manual" {
+            text.push_line(vec!["WARNING: ".red(),"the configuratiion set locally will be overwritten by working configuration from the controller".white()]);
+        }
+
+        let vault_status_widget = ratatui::widgets::Paragraph::new(Text::from(text))
+            .block(
+                ratatui::widgets::Block::default()
+                    .borders(ratatui::widgets::Borders::ALL)
+                    .title("Connectivity status"),
+            )
+            .style(ratatui::style::Style::default().fg(ratatui::style::Color::White));
+        frame.render_widget(vault_status_widget, network_summary_rect);
+    }
 }

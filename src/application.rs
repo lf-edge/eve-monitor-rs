@@ -181,6 +181,11 @@ impl Application {
                 self.model.borrow_mut().update_zed_agent_status(status);
             }
 
+            IpcMessage::TpmLogs(logs) => {
+                debug!("Got TpmLogs");
+                self.model.borrow_mut().update_tpm_logs(logs);
+            }
+
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
             }

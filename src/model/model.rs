@@ -3,13 +3,18 @@
 
 use std::{cell::RefCell, collections::HashMap};
 
+use anyhow::Result;
 use chrono::{DateTime, Utc};
+use log::{error, info};
 use uuid::Uuid;
 
-use crate::ipc::eve_types::{
-    AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
-    DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
-    EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, ZedAgentStatus,
+use crate::{
+    ipc::eve_types::{
+        AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
+        DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
+        EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, TpmLogs, ZedAgentStatus,
+    },
+    tpm::diff::{InterpretedTpmEvent, InterpretedTpmEventRef, TpmLogDiff},
 };
 
 use super::device::network::NetworkInterfaceStatus;
@@ -70,7 +75,16 @@ pub enum VaultStatus {
     Unknown,
     EncryptionDisabled(EveError, bool),
     Unlocked(bool),
-    Locked(EveError, Option<Vec<i32>>),
+    Locked(EveError, Option<Vec<u32>>),
+}
+
+impl VaultStatus {
+    pub fn is_vault_locked(&self) -> bool {
+        match self {
+            VaultStatus::Locked(_, _) => true,
+            _ => false,
+        }
+    }
 }
 
 pub type Model = RefCell<MonitorModel>;
@@ -85,6 +99,8 @@ pub struct MonitorModel {
     pub dpc_list: Option<DevicePortConfigList>,
     pub dpc_key: Option<String>,
     pub z_status: Option<ZedAgentStatus>,
+    pub tpm: Option<TpmLogDiff>,
+    pub error_log: Vec<String>,
 }
 
 impl From<EveVaultStatus> for VaultStatus {
@@ -222,6 +238,69 @@ impl MonitorModel {
     pub fn update_zed_agent_status(&mut self, status: ZedAgentStatus) {
         self.z_status = Some(status);
     }
+
+    pub fn update_tpm_logs(&mut self, logs: TpmLogs) {
+        info!("Got TPM logs from EVE");
+
+        match &self.vault_status {
+            VaultStatus::Locked(_, Some(pcrs)) => {
+                let diff = TpmLogDiff::try_from(logs);
+                match diff {
+                    Ok(mut diff) => {
+                        diff.set_affected_pcrs(pcrs);
+                        // TODO: start async parsing
+                        match diff.parse() {
+                            Ok(result) => {
+                                diff.result = Some(result);
+                            }
+                            Err(e) => {
+                                error!("Error parsing TPM logs: {:?}", e);
+                                self.error_log
+                                    .push(format!("Error parsing TPM logs: {:?}", e));
+                            }
+                        }
+                        //FIXME: should I set it at all if parsing fails?
+                        self.tpm = Some(diff);
+                    }
+                    Err(e) => {
+                        error!("Error getting TPM logs from IPC event: {:?}", e);
+                        self.error_log
+                            .push(format!("Error parsing TPM logs: {:?}", e));
+                    }
+                }
+                // if let Ok((old_good_log, new_log)) = get_logs_pair(logs) {
+                //     self.old_good_tpm_log = Some(old_good_log);
+                //     self.new_tpm_log = Some(new_log);
+                //     match Self::parse_tpm_logs(
+                //         &pcrs,
+                //         self.old_good_tpm_log.as_ref().unwrap(),
+                //         self.new_tpm_log.as_ref().unwrap(),
+                //     ) {
+                //         Ok(mut logs) => {
+                //             // sort tpm_events by new_original_index
+                //             // TODO: add sorting by PCR
+                //             logs.sort_by_key(|e| e.new_original_index);
+                //             self.tpm_log_parse_result = Some(logs);
+                //         }
+                //         Err(e) => {
+                //             error!("Error parsing TPM logs: {:?}", e);
+                //             self.error_log
+                //                 .push(format!("Error parsing TPM logs: {:?}", e));
+                //         }
+                //     }
+                // } else {
+                //     error!("Failed to get TPM logs pair");
+                //     self.error_log
+                //         .push("Failed to get TPM logs pair".to_string());
+                // }
+            }
+            _ => {
+                error!("TPM logs received while vault is not locked");
+                self.error_log
+                    .push("TPM logs received while vault is not locked".to_string());
+            }
+        }
+    }
 }
 
 impl Default for MonitorModel {
@@ -236,6 +315,8 @@ impl Default for MonitorModel {
             dpc_list: None,
             dpc_key: None,
             z_status: None,
+            tpm: None,
+            error_log: Vec::new(),
         }
     }
 }

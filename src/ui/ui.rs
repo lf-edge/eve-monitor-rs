@@ -37,6 +37,7 @@ use super::{
     networkpage::create_network_page,
     statusbar::{create_status_bar, StatusBarState},
     summary_page::SummaryPage,
+    vaultpage::VaultPage,
     window::Window,
 };
 
@@ -64,6 +65,7 @@ pub enum UiTabs {
     Home,
     Network,
     Applications,
+    Vault,
     Dmesg,
 }
 
@@ -106,6 +108,7 @@ impl Ui {
 
         self.views[UiTabs::Applications as usize].push(Box::new(ApplicationsPage::new()));
         self.views[UiTabs::Dmesg as usize].push(Box::new(DmesgViewer::new()));
+        self.views[UiTabs::Vault as usize].push(Box::new(VaultPage::new()));
     }
 
     pub fn draw(&mut self, model: Rc<Model>) {
@@ -138,6 +141,12 @@ impl Ui {
             // redraw from the bottom up
             let stack = &mut self.views[self.selected_tab as usize];
             let last_index = stack.len().saturating_sub(1);
+            // get hint for the last layer
+            let hint = if let Some(top) = stack.last_mut() {
+                top.status_bar_tips()
+            } else {
+                None
+            };
             for (index, layer) in stack.iter_mut().enumerate() {
                 layer.render(&body_rect, frame, &model, index == last_index);
             }

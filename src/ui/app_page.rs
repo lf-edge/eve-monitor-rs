@@ -183,6 +183,7 @@ impl IPresenter for ApplicationsPage {
 }
 
 impl ISelector for ApplicationsPage {
+    type Item = String;
     fn select_next(&mut self) {
         if let Some(selected) = self.list.state.selected() {
             if selected < self.list.size - 1 {
@@ -217,4 +218,8 @@ impl ISelector for ApplicationsPage {
         //     .map(|index| self[index].clone())
         None
     }
+
+    fn select_forward_by(&mut self, count: usize) {}
+
+    fn select_backward_by(&mut self, count: usize) {}
 }

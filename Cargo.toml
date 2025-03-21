@@ -21,13 +21,11 @@ lto = true          # Enable link-time optimization.
 # debuginfo = "packed"
 
 [dependencies]
-crossterm = { version = "0.28.1", default-features = false, features = [
+crossterm = { git = "https://github.com/crossterm-rs/crossterm.git", rev = "69249c88fed67ee917218dc7ccb8a866f391beed", version = "0.28.1", default-features = false, features = [
     "event-stream",
     "use-dev-tty",
-    # we do not nees libc feature however 0.28.1 has a bug that requires it
-    # https://github.com/crossterm-rs/crossterm/issues/935
-    "libc",
 ] }
+
 ratatui = { version = "0.29.0", features = ["unstable-widget-ref"] }
 anyhow = "1.0.86"
 log = "0.4.22"

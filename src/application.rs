@@ -11,12 +11,16 @@ use crate::ui::ui::Ui;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::net::IpAddr;
+use std::path::Path;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::result::Result::Ok;
+use std::str::FromStr;
 
 use anyhow::Result;
 use ipnet::IpNet;
 use log::error;
+use log::LevelFilter;
 use log::{debug, info, trace, warn};
 
 use tokio::sync::mpsc;
@@ -33,6 +37,57 @@ use crate::ipc::message::{IpcMessage, Request};
 use crate::terminal::TerminalWrapper;
 use crate::ui::action::{Action, UiActions};
 
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+pub struct AppConfig {
+    #[serde(skip)]
+    config_path: PathBuf,
+    pub log_level: String,
+}
+
+impl AppConfig {
+    fn new<T>(path: T) -> Self
+    where
+        T: AsRef<std::path::Path>,
+    {
+        Self {
+            config_path: path.as_ref().to_path_buf(),
+            log_level: "info".to_string(),
+        }
+    }
+
+    fn load<T>(path: T) -> Result<Self>
+    where
+        T: AsRef<std::path::Path>,
+    {
+        let cfg = std::fs::read_to_string(path)?;
+        let cfg: AppConfig = serde_json::from_str(&cfg)?;
+        Ok(cfg)
+    }
+
+    pub fn save(&self) -> Result<()> {
+        let cfg = serde_json::to_string_pretty(&self)?;
+        std::fs::write(&self.config_path, cfg)?;
+        Ok(())
+    }
+
+    pub fn load_or_create_app_config(base_dir: &Path) -> AppConfig {
+        let config_dir = PathBuf::from(base_dir).join("config");
+        std::fs::create_dir_all(&config_dir).expect("Failed to create config directory");
+
+        let config_path = config_dir.join("config.json");
+
+        AppConfig::load(&config_path).map_or_else(
+            |e| {
+                log::error!("Failed to load config: {}", e);
+                let cfg = AppConfig::new(config_path);
+                cfg.save().expect("Failed to save config");
+                cfg
+            },
+            |c| c,
+        )
+    }
+}
+
 pub struct Application {
     terminal_rx: UnboundedReceiver<Event>,
     terminal_tx: UnboundedSender<Event>,
@@ -44,10 +99,11 @@ pub struct Application {
     model: Rc<Model>,
     // pending requests
     pending_requests: HashMap<u64, Rc<dyn Fn(&mut Application)>>,
+    config: AppConfig,
 }
 
 impl Application {
-    pub fn new() -> Result<Self> {
+    pub fn new(config: AppConfig) -> Result<Self> {
         let (action_tx, action_rx) = mpsc::unbounded_channel::<Action>();
         let (terminal_tx, terminal_rx) = mpsc::unbounded_channel::<Event>();
         let terminal = TerminalWrapper::open_terminal()?;
@@ -66,6 +122,7 @@ impl Application {
             ipc_tx: None,
             model,
             pending_requests,
+            config,
         })
     }
     pub fn send_ipc_message<F>(&mut self, msg: IpcMessage, handle_response: F)

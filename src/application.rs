@@ -238,6 +238,30 @@ impl Application {
                 self.model.borrow_mut().update_zed_agent_status(status);
             }
 
+            IpcMessage::TUIConfig(cfg) => {
+                info!("== Configuration changed: TUIConfig ==");
+                // update log level
+                LevelFilter::from_str(&cfg.log_level).map_or_else(
+                    |e| {
+                        warn!("Invalid log level: {}", e);
+                    },
+                    |log_level| {
+                        log::set_max_level(log_level);
+                        info!("Log level set to: {:?}", log::max_level());
+                    },
+                );
+                // update application config
+                self.config.log_level = cfg.log_level;
+                match self.config.save() {
+                    Ok(_) => {
+                        info!("Application Configuration saved");
+                    }
+                    Err(e) => {
+                        error!("Failed to save configuration: {}", e);
+                    }
+                }
+            }
+
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
             }

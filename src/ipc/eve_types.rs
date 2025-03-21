@@ -1502,3 +1502,8 @@ pub enum ConfigGetStatus {
     TemporaryFail = 3, // ConfigGetTemporaryFail
     ReadSaved = 4,     // ConfigGetReadSaved
 }
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct TuiEveConfig {
+    pub log_level: String,
+}

@@ -13,6 +13,7 @@ use eve_types::EveOnboardingStatus;
 use eve_types::EveVaultStatus;
 use eve_types::LedBlinkCounter;
 use eve_types::PhysicalIOAdapterList;
+use eve_types::TuiEveConfig;
 use eve_types::ZedAgentStatus;
 use format_serde_error::SerdeError;
 use std::path::PathBuf;
@@ -44,6 +45,7 @@ enum TestMessageType {
     AppSummary,
     AppStatus,
     Response,
+    TUIConfig,
     Unknown(String),
 }
 
@@ -63,6 +65,7 @@ impl From<&str> for TestMessageType {
             "AppSummary" => TestMessageType::AppSummary,
             "AppStatus" => TestMessageType::AppStatus,
             "Response" => TestMessageType::Response,
+            "TUIConfig" => TestMessageType::TUIConfig,
             _ => TestMessageType::Unknown(s.to_string()),
         }
     }
@@ -146,6 +149,10 @@ fn test_from_device_files() -> Result<()> {
             }
             TestMessageType::AppStatus => {
                 let _ = serde_json::from_str::<AppInstanceStatus>(&data)
+                    .map_err(|err| SerdeError::new(data.to_string(), err))?;
+            }
+            TestMessageType::TUIConfig => {
+                let _ = serde_json::from_str::<TuiEveConfig>(&data)
                     .map_err(|err| SerdeError::new(data.to_string(), err))?;
             }
             TestMessageType::Response => {}

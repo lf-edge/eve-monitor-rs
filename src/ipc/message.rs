@@ -24,6 +24,7 @@ use super::eve_types::EveOnboardingStatus;
 use super::eve_types::EveVaultStatus;
 use super::eve_types::LedBlinkCounter;
 use super::eve_types::PhysicalIOAdapterList;
+use super::eve_types::TpmLogs;
 use super::eve_types::TuiEveConfig;
 use super::eve_types::ZedAgentStatus;
 
@@ -64,6 +65,7 @@ pub enum IpcMessage {
     AppsList(AppsList),
     ZedAgentStatus(ZedAgentStatus),
     TUIConfig(TuiEveConfig),
+    TpmLogs(TpmLogs),
     Response {
         #[serde(flatten)]
         result: core::result::Result<String, String>,
@@ -104,11 +106,23 @@ fn dump_to_file(message: &str, is_error: bool) {
 impl IpcMessage {
     fn from_reader(bytes: Bytes) -> Self {
         // TODO: it is faster to call serde_json::from_reader directly
+        // TODO: move dump_to_file to upper level
         // but I want to log the message if it fails to parse
         if let Ok(s) = String::from_utf8(bytes.to_vec()) {
             match serde_json::from_str(s.as_str()) {
                 Ok(message) => {
                     dump_to_file(s.as_str(), false);
+                    // dumpt raw binary TPM logs to file
+                    if let Self::TpmLogs(logs) = &message {
+                        if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {
+                            match logs.save_raw_binary_logs(&log_dir) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!("Failed to save raw binary logs: {}", e);
+                                }
+                            }
+                        }
+                    }
                     message
                 }
                 Err(e) => {

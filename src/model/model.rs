@@ -70,7 +70,7 @@ pub enum VaultStatus {
     Unknown,
     EncryptionDisabled(EveError, bool),
     Unlocked(bool),
-    Locked(EveError, Option<Vec<i32>>),
+    Locked(EveError, Option<Vec<u32>>),
 }
 
 pub type Model = RefCell<MonitorModel>;

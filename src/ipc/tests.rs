@@ -13,6 +13,7 @@ use eve_types::EveOnboardingStatus;
 use eve_types::EveVaultStatus;
 use eve_types::LedBlinkCounter;
 use eve_types::PhysicalIOAdapterList;
+use eve_types::TpmLogs;
 use eve_types::TuiEveConfig;
 use eve_types::ZedAgentStatus;
 use format_serde_error::SerdeError;
@@ -46,6 +47,7 @@ enum TestMessageType {
     AppStatus,
     Response,
     TUIConfig,
+    TpmLogs,
     Unknown(String),
 }
 
@@ -66,6 +68,7 @@ impl From<&str> for TestMessageType {
             "AppStatus" => TestMessageType::AppStatus,
             "Response" => TestMessageType::Response,
             "TUIConfig" => TestMessageType::TUIConfig,
+            "TpmLogs" => TestMessageType::TpmLogs,
             _ => TestMessageType::Unknown(s.to_string()),
         }
     }
@@ -153,6 +156,10 @@ fn test_from_device_files() -> Result<()> {
             }
             TestMessageType::TUIConfig => {
                 let _ = serde_json::from_str::<TuiEveConfig>(&data)
+                    .map_err(|err| SerdeError::new(data.to_string(), err))?;
+            }
+            TestMessageType::TpmLogs => {
+                let _ = serde_json::from_str::<TpmLogs>(&data)
                     .map_err(|err| SerdeError::new(data.to_string(), err))?;
             }
             TestMessageType::Response => {}

@@ -27,18 +27,17 @@ use super::eve_types::PhysicalIOAdapterList;
 use super::eve_types::TuiEveConfig;
 use super::eve_types::ZedAgentStatus;
 
-/// WindowId is a unique identifier for a window that is incremented sequentially.
 pub type RequestId = u64;
 
-struct RequestIdGenerator(AtomicU64);
-impl RequestIdGenerator {
+struct AtomicIdGenerator(AtomicU64);
+impl AtomicIdGenerator {
     fn next(&self) -> RequestId {
         self.0.fetch_add(1, Ordering::SeqCst)
     }
 }
 
-// statically initialize the window id counter
-static REQ_ID: RequestIdGenerator = RequestIdGenerator(AtomicU64::new(1));
+static REQ_ID: AtomicIdGenerator = AtomicIdGenerator(AtomicU64::new(1));
+static MSG_INDEX: AtomicIdGenerator = AtomicIdGenerator(AtomicU64::new(1));
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "RequestType", content = "RequestData")]
@@ -78,26 +77,19 @@ pub enum IpcMessage {
     },
 }
 
-// static mutable  variable to store the index of log file to write
-//TODO: it will go away eventually
-static mut LOG_FILE_INDEX: u64 = 0;
-
 fn dump_to_file(message: &str, is_error: bool) {
     use std::fs::OpenOptions;
     use std::io::Write;
 
-    // get EVE_MONITOR_LOG_DIR from environment
+    let msg_id = MSG_INDEX.next();
+
     if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {
         let log_file_name = format!(
             "eve_ipc_message{}-{}.json",
             if is_error { "-err" } else { "" },
-            unsafe { LOG_FILE_INDEX }
+            msg_id
         );
         let log_file_name = std::path::Path::new(log_dir.as_str()).join(log_file_name);
-        // increment log file index
-        unsafe {
-            LOG_FILE_INDEX += 1;
-        }
 
         let mut file = OpenOptions::new()
             .create(true)

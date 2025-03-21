@@ -22,7 +22,14 @@ pub struct RadioGroupElement {
     pub title: String,
 }
 
-impl IWidget for RadioGroupElement {}
+impl IWidget for RadioGroupElement {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 impl RadioGroupElement {
     pub fn new<S: Into<String>, P: Into<String>>(labels: Vec<S>, title: P) -> Self {

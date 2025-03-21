@@ -29,7 +29,14 @@ pub struct SpinBoxElement {
     size_hint: Option<usize>,
 }
 
-impl IWidget for SpinBoxElement {}
+impl IWidget for SpinBoxElement {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
+}
 
 impl SpinBoxElement {
     pub fn new<S: Into<String>>(items: Vec<S>) -> Self {

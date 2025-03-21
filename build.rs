@@ -1,7 +1,6 @@
 // Copyright (c) 2024-2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::env;
 use std::process::Command;
 
 fn main() {
@@ -19,16 +18,18 @@ fn main() {
         .filter(|output| output.status.success())
         .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
 
+    // or get dirty description if it exists
     let dirty_descr = Command::new("git")
         .args(["describe", "--tags", "--dirty"])
         .output()
         .ok()
         .filter(|output| output.status.success())
-        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string())
-        .unwrap_or_else(|| "unknown".to_string());
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_string());
 
-    let git_info = exact_tag.unwrap_or(dirty_descr);
-
-    // Set an environment variable in the Rust build output
-    println!("cargo:rustc-env=GIT_VERSION={}", git_info);
+    // if git tool is not available e.g. not installed in the container
+    // or the repository is not tagged, do nothing
+    exact_tag.or(dirty_descr).map(|version| {
+        // Set an environment variable in the Rust build output
+        println!("cargo:rustc-env=GIT_VERSION={}", version);
+    });
 }

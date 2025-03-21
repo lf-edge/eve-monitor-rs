@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
+    application::AppConfig,
     model::device::network::NetworkInterfaceStatus,
     traits::{IPresenter, IWindow},
     ui::{input_dialog::create_input_dialog, ipdialog::create_ip_dialog},
@@ -111,6 +112,7 @@ impl Ui {
     pub fn draw(&mut self, model: Rc<Model>) {
         let screen_layout = Layout::vertical([Length(3), Fill(0), Length(3)]);
         let tabs_widget = Ui::tabs();
+        let git_version = model.borrow().app_version.clone();
 
         //TODO: handle terminal event
         let _ = self.terminal.draw(|frame| {
@@ -121,9 +123,6 @@ impl Ui {
                 self.first_frame = false;
                 frame.render_widget(Clear, area);
             }
-
-            // these are evaluated statically during build time
-            let git_version = option_env!("GIT_VERSION").unwrap_or("Git version: N/A");
 
             let [tabs_rect, version_rect] =
                 Layout::horizontal([Fill(0), Length(git_version.len() as u16)]).areas(top_bar_rect);

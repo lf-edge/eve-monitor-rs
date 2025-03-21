@@ -76,6 +76,7 @@ pub enum VaultStatus {
 pub type Model = RefCell<MonitorModel>;
 #[derive(Debug)]
 pub struct MonitorModel {
+    pub app_version: String,
     pub dmesg: Vec<rmesg::entry::Entry>,
     pub network: Vec<NetworkInterfaceStatus>,
     pub downloader: Option<DownloaderStatus>,
@@ -226,7 +227,13 @@ impl MonitorModel {
 
 impl Default for MonitorModel {
     fn default() -> Self {
+        let app_version = option_env!("GIT_VERSION")
+            .map(|v| format!("{}", v))
+            .or(option_env!("CARGO_PKG_VERSION").map(|v| format!("{}", v)))
+            .unwrap_or("unknown".to_string());
+
         MonitorModel {
+            app_version,
             dmesg: Vec::with_capacity(1000),
             network: Vec::new(),
             downloader: None,

@@ -164,7 +164,8 @@ fn log_system_info() {
     info!("Starting monitor version: {}", env!("CARGO_PKG_VERSION"));
     info!(
         "Git version: {}",
-        option_env!("GIT_VERSION").unwrap_or("GIT_VERSION is not set, no .git directory?")
+        option_env!("GIT_VERSION")
+            .unwrap_or("GIT_VERSION is not set, no .git directory or git is not installed?")
     );
 
     // get current user UID and GID

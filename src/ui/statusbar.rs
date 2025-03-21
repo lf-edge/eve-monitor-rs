@@ -9,7 +9,21 @@ use ratatui::{
 
 use super::{widgets::label::LabelElement, window::Window};
 
-pub struct StatusBarState {}
+pub struct StatusBarState {
+    tips: Option<String>,
+}
+
+impl Default for StatusBarState {
+    fn default() -> Self {
+        Self { tips: None }
+    }
+}
+
+impl StatusBarState {
+    pub fn set_tips(&mut self, tips: Option<String>) {
+        self.tips = tips;
+    }
+}
 
 pub fn create_status_bar() -> Window<StatusBarState> {
     let clock = LabelElement::new("Clock").on_tick(|label| {
@@ -18,21 +32,33 @@ pub fn create_status_bar() -> Window<StatusBarState> {
         label.set_text(time);
     });
 
+    let tips = LabelElement::new("");
+
     let w = Window::builder("StatusBar")
-        .with_state(StatusBarState {})
+        .with_state(StatusBarState::default())
         .widget("Clock", clock)
+        .widget("Tips", tips)
         .with_layout(|w, rect, _model| {
             let inner_rect = rect.inner(Margin {
                 horizontal: 1,
                 vertical: 1,
             });
 
-            let layout = Layout::horizontal([Constraint::Length(0), Constraint::Length(8)])
+            let layout = Layout::horizontal([Constraint::Fill(1), Constraint::Length(8)])
                 .flex(Flex::End)
                 .split(inner_rect);
             w.update_layout("Clock", layout[1]);
+            w.update_layout("Tips", layout[0]);
         })
         .with_render(|_w, rect, frame, _model| {
+            let model = _model.borrow();
+
+            // FIXME: implement without downcast
+            let tips = _w.get_widget_mut("Tips").unwrap();
+            let label: &mut LabelElement =
+                tips.as_any_mut().downcast_mut::<LabelElement>().unwrap();
+            label.set_text(&model.status_bar_tips.clone().unwrap_or_default());
+
             let blk = Block::new()
                 //.border_type(BorderType::Rounded)
                 //FIXME: need new Font

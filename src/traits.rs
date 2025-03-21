@@ -53,6 +53,9 @@ pub trait IWindow: IPresenter + IEventHandler {
         info!("Window received child action: {:?} from {}", action, source);
         None
     }
+    fn status_bar_tips(&self) -> Option<String> {
+        None
+    }
 }
 pub trait IWidget: IWidgetPresenter + IElementEventHandler {
     fn as_any(&self) -> &dyn Any;

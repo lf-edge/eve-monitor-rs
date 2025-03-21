@@ -28,7 +28,13 @@ impl SummaryPage {
     }
 }
 
-impl IWindow for SummaryPage {}
+impl IWindow for SummaryPage {
+    fn status_bar_tips(&self) -> Option<String> {
+        Some(format!(
+            "Alt + <> linux terminal | Ctrl + s change server | Ctrl + <> switch tabs"
+        ))
+    }
+}
 
 impl IEventHandler for SummaryPage {
     fn handle_event(&mut self, event: crate::events::Event) -> Option<super::action::Action> {

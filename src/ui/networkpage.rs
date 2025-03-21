@@ -74,7 +74,11 @@ impl Default for InterfaceList {
     }
 }
 
-impl IWindow for NetworkPage {}
+impl IWindow for NetworkPage {
+    fn status_bar_tips(&self) -> Option<String> {
+        Some(format!("↑/↓ - navigate | Enter - edit interface"))
+    }
+}
 
 fn info_row_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Row<'b> {
     // cells #1,2 IFace name and Link status

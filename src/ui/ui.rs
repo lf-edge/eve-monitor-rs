@@ -137,6 +137,18 @@ impl Ui {
             // redraw from the bottom up
             let stack = &mut self.views[self.selected_tab as usize];
             let last_index = stack.len().saturating_sub(1);
+            // get hint for the last layer
+            {
+                let mut model = model.borrow_mut();
+
+                let hint = if let Some(top) = stack.last_mut() {
+                    top.status_bar_tips()
+                } else {
+                    None
+                };
+                debug!("Hint: {:?}", hint);
+                model.status_bar_tips = hint;
+            }
             for (index, layer) in stack.iter_mut().enumerate() {
                 layer.render(&body_rect, frame, &model, index == last_index);
             }

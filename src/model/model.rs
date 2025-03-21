@@ -86,6 +86,7 @@ pub struct MonitorModel {
     pub dpc_list: Option<DevicePortConfigList>,
     pub dpc_key: Option<String>,
     pub z_status: Option<ZedAgentStatus>,
+    pub status_bar_tips: Option<String>,
 }
 
 impl From<EveVaultStatus> for VaultStatus {
@@ -243,6 +244,7 @@ impl Default for MonitorModel {
             dpc_list: None,
             dpc_key: None,
             z_status: None,
+            status_bar_tips: None,
         }
     }
 }

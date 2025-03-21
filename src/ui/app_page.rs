@@ -21,12 +21,32 @@ use crate::{
     traits::{IEventHandler, IPresenter, IWindow},
 };
 
-use super::traits::ISelector;
+use super::traits::{ISelectable, ISelector};
 
 #[derive(Debug, Default)]
 struct ApplicationList {
     state: TableState,
     size: usize,
+}
+
+impl ISelectable for ApplicationList {
+    type Item = String;
+
+    fn current_index(&self) -> Option<usize> {
+        self.state.selected()
+    }
+
+    fn selection_size(&self) -> usize {
+        self.size
+    }
+
+    fn select(&mut self, index: usize) {
+        self.state.select(Some(index));
+    }
+
+    fn selected_item(&self) -> Option<Self::Item> {
+        None
+    }
 }
 
 #[derive(Debug, Default)]
@@ -57,12 +77,6 @@ impl ApplicationsPage {
             .collect::<Vec<_>>();
 
         self.list.size = rows.len();
-        // self.interface_names = model
-        //     .borrow()
-        //     .network
-        //     .iter()
-        //     .map(|iface| iface.name.clone())
-        //     .collect();
 
         // create a surrounding block for the list
         let block = Block::default()
@@ -109,16 +123,10 @@ impl IEventHandler for ApplicationsPage {
     fn handle_event(&mut self, event: Event) -> Option<super::action::Action> {
         match event {
             Event::Key(key) => match key.code {
-                KeyCode::Up => self.select_previous(),
-                KeyCode::Down => self.select_next(),
-                KeyCode::Home if key.modifiers == KeyModifiers::CONTROL => self.select_first(),
-                KeyCode::End if key.modifiers == KeyModifiers::CONTROL => self.select_last(),
-                KeyCode::Enter => {
-                    let _selected_iface = self.selected();
-                    // if let Some(selected) = _selected_iface {
-                    //     return Some(Action::new("net", UiActions::EditIfaceConfig(selected)));
-                    // }
-                }
+                KeyCode::Up => self.list.select_previous(),
+                KeyCode::Down => self.list.select_next(),
+                KeyCode::Home if key.modifiers == KeyModifiers::CONTROL => self.list.select_first(),
+                KeyCode::End if key.modifiers == KeyModifiers::CONTROL => self.list.select_last(),
                 _ => {}
             },
             _ => {}
@@ -141,32 +149,6 @@ fn info_row_from_app<'a, 'b>(app: &'a AppInstance) -> Row<'b> {
         },
     ];
 
-    // // collect IP addresses and add as multiline
-    // let ipv4_len = app.ipv4.as_ref().map_or(0, |v| v.len());
-    // let ipv6_len = app.ipv6.as_ref().map_or(0, |v| v.len());
-
-    // let height = (ipv4_len + ipv6_len).max(1);
-
-    // // join both ipv4 and ipv6 addresses and separate by newline
-    // let combined_ip_list_iter = app
-    //     .ipv4
-    //     .iter()
-    //     .chain(app.ipv6.iter())
-    //     .flat_map(|v| v.iter().cloned())
-    //     .map(|ip| ip.to_string())
-    //     .collect::<Vec<_>>()
-    //     .join("\n");
-
-    // // cell #3 IP address list
-    // if height > 1 {
-    //     cells.push(Cell::from(combined_ip_list_iter).style(Style::new().white()));
-    // } else {
-    //     cells.push(Cell::from("N/A").style(Style::new().red()));
-    // }
-
-    // cell #4 MAC
-    //cells.push(Cell::from(app.mac.to_string()).style(Style::new().yellow()));
-
     Row::new(cells).height(height)
 }
 
@@ -179,42 +161,5 @@ impl IPresenter for ApplicationsPage {
         _focused: bool,
     ) {
         self.render_app_list(model, *area, frame);
-    }
-}
-
-impl ISelector for ApplicationsPage {
-    fn select_next(&mut self) {
-        if let Some(selected) = self.list.state.selected() {
-            if selected < self.list.size - 1 {
-                self.list.state.select(Some(selected + 1));
-            }
-        } else {
-            self.list.state.select(Some(0));
-        }
-    }
-
-    fn select_previous(&mut self) {
-        if let Some(selected) = self.list.state.selected() {
-            let index = selected.saturating_sub(1);
-            self.list.state.select(Some(index));
-        }
-    }
-
-    fn select_first(&mut self) {
-        self.list.state.select(Some(0));
-    }
-
-    fn select_last(&mut self) {
-        let index = self.list.size.saturating_sub(1);
-
-        self.list.state.select(Some(index));
-    }
-
-    fn selected(&self) -> Option<String> {
-        // self.list
-        //     .state
-        //     .selected()
-        //     .map(|index| self[index].clone())
-        None
     }
 }

@@ -85,6 +85,11 @@ fn dump_to_file(message: &str, is_error: bool) {
 
     let msg_id = MSG_INDEX.next();
 
+    // dump all message only for debug. they may consume a lot of disk space
+    if !is_error && log::max_level() < log::LevelFilter::Debug {
+        return;
+    }
+
     if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {
         let log_file_name = format!(
             "eve_ipc_message{}-{}.json",

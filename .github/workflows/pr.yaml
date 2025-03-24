@@ -1,4 +1,6 @@
+---
 name: Pull Request Workflow
+# yamllint disable-line rule:truthy
 on:
   push:
     branches: ["main"]
@@ -14,14 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: checkout
-        uses: actions/checkout@v4
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Get files for PR
-        uses: tj-actions/changed-files@v44
+        # yamllint disable-line rule:line-length
+        uses: tj-actions/changed-files@2f7c5bfce28377bc069a65ba478de0a74aa0ca32 # v46.0.1
         id: changed-files
         with:
           separator: "," # Space-separated output
       - name: Verify SPDX headers
-        uses: rucoder/spdx@v1
+        # yamllint disable-line rule:line-length
+        uses: rucoder/spdx@fbe91fbffc0ae3f55ae6f2b9ab0adb41a4083ad0 # v1
         with:
           licenses: |-
             Apache-2.0
@@ -32,7 +37,9 @@ jobs:
     needs: check-spdx-headers
 
     steps:
-      - uses: actions/checkout@v4
+      - name: checkout
+        # yamllint disable-line rule:line-length
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - name: Build
         run: cargo build --verbose
       - name: Run tests

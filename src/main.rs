@@ -7,6 +7,7 @@ mod efi;
 mod events;
 mod ipc;
 mod model;
+mod tcg;
 mod terminal;
 mod traits;
 mod ui;

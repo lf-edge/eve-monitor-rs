@@ -74,6 +74,13 @@ impl From<&str> for TestMessageType {
     }
 }
 
+fn get_test_data_path(data: &str) -> PathBuf {
+    let manifest_dir =
+        std::env::var("CARGO_MANIFEST_DIR").expect("Failed to find CARGO_MANIFEST_DIR");
+    let test_data_path = std::path::Path::new(&manifest_dir).join("test_data");
+    test_data_path.join(data)
+}
+
 // the function loads one JSON file and returns message type
 // e.g {"type":"ZedAgentStatus","message":  where 'message' is the raw json data
 // return message type and the raw json data
@@ -92,8 +99,8 @@ fn load_all_files<P: Into<PathBuf>>(path: P) -> Result<Vec<(TestMessageType, Str
     for entry in std::fs::read_dir(path)? {
         let entry = entry?;
         let path = entry.path();
-        // skip if the extension is not .json
-        if path.extension().unwrap() != "json" {
+        let extension = path.extension();
+        if extension != Some("json".as_ref()) {
             continue;
         }
         let (message_type, data, path) = load_json_test_data(path)?;
@@ -105,7 +112,7 @@ fn load_all_files<P: Into<PathBuf>>(path: P) -> Result<Vec<(TestMessageType, Str
 #[test]
 fn test_from_device_files() -> Result<()> {
     // load all files from the specified directory
-    let data = load_all_files("./ipc-tests").unwrap();
+    let data = load_all_files(get_test_data_path("ipc-tests")).unwrap();
     for (message_type, data, path) in data {
         // print file name
         println!("Testing JSON file: {:?}", path);

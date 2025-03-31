@@ -262,6 +262,11 @@ impl Application {
                 }
             }
 
+            IpcMessage::TpmLogs(logs) => {
+                debug!("Got TpmLogs");
+                self.model.borrow_mut().update_tpm_logs(logs);
+            }
+
             _ => {
                 warn!("Unhandled IPC message: {:?}", msg);
             }

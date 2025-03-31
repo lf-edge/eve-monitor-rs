@@ -2,14 +2,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::{
-    application::AppConfig,
     model::device::network::NetworkInterfaceStatus,
     traits::{IPresenter, IWindow},
     ui::{input_dialog::create_input_dialog, ipdialog::create_ip_dialog},
 };
 use core::fmt::Debug;
 use crossterm::event::{KeyCode, KeyModifiers};
-use log::debug;
+use log::{debug, info};
 use ratatui::{
     layout::{
         Constraint::{Fill, Length},
@@ -38,6 +37,7 @@ use super::{
     networkpage::create_network_page,
     statusbar::{create_status_bar, StatusBarState},
     summary_page::SummaryPage,
+    vaultpage::VaultPage,
     window::Window,
 };
 
@@ -65,6 +65,7 @@ pub enum UiTabs {
     Home,
     Network,
     Applications,
+    Vault,
     Dmesg,
 }
 
@@ -107,6 +108,7 @@ impl Ui {
 
         self.views[UiTabs::Applications as usize].push(Box::new(ApplicationsPage::new()));
         self.views[UiTabs::Dmesg as usize].push(Box::new(DmesgViewer::new()));
+        self.views[UiTabs::Vault as usize].push(Box::new(VaultPage::new()));
     }
 
     pub fn draw(&mut self, model: Rc<Model>) {
@@ -127,7 +129,7 @@ impl Ui {
             let [tabs_rect, version_rect] =
                 Layout::horizontal([Fill(0), Length(git_version.len() as u16)]).areas(top_bar_rect);
 
-            let version_widget = Paragraph::new(git_version).fg(Color::DarkGray);
+            let version_widget = Paragraph::new(git_version.clone()).fg(Color::DarkGray);
             frame.render_widget(version_widget, version_rect);
 
             tabs_widget

@@ -3,6 +3,7 @@
 
 mod actions;
 mod application;
+mod diff;
 mod efi;
 mod events;
 mod ipc;

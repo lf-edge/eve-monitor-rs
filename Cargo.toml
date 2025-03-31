@@ -67,5 +67,7 @@ strip-ansi-escapes = "0.2.0"
 byteorder = "1.5.0"
 num_enum = "0.7.3"
 hex = "0.4.3"
+regex = "1.11.1"
 [dev-dependencies]
 sha2 = "0.10.8"
+env_logger = "0.11.7"

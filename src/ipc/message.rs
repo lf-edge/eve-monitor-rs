@@ -24,20 +24,21 @@ use super::eve_types::EveOnboardingStatus;
 use super::eve_types::EveVaultStatus;
 use super::eve_types::LedBlinkCounter;
 use super::eve_types::PhysicalIOAdapterList;
+use super::eve_types::TpmLogs;
+use super::eve_types::TuiEveConfig;
 use super::eve_types::ZedAgentStatus;
 
-/// WindowId is a unique identifier for a window that is incremented sequentially.
 pub type RequestId = u64;
 
-struct RequestIdGenerator(AtomicU64);
-impl RequestIdGenerator {
+struct AtomicIdGenerator(AtomicU64);
+impl AtomicIdGenerator {
     fn next(&self) -> RequestId {
         self.0.fetch_add(1, Ordering::SeqCst)
     }
 }
 
-// statically initialize the window id counter
-static REQ_ID: RequestIdGenerator = RequestIdGenerator(AtomicU64::new(1));
+static REQ_ID: AtomicIdGenerator = AtomicIdGenerator(AtomicU64::new(1));
+static MSG_INDEX: AtomicIdGenerator = AtomicIdGenerator(AtomicU64::new(1));
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "RequestType", content = "RequestData")]
@@ -63,6 +64,8 @@ pub enum IpcMessage {
     NodeStatus(EveNodeStatus),
     AppsList(AppsList),
     ZedAgentStatus(ZedAgentStatus),
+    TUIConfig(TuiEveConfig),
+    TpmLogs(TpmLogs),
     Response {
         #[serde(flatten)]
         result: core::result::Result<String, String>,
@@ -76,26 +79,24 @@ pub enum IpcMessage {
     },
 }
 
-// static mutable  variable to store the index of log file to write
-//TODO: it will go away eventually
-static mut LOG_FILE_INDEX: u64 = 0;
-
 fn dump_to_file(message: &str, is_error: bool) {
     use std::fs::OpenOptions;
     use std::io::Write;
 
-    // get EVE_MONITOR_LOG_DIR from environment
+    let msg_id = MSG_INDEX.next();
+
+    // dump all message only for debug. they may consume a lot of disk space
+    if !is_error && log::max_level() < log::LevelFilter::Debug {
+        return;
+    }
+
     if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {
         let log_file_name = format!(
             "eve_ipc_message{}-{}.json",
             if is_error { "-err" } else { "" },
-            unsafe { LOG_FILE_INDEX }
+            msg_id
         );
         let log_file_name = std::path::Path::new(log_dir.as_str()).join(log_file_name);
-        // increment log file index
-        unsafe {
-            LOG_FILE_INDEX += 1;
-        }
 
         let mut file = OpenOptions::new()
             .create(true)
@@ -110,11 +111,23 @@ fn dump_to_file(message: &str, is_error: bool) {
 impl IpcMessage {
     fn from_reader(bytes: Bytes) -> Self {
         // TODO: it is faster to call serde_json::from_reader directly
+        // TODO: move dump_to_file to upper level
         // but I want to log the message if it fails to parse
         if let Ok(s) = String::from_utf8(bytes.to_vec()) {
             match serde_json::from_str(s.as_str()) {
                 Ok(message) => {
                     dump_to_file(s.as_str(), false);
+                    // dumpt raw binary TPM logs to file
+                    if let Self::TpmLogs(logs) = &message {
+                        if let Ok(log_dir) = std::env::var("EVE_MONITOR_LOG_DIR") {
+                            match logs.save_raw_binary_logs(&log_dir) {
+                                Ok(_) => {}
+                                Err(e) => {
+                                    error!("Failed to save raw binary logs: {}", e);
+                                }
+                            }
+                        }
+                    }
                     message
                 }
                 Err(e) => {

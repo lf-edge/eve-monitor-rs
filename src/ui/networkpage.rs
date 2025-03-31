@@ -24,7 +24,7 @@ use crate::{
 
 use super::{
     action::{Action, UiActions},
-    traits::ISelector,
+    traits::{ISelectable, ISelector},
 };
 
 const MAC_LENGTH: u16 = 17;
@@ -35,12 +35,33 @@ const IFACE_LABEL_LENGTH: u16 = 10;
 #[derive(Default)]
 struct NetworkPage {
     list: InterfaceList,
-    interface_names: Vec<String>,
 }
 
 struct InterfaceList {
     state: TableState,
     size: usize,
+    interface_names: Vec<String>,
+}
+
+impl ISelectable for InterfaceList {
+    type Item = String;
+
+    fn current_index(&self) -> Option<usize> {
+        self.state.selected()
+    }
+
+    fn selection_size(&self) -> usize {
+        self.size
+    }
+
+    fn select(&mut self, index: usize) {
+        self.state.select(Some(index));
+    }
+
+    fn selected_item(&self) -> Option<Self::Item> {
+        self.current_index()
+            .map(|index| self.interface_names[index].clone())
+    }
 }
 
 impl Default for InterfaceList {
@@ -48,11 +69,16 @@ impl Default for InterfaceList {
         Self {
             state: TableState::default(),
             size: 0,
+            interface_names: vec![],
         }
     }
 }
 
-impl IWindow for NetworkPage {}
+impl IWindow for NetworkPage {
+    fn status_bar_tips(&self) -> Option<String> {
+        Some(format!("↑/↓ - navigate | Enter - edit interface"))
+    }
+}
 
 fn info_row_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Row<'b> {
     // cells #1,2 IFace name and Link status
@@ -209,7 +235,7 @@ impl NetworkPage {
         &self,
         model: &Rc<RefCell<MonitorModel>>,
     ) -> Option<NetworkInterfaceStatus> {
-        let selected = self.selected()?;
+        let selected = self.list.selected()?;
         let model_ref = model.borrow();
         let ifaces = &model_ref.network;
         ifaces.iter().find(|iface| iface.name == selected).cloned()
@@ -253,7 +279,7 @@ impl NetworkPage {
             .collect::<Vec<_>>();
 
         self.list.size = rows.len();
-        self.interface_names = model
+        self.list.interface_names = model
             .borrow()
             .network
             .iter()
@@ -333,13 +359,12 @@ impl IEventHandler for NetworkPage {
     fn handle_event(&mut self, event: Event) -> Option<Action> {
         match event {
             Event::Key(key) => match key.code {
-                KeyCode::Up => self.select_previous(),
-                KeyCode::Down => self.select_next(),
-                KeyCode::Home if key.modifiers == KeyModifiers::CONTROL => self.select_first(),
-                KeyCode::End if key.modifiers == KeyModifiers::CONTROL => self.select_last(),
+                KeyCode::Up => self.list.select_previous(),
+                KeyCode::Down => self.list.select_next(),
+                KeyCode::Home if key.modifiers == KeyModifiers::CONTROL => self.list.select_first(),
+                KeyCode::End if key.modifiers == KeyModifiers::CONTROL => self.list.select_last(),
                 KeyCode::Enter => {
-                    let _selected_iface = self.selected();
-                    if let Some(selected) = _selected_iface {
+                    if let Some(selected) = self.list.selected() {
                         return Some(Action::new("net", UiActions::EditIfaceConfig(selected)));
                     }
                 }
@@ -351,45 +376,8 @@ impl IEventHandler for NetworkPage {
     }
 }
 
-impl ISelector for NetworkPage {
-    fn select_next(&mut self) {
-        if let Some(selected) = self.list.state.selected() {
-            if selected < self.list.size - 1 {
-                self.list.state.select(Some(selected + 1));
-            }
-        } else {
-            self.list.state.select(Some(0));
-        }
-    }
-
-    fn select_previous(&mut self) {
-        if let Some(selected) = self.list.state.selected() {
-            let index = selected.saturating_sub(1);
-            self.list.state.select(Some(index));
-        }
-    }
-
-    fn select_first(&mut self) {
-        self.list.state.select(Some(0));
-    }
-
-    fn select_last(&mut self) {
-        let index = self.list.size.saturating_sub(1);
-
-        self.list.state.select(Some(index));
-    }
-
-    fn selected(&self) -> Option<String> {
-        self.list
-            .state
-            .selected()
-            .map(|index| self.interface_names[index].clone())
-    }
-}
-
 pub fn create_network_page() -> impl IWindow {
     NetworkPage {
         list: InterfaceList::default(),
-        interface_names: vec![],
     }
 }

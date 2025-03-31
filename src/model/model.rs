@@ -4,12 +4,16 @@
 use std::{cell::RefCell, collections::HashMap};
 
 use chrono::{DateTime, Utc};
+use log::{error, info};
 use uuid::Uuid;
 
-use crate::ipc::eve_types::{
-    AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
-    DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
-    EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, ZedAgentStatus,
+use crate::{
+    ipc::eve_types::{
+        AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
+        DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
+        EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, TpmLogs, ZedAgentStatus,
+    },
+    model::device::tpmlog_diff::TpmLogDiff,
 };
 
 use super::device::network::NetworkInterfaceStatus;
@@ -70,12 +74,22 @@ pub enum VaultStatus {
     Unknown,
     EncryptionDisabled(EveError, bool),
     Unlocked(bool),
-    Locked(EveError, Option<Vec<i32>>),
+    Locked(EveError, Option<Vec<u32>>),
+}
+
+impl VaultStatus {
+    pub fn is_vault_locked(&self) -> bool {
+        match self {
+            VaultStatus::Locked(_, _) => true,
+            _ => false,
+        }
+    }
 }
 
 pub type Model = RefCell<MonitorModel>;
 #[derive(Debug)]
 pub struct MonitorModel {
+    pub app_version: String,
     pub dmesg: Vec<rmesg::entry::Entry>,
     pub network: Vec<NetworkInterfaceStatus>,
     pub downloader: Option<DownloaderStatus>,
@@ -85,6 +99,9 @@ pub struct MonitorModel {
     pub dpc_list: Option<DevicePortConfigList>,
     pub dpc_key: Option<String>,
     pub z_status: Option<ZedAgentStatus>,
+    pub tpm: Option<TpmLogDiff>,
+    pub error_log: Vec<String>,
+    pub status_bar_tips: Option<String>,
 }
 
 impl From<EveVaultStatus> for VaultStatus {
@@ -222,11 +239,55 @@ impl MonitorModel {
     pub fn update_zed_agent_status(&mut self, status: ZedAgentStatus) {
         self.z_status = Some(status);
     }
+
+    pub fn update_tpm_logs(&mut self, logs: TpmLogs) {
+        info!("Got TPM logs from EVE");
+
+        match &self.vault_status {
+            VaultStatus::Locked(_, Some(pcrs)) => {
+                let diff = TpmLogDiff::try_from(logs);
+                match diff {
+                    Ok(mut diff) => {
+                        diff.set_affected_pcrs(pcrs);
+                        // TODO: start async parsing
+                        match diff.parse() {
+                            Ok(result) => {
+                                diff.result = Some(result);
+                            }
+                            Err(e) => {
+                                error!("Error parsing TPM logs: {:?}", e);
+                                self.error_log
+                                    .push(format!("Error parsing TPM logs: {:?}", e));
+                            }
+                        }
+                        //FIXME: should I set it at all if parsing fails?
+                        self.tpm = Some(diff);
+                    }
+                    Err(e) => {
+                        error!("Error getting TPM logs from IPC event: {:?}", e);
+                        self.error_log
+                            .push(format!("Error parsing TPM logs: {:?}", e));
+                    }
+                }
+            }
+            _ => {
+                error!("TPM logs received while vault is not locked");
+                self.error_log
+                    .push("TPM logs received while vault is not locked".to_string());
+            }
+        }
+    }
 }
 
 impl Default for MonitorModel {
     fn default() -> Self {
+        let app_version = option_env!("GIT_VERSION")
+            .map(|v| format!("{}", v))
+            .or(option_env!("CARGO_PKG_VERSION").map(|v| format!("{}", v)))
+            .unwrap_or("unknown".to_string());
+
         MonitorModel {
+            app_version,
             dmesg: Vec::with_capacity(1000),
             network: Vec::new(),
             downloader: None,
@@ -236,6 +297,9 @@ impl Default for MonitorModel {
             dpc_list: None,
             dpc_key: None,
             z_status: None,
+            tpm: None,
+            error_log: Vec::new(),
+            status_bar_tips: None,
         }
     }
 }

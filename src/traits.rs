@@ -1,6 +1,7 @@
 // Copyright (c) 2024-2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use std::any::Any;
 use std::rc::Rc;
 
 use crate::events::Event;
@@ -52,8 +53,13 @@ pub trait IWindow: IPresenter + IEventHandler {
         info!("Window received child action: {:?} from {}", action, source);
         None
     }
+    fn status_bar_tips(&self) -> Option<String> {
+        None
+    }
 }
 pub trait IWidget: IWidgetPresenter + IElementEventHandler {
+    fn as_any(&self) -> &dyn Any;
+    fn as_any_mut(&mut self) -> &mut dyn Any;
     fn set_enabled(&mut self, _enabled: bool) {}
     fn is_enabled(&self) -> bool {
         true

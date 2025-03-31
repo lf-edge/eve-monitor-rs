@@ -1,6 +1,7 @@
 // Copyright (c) 2024-2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::Result;
 use base64::Engine;
 use chrono::DateTime;
 use chrono::Utc;
@@ -16,6 +17,8 @@ use serde_with::serde_as;
 use serde_with::DefaultOnNull;
 use serde_with::FromInto;
 use serde_with::NoneAsEmptyString;
+use std::fs::File;
+use std::io::Write;
 use std::net::IpAddr;
 use strum::Display;
 use uuid::Uuid;
@@ -1338,7 +1341,7 @@ pub struct EveVaultStatus {
     pub pcr_status: PCRStatus,
     pub conversion_complete: bool,
     #[serde(rename = "MismatchingPCRs")]
-    pub mismatching_pcrs: Option<Vec<i32>>,
+    pub mismatching_pcrs: Option<Vec<u32>>,
     #[serde(flatten)]
     pub error_and_time: ErrorAndTime, // Unknown type, skipped
 }
@@ -1501,4 +1504,54 @@ pub enum ConfigGetStatus {
     Fail = 2,          // ConfigGetFail
     TemporaryFail = 3, // ConfigGetTemporaryFail
     ReadSaved = 4,     // ConfigGetReadSaved
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct TuiEveConfig {
+    pub log_level: String,
+}
+
+#[serde_as]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
+pub struct EveEfiVariable {
+    pub name: String,
+    #[serde_as(as = "Base64")]
+    pub value: Vec<u8>,
+}
+
+#[serde_as]
+#[derive(Debug, Default, Serialize, Deserialize)]
+pub struct TpmLogs {
+    #[serde_as(as = "Option<Base64>")]
+    pub last_failed_log: Option<Vec<u8>>,
+    #[serde_as(as = "Option<Base64>")]
+    pub last_good_log: Option<Vec<u8>>,
+    #[serde_as(as = "Option<Base64>")]
+    pub backup_failed_log: Option<Vec<u8>>,
+    #[serde_as(as = "Option<Base64>")]
+    pub backup_good_log: Option<Vec<u8>>,
+    pub efi_vars_success: Option<Vec<EveEfiVariable>>,
+    pub efi_vars_failed: Option<Vec<EveEfiVariable>>,
+}
+
+impl TpmLogs {
+    pub fn save_raw_binary_logs(&self, path: &str) -> Result<()> {
+        if let Some(ref last_failed_log) = self.last_failed_log {
+            let mut file = File::create(format!("{}/last_failed_log.bin", path))?;
+            file.write_all(last_failed_log)?;
+        }
+        if let Some(ref last_good_log) = self.last_good_log {
+            let mut file = File::create(format!("{}/last_good_log.bin", path))?;
+            file.write_all(last_good_log)?;
+        }
+        if let Some(ref backup_failed_log) = self.backup_failed_log {
+            let mut file = File::create(format!("{}/backup_failed_log.bin", path))?;
+            file.write_all(backup_failed_log)?;
+        }
+        if let Some(ref backup_good_log) = self.backup_good_log {
+            let mut file = File::create(format!("{}/backup_good_log.bin", path))?;
+            file.write_all(backup_good_log)?;
+        }
+        Ok(())
+    }
 }

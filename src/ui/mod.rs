@@ -18,5 +18,6 @@ pub mod summary_page;
 pub mod tools;
 pub mod traits;
 pub mod ui;
+pub mod vaultpage;
 pub mod widgets;
 pub mod window;

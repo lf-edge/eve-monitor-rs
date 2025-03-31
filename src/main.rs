@@ -3,32 +3,43 @@
 
 mod actions;
 mod application;
+mod diff;
+mod efi;
 mod events;
 mod ipc;
 mod model;
+mod tcg;
 mod terminal;
 mod traits;
 mod ui;
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use anyhow::Result;
-use application::Application;
+use application::{AppConfig, Application};
 use libc::{EXIT_FAILURE, EXIT_SUCCESS};
 use log::{info, warn, LevelFilter};
 use terminal::TerminalWrapper;
 
-const EVE_MONITOR_LOG_DIR_EVE: &str = "/persist/monitor/log";
-const EVE_MONITOR_LOG_DIR: &str = "./persist/monitor/log";
+const EVE_MONITOR_BASE_DIR_EVE: &str = "/persist/monitor/";
+const EVE_MONITOR_BASE_DIR_PC: &str = "./persist/monitor/";
 
-fn get_base_log_dir() -> &'static str {
+fn get_base_dir() -> PathBuf {
     // we use XDG_RUNTIME_DIR to detect the fact that we are running on desktop linux
     // FIXME: is there a better way?
     if let Ok(_dir) = std::env::var("XDG_RUNTIME_DIR") {
-        EVE_MONITOR_LOG_DIR
+        EVE_MONITOR_BASE_DIR_PC.into()
     } else {
-        EVE_MONITOR_LOG_DIR_EVE
+        EVE_MONITOR_BASE_DIR_EVE.into()
     }
+}
+
+fn get_base_log_dir() -> PathBuf {
+    let base_dir = get_base_dir();
+    base_dir.join("log")
 }
 
 fn remove_old_log_sessions<T: AsRef<Path>>(log_dir: T, rotate_count: usize) -> Result<()> {
@@ -62,15 +73,17 @@ fn remove_old_log_sessions<T: AsRef<Path>>(log_dir: T, rotate_count: usize) -> R
     Ok(())
 }
 
-fn init_logging() -> log2::Handle {
+fn init_logging(log_level: &str) -> log2::Handle {
     let base_log_dir = get_base_log_dir();
 
+    let log_level = LevelFilter::from_str(log_level).unwrap_or(LevelFilter::Info);
+
     // remove old log directories. store result until we initialize logging
-    let remove_result = remove_old_log_sessions(base_log_dir, 3);
+    let remove_result = remove_old_log_sessions(&base_log_dir, 3);
 
     // get current data and time and use it as a subdirectory name for logs
     let current_dir = chrono::Local::now().format("%Y-%m-%d-%H-%M-%S").to_string();
-    let log_dir = PathBuf::from(format!("{}/{}", base_log_dir, current_dir));
+    let log_dir = base_log_dir.join(current_dir);
     std::fs::create_dir_all(&log_dir).expect("Failed to create log directory");
     // set EVE_MONITOR_LOG_DIR to the created folder. it is used later in panic handler
     std::env::set_var("EVE_MONITOR_LOG_DIR", log_dir.to_string_lossy().to_string());
@@ -82,10 +95,10 @@ fn init_logging() -> log2::Handle {
         .rotate(10)
         .tee(false) // no console output
         .module(true)
-        .level(LevelFilter::Debug)
+        .level(log_level)
         .start();
 
-    info!("Logging initialized: {:?}", log_file);
+    info!("Logging initialized: [{}] {:?}", log_level, log_file);
 
     if let Err(e) = remove_result {
         warn!("Failed to remove old log sessions: {}", e);
@@ -154,7 +167,8 @@ fn log_system_info() {
     info!("Starting monitor version: {}", env!("CARGO_PKG_VERSION"));
     info!(
         "Git version: {}",
-        option_env!("GIT_VERSION").unwrap_or("GIT_VERSION is not set, no .git directory?")
+        option_env!("GIT_VERSION")
+            .unwrap_or("GIT_VERSION is not set, no .git directory or git is not installed?")
     );
 
     // get current user UID and GID
@@ -171,11 +185,12 @@ fn log_system_info() {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let _log2 = init_logging();
+    let config = AppConfig::load_or_create_app_config(&get_base_dir());
+    let _log2 = init_logging(&config.log_level);
     initialize_panic_handler()?;
     log_system_info();
 
-    let mut app = Application::new()?;
+    let mut app = Application::new(config)?;
     let result = app.run().await;
     if let Err(e) = &result {
         log::error!("Application error: {}", e);

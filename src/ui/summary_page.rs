@@ -6,11 +6,11 @@ use std::rc::Rc;
 use crossterm::event::{KeyCode, KeyModifiers};
 use log::{debug, info};
 use ratatui::{
-    layout::{Constraint, Layout},
+    layout::{Alignment, Constraint, Layout},
     prelude::Rect,
     style::{Color, Style, Stylize},
     text::{Line, Span, Text, ToText},
-    widgets::{Cell, Row, Table},
+    widgets::{Block, BorderType, Borders, Cell, Padding, Row, Table},
     Frame,
 };
 
@@ -20,6 +20,10 @@ use crate::{
     model::model::{Model, OnboardingStatus, VaultStatus},
     traits::{IEventHandler, IPresenter, IWindow},
     ui::action::{Action, UiActions},
+};
+
+use super::networkpage::{
+    CTRL_STATUS_LENGTH, IFACE_LABEL_LENGTH, IPV6_MAX_LENGTH, LINK_STATE_LENGTH, MAC_LENGTH,
 };
 
 #[derive(Default)]
@@ -478,12 +482,73 @@ impl SummaryPage {
             .style(ratatui::style::Style::default().fg(ratatui::style::Color::White));
         frame.render_widget(attest_status_widget, status_rect);
     }
+
+    fn render_interface_list(&self, model: &Rc<Model>, list_rect: Rect, frame: &mut Frame) {
+        // create header for the table
+        let header = Row::new(vec![
+            Cell::from("Name").style(Style::default()),
+            Cell::from("Link").style(Style::default()),
+            Cell::from("IPv4/IPv6").style(Style::default()),
+            Cell::from("MAC").style(Style::default()),
+            Cell::from("Controller").style(Style::default()),
+        ]);
+
+        // create list items from the interface
+        let rows = model
+            .borrow()
+            .network
+            .iter()
+            .map(|iface| super::networkpage::info_row_from_iface(iface))
+            .collect::<Vec<_>>();
+
+        // create a surrounding block for the list
+        let block = Block::default()
+            .title(" Network Interfaces ")
+            .title_alignment(Alignment::Center)
+            .borders(Borders::ALL)
+            .border_type(BorderType::Plain)
+            // .border_style(Style::default().fg(Color::White).bg(Color::Black))
+            // .style(Style::default().bg(Color::Black));
+            .padding(Padding::new(1, 1, 1, 1));
+
+        // Create a List from all list items and highlight the currently selected one
+        let list = Table::new(
+            rows,
+            [
+                Constraint::Max(IFACE_LABEL_LENGTH),
+                Constraint::Max(LINK_STATE_LENGTH),
+                Constraint::Length(IPV6_MAX_LENGTH),
+                Constraint::Max(MAC_LENGTH),
+                Constraint::Length(CTRL_STATUS_LENGTH),
+            ],
+        )
+        .block(block)
+        .header(header);
+
+        // StatefulWidget::render(list, list_rect, frame.buffer_mut(), &mut self.list.state);
+        frame.render_widget(list, list_rect);
+    }
+
     fn render_connection_summary(
         &self,
         model: &Rc<Model>,
         frame: &mut Frame<'_>,
-        network_summary_rect: Rect,
+        network_info_rect: Rect,
     ) {
+        // render block in the whole rect
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .title("Connectivity status")
+            .border_type(BorderType::Plain)
+            .border_style(Style::default().fg(Color::White).bg(Color::Black));
+        // .style(Style::default().bg(Color::Black));
+        frame.render_widget(block, network_info_rect);
+
+        let inner_rect = network_info_rect.inner(ratatui::layout::Margin {
+            vertical: 1,
+            horizontal: 1,
+        });
+
         let dpc_key = model
             .borrow()
             .dpc_key
@@ -506,16 +571,40 @@ impl SummaryPage {
         let mut text = Text::from(dpc_info);
 
         if dpc_key == "manual" {
-            text.push_line(vec!["WARNING: ".red(),"the configuratiion set locally will be overwritten by working configuration from the controller".white()]);
+            text.push_line(vec!["WARNING: ".yellow(),"the configuratiion set locally will be overwritten by working configuration from the controller".white()]);
         }
 
-        let vault_status_widget = ratatui::widgets::Paragraph::new(Text::from(text))
-            .block(
-                ratatui::widgets::Block::default()
-                    .borders(ratatui::widgets::Borders::ALL)
-                    .title("Connectivity status"),
-            )
+        // if we have no interfaces connected  to controller (all have errors), show the message
+        if model
+            .borrow()
+            .network
+            .iter()
+            .all(|iface| !iface.is_connected())
+        {
+            text.push_line(vec![
+                "WARNING: ".yellow(),
+                "No interfaces connected to the controller. See ".white(),
+                "Network".green(),
+                " tab".white(),
+            ]);
+        }
+
+        // get number of lines in text
+        let lines = text.height();
+
+        // split inner rect vertically into 2 parts
+        let [network_summary_rect, iface_list_rect] =
+            Layout::vertical(vec![Constraint::Length(lines as u16), Constraint::Fill(1)])
+                .areas(inner_rect);
+
+        // split iface list rect into 2 parts horizontally
+        let [iface_list_rect, _] =
+            Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Fill(1)])
+                .areas(iface_list_rect);
+
+        let connectivity_status_widget = ratatui::widgets::Paragraph::new(Text::from(text))
             .style(ratatui::style::Style::default().fg(ratatui::style::Color::White));
-        frame.render_widget(vault_status_widget, network_summary_rect);
+        frame.render_widget(connectivity_status_widget, network_summary_rect);
+        self.render_interface_list(model, iface_list_rect, frame);
     }
 }

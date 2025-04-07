@@ -305,9 +305,27 @@ pub struct L2LinkConfig {
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone, Default)]
 #[serde(rename_all = "PascalCase")]
 pub struct TestResults {
-    last_failed: DateTime<Utc>,
-    last_succeeded: DateTime<Utc>,
-    last_error: String,
+    pub last_failed: DateTime<Utc>,
+    pub last_succeeded: DateTime<Utc>,
+    pub last_error: String,
+}
+
+impl TestResults {
+    pub fn is_error(&self) -> bool {
+        !self.last_error.is_empty()
+    }
+    pub fn map_error(&self) -> Option<Vec<String>> {
+        // split error string into lines by
+        if self.is_error() {
+            self.last_error
+                .split(':')
+                .map(|s| s.trim().to_string())
+                .collect::<Vec<String>>()
+                .into()
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Deserialize, Serialize)]

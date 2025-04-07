@@ -27,10 +27,12 @@ use super::{
     traits::{ISelectable, ISelector},
 };
 
-const MAC_LENGTH: u16 = 17;
-const LINK_STATE_LENGTH: u16 = 4;
-const IPV6_AVERAGE_LENGTH: u16 = 25;
-const IFACE_LABEL_LENGTH: u16 = 10;
+pub const MAC_LENGTH: u16 = 17;
+pub const LINK_STATE_LENGTH: u16 = 4;
+pub const IPV6_AVERAGE_LENGTH: u16 = 25;
+pub const IPV6_MAX_LENGTH: u16 = 39;
+pub const IFACE_LABEL_LENGTH: u16 = 10;
+pub const CTRL_STATUS_LENGTH: u16 = 12;
 
 #[derive(Default)]
 struct NetworkPage {
@@ -80,7 +82,7 @@ impl IWindow for NetworkPage {
     }
 }
 
-fn info_row_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Row<'b> {
+pub fn info_row_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Row<'b> {
     // cells #1,2 IFace name and Link status
     let mut cells = vec![
         Cell::from(iface.name.clone()),
@@ -125,6 +127,13 @@ fn info_row_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Row<'b> {
         Cell::from(iface.mac.map_or("N/A".to_string(), |e| e.to_string()))
             .style(Style::new().yellow()),
     );
+
+    // cell #5: connected to controller
+    if iface.is_connected() {
+        cells.push(Cell::from("Connected").style(Style::new().green()));
+    } else {
+        cells.push(Cell::from("Disconnected").style(Style::new().red()));
+    }
 
     Row::new(cells).height(height as u16)
 }
@@ -207,13 +216,36 @@ fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Ro
         NetworkType::Cellular(_) => {}
     }
 
+    // Row 5: Errors if any. One line per error. The heights of the rows are set to the number of errors
+    let errors = iface.errors.as_ref().map_or_else(
+        || "N/A".to_string(),
+        |list| {
+            list.iter()
+                .map(|ip| ip.to_string())
+                .collect::<Vec<_>>()
+                .join("\n")
+        },
+    );
+    let errors_row_height = iface.errors.as_ref().map_or(1, |v| v.len());
+    let errors_row = Row::new(vec![
+        Cell::from("Errors").style(Style::new().yellow()),
+        Cell::from(errors).style(Style::new().white()),
+    ]);
+    table.push(errors_row.height(errors_row_height as u16));
+
     table
 }
 
 impl IPresenter for NetworkPage {
     fn render(&mut self, area: &Rect, frame: &mut Frame<'_>, model: &Rc<Model>, _focused: bool) {
-        let estimated_width =
-            IFACE_LABEL_LENGTH + LINK_STATE_LENGTH + IPV6_AVERAGE_LENGTH + MAC_LENGTH + 3 + 2 + 2; // for spacers and borders and selector
+        let estimated_width = IFACE_LABEL_LENGTH
+            + LINK_STATE_LENGTH
+            + IPV6_AVERAGE_LENGTH
+            + MAC_LENGTH
+            + CTRL_STATUS_LENGTH
+            + 3
+            + 2
+            + 2; // for spacers and borders and selector
         let [dpc_info_rect, iface_list_rect, details_rect] = Layout::vertical([
             Constraint::Length(3),
             Constraint::Percentage(40),
@@ -268,6 +300,7 @@ impl NetworkPage {
             Cell::from("Link").style(Style::default()),
             Cell::from("IPv4/IPv6").style(Style::default()),
             Cell::from("MAC").style(Style::default()),
+            Cell::from("Controller").style(Style::default()),
         ]);
 
         // create list items from the interface
@@ -306,6 +339,7 @@ impl NetworkPage {
                 Constraint::Max(LINK_STATE_LENGTH),
                 Constraint::Fill(1),
                 Constraint::Max(MAC_LENGTH),
+                Constraint::Length(CTRL_STATUS_LENGTH),
             ],
         )
         .block(block)

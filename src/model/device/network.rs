@@ -202,6 +202,7 @@ pub struct NetworkInterfaceStatus {
     pub proxy_config: ProxyConfig,
     pub domain: Option<String>,
     pub cost: u8,
+    pub errors: Option<Vec<String>>,
 }
 
 pub trait ToInnerIpAddr {
@@ -328,6 +329,8 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             Some(ntp_servers)
         };
 
+        let last_error = &port.test_results.map_error();
+
         NetworkInterfaceStatus {
             name: port.if_name.clone(),
             ipv4,
@@ -349,6 +352,13 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
                 Some(port.domain_name.clone())
             },
             proxy_config: (&port.proxy_config).into(),
+            errors: last_error.clone(),
         }
+    }
+}
+
+impl NetworkInterfaceStatus {
+    pub fn is_connected(&self) -> bool {
+        self.errors.is_none() && self.up
     }
 }

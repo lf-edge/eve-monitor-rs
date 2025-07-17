@@ -1415,6 +1415,8 @@ pub enum LedBlinkCount {
     LedBlinkInvalidControllerCert,
     LedBlinkInvalidAuthContainer,
     LedBlinkInvalidBootstrapConfig,
+    LedBlinkOnboardingFailureConflict,
+    LedBlinkOnboardingFailureNotFound,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]

@@ -87,7 +87,7 @@ impl SummaryPage {
 impl IWindow for SummaryPage {
     fn status_bar_tips(&self) -> Option<String> {
         Some(format!(
-            "Alt + <> linux terminal | Ctrl + s change server | Ctrl + <> switch tabs"
+            "Alt + ◄ ► linux terminal | Ctrl + s change server | Ctrl + ◄ ► switch tabs"
         ))
     }
 }
@@ -598,9 +598,9 @@ impl SummaryPage {
                 .areas(inner_rect);
 
         // split iface list rect into 2 parts horizontally
-        let [iface_list_rect, _] =
-            Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Fill(1)])
-                .areas(iface_list_rect);
+        // let [iface_list_rect, _] =
+        //     Layout::horizontal(vec![Constraint::Percentage(50), Constraint::Fill(1)])
+        //         .areas(iface_list_rect);
 
         let connectivity_status_widget = ratatui::widgets::Paragraph::new(Text::from(text))
             .style(ratatui::style::Style::default().fg(ratatui::style::Color::White));

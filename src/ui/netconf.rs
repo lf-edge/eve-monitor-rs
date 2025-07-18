@@ -186,7 +186,7 @@ impl NetworkDialog {
 
         let _ = lm.insert("tabs".to_string(), tabs);
         let _ = lm.insert("mode".to_string(), mode);
-        let _ = lm.insert("fileds".to_string(), fields);
+        let _ = lm.insert("fields".to_string(), fields);
 
         let [ok, cancel] = Layout::horizontal(vec![Constraint::Length(10); 2])
             .flex(Flex::Start)

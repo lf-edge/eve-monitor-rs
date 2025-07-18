@@ -35,8 +35,8 @@ use super::{
 pub enum ProxyType {
     None,
     Manual,
-    Pac,
-    Wad,
+    // Pac,
+    // Wad,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -107,12 +107,13 @@ impl IpDialogState {
                         "https",
                         "ftp",
                         "socks",
-                        "certificate",
-                        "upload",
+                        // this is not supported yet but let's keep it here for future use
+                        // "certificate",
+                        // "upload",
                     ]
-                }
-                ProxyType::Wad => vec!["proxy_spinner"],
-                ProxyType::Pac => vec!["proxy_spinner", "pac_file", "upload"],
+                } // this is not supported yet but let's keep it here for future use
+                  // ProxyType::Wad => vec!["proxy_spinner"],
+                  // ProxyType::Pac => vec!["proxy_spinner", "pac_file", "upload"],
             },
             _ => vec![],
         };
@@ -208,7 +209,7 @@ fn create_widgets(w: &mut Window<IpDialogState>) {
     // proxy widgets
     w.add_widget(
         "proxy_spinner",
-        SpinBoxElement::new(vec!["None", "Manual", "Pac"]),
+        SpinBoxElement::new(vec!["None", "Manual" /*, "Pac"*/]),
     );
     w.add_widget(
         "http",
@@ -226,20 +227,21 @@ fn create_widgets(w: &mut Window<IpDialogState>) {
         "socks",
         InputFieldElement::new("SOCKS", Some(&w.state.new_iface_state.proxy_socks.as_str())),
     );
-    w.add_widget(
-        "pac_file",
-        InputFieldElement::new("PAC file", Some(&w.state.new_iface_state.pac_file.as_str()))
-            .enabled(false),
-    );
-    w.add_widget(
-        "certificate",
-        InputFieldElement::new(
-            "Proxy Certificcate",
-            Some(&w.state.new_iface_state.proxy_certificate.as_str()),
-        )
-        .enabled(false),
-    );
-    w.add_widget("upload", ButtonElement::new("Upload"));
+    // w.add_widget(
+    //     "pac_file",
+    //     InputFieldElement::new("PAC file", Some(&w.state.new_iface_state.pac_file.as_str()))
+    //         .enabled(false),
+    // );
+    // This is not supported yet but let's keep it here for future use
+    // w.add_widget(
+    //     "certificate",
+    //     InputFieldElement::new(
+    //         "Proxy Certificcate",
+    //         Some(&w.state.new_iface_state.proxy_certificate.as_str()),
+    //     )
+    //     .enabled(false),
+    // );
+    // w.add_widget("upload", ButtonElement::new("Upload"));
 }
 
 fn update_ip_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
@@ -301,17 +303,17 @@ fn update_proxy_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
             w.update_layout("socks", socks);
             w.update_layout("certificate", cert_str);
             w.update_layout("upload", upload_button);
-        }
-        ProxyType::Pac => {
-            let [pac_file_area] = Layout::vertical(vec![Constraint::Length(3)]).areas(input_rect);
-            let [pac_url, upload] =
-                Layout::horizontal(vec![Constraint::Fill(1), Constraint::Length(10)])
-                    .flex(Flex::SpaceBetween)
-                    .areas(pac_file_area);
-            w.update_layout("pac_file", pac_url);
-            w.update_layout("upload", upload);
-        }
-        ProxyType::Wad => {}
+        } // This is not supported yet but let's keep it here for future use
+          // ProxyType::Pac => {
+          //     let [pac_file_area] = Layout::vertical(vec![Constraint::Length(3)]).areas(input_rect);
+          //     let [pac_url, upload] =
+          //         Layout::horizontal(vec![Constraint::Fill(1), Constraint::Length(10)])
+          //             .flex(Flex::SpaceBetween)
+          //             .areas(pac_file_area);
+          //     w.update_layout("pac_file", pac_url);
+          //     w.update_layout("upload", upload);
+          // }
+          // ProxyType::Wad => {}
     }
 }
 
@@ -417,7 +419,7 @@ fn on_child_ui_action(
                 w.state.new_iface_state.proxy_type = match *selected {
                     0 => ProxyType::None,
                     1 => ProxyType::Manual,
-                    2 => ProxyType::Pac,
+                    // 2 => ProxyType::Pac,
                     _ => ProxyType::None,
                 };
                 update_tab_order(w);
@@ -511,8 +513,9 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
         let proxy_type = match iface.proxy_config {
             ProxyConfig::None => ProxyType::None,
             ProxyConfig::Manual { .. } => ProxyType::Manual,
-            ProxyConfig::Pac { .. } => ProxyType::Pac,
-            ProxyConfig::Wad { .. } => ProxyType::Wad,
+            // ProxyConfig::Pac { .. } => ProxyType::Pac,
+            // ProxyConfig::Wad { .. } => ProxyType::Wad,
+            _ => ProxyType::None,
         };
 
         let proxy_url = if let ProxyConfig::Wad { url, .. } = &iface.proxy_config {

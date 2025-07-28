@@ -212,22 +212,38 @@ impl From<GoIpNetwork> for Option<IpNet> {
 impl From<Option<IpNet>> for GoIpNetwork {
     fn from(ip_net: Option<IpNet>) -> Self {
         match ip_net {
-            Some(net) => {
-                let ip = net.addr();
-                let prefix_len = net.prefix_len();
-                let mut mask = vec![0u8; 16];
-                for i in 0..prefix_len {
-                    mask[i as usize / 8] |= 1 << (7 - i % 8);
-                }
-                GoIpNetwork {
-                    ip: Some(ip),
-                    mask: Some(mask),
-                }
-            }
+            Some(net) => net.into(),
             None => GoIpNetwork {
                 ip: None,
                 mask: None,
             },
+        }
+    }
+}
+
+impl From<IpNet> for GoIpNetwork {
+    fn from(ip_net: IpNet) -> Self {
+        let ip = ip_net.addr();
+        let prefix_len = ip_net.prefix_len();
+        let mut mask = vec![0u8; 16];
+        for i in 0..prefix_len {
+            mask[i as usize / 8] |= 1 << (7 - i % 8);
+        }
+        GoIpNetwork {
+            ip: Some(ip),
+            mask: Some(mask),
+        }
+    }
+}
+
+impl From<GoIpNetwork> for IpNet {
+    fn from(gip: GoIpNetwork) -> Self {
+        match (gip.ip, gip.mask) {
+            (Some(ip), Some(mask)) => {
+                let prefix_len = mask.iter().fold(0, |acc, &byte| acc + byte.count_ones()) as u8;
+                IpNet::new(ip, prefix_len).expect("Invalid IP network")
+            }
+            _ => panic!("Invalid GoIpNetwork: missing IP or mask"),
         }
     }
 }
@@ -248,8 +264,14 @@ pub struct NetworkPortStatus {
     pub dhcp: DhcpType,
     #[serde(rename = "Type")]
     pub network_type: NetworkType,
-    #[serde_as(as = "FromInto<GoIpNetwork>")]
-    pub subnet: Option<IpNet>,
+    #[serde_as(as = "Option<FromInto<GoIpNetwork>>")]
+    pub configured_subnet: Option<IpNet>,
+    #[serde_as(as = "Option<FromInto<GoIpNetwork>>")]
+    #[serde(rename = "IPv4Subnet", default)]
+    pub ipv4_subnet: Option<IpNet>,
+    #[serde_as(as = "Option<Vec<FromInto<GoIpNetwork>>>")]
+    #[serde(rename = "IPv6Subnets", default)]
+    pub ipv6_subnets: Option<Vec<Option<IpNet>>>,
     pub configured_ntp_servers: Option<Vec<String>>,
     pub domain_name: String,
     #[serde(rename = "DNSServers")]

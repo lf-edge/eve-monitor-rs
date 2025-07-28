@@ -343,7 +343,7 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             media,
             dns,
             gw,
-            subnet: port.subnet.clone(),
+            subnet: port.ipv4_subnet.clone(),
             is_dhcp,
             cost: port.cost,
             domain: if port.domain_name.is_empty() {

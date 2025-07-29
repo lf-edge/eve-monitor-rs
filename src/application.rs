@@ -59,8 +59,10 @@ impl AppConfig {
     where
         T: AsRef<std::path::Path>,
     {
-        let cfg = std::fs::read_to_string(path)?;
-        let cfg: AppConfig = serde_json::from_str(&cfg)?;
+        let cfg = std::fs::read_to_string(&path)?;
+        let mut cfg: AppConfig = serde_json::from_str(&cfg)?;
+        // ensure the config path is set. it is not set by serde_json::from_str
+        cfg.config_path = path.as_ref().to_path_buf();
         Ok(cfg)
     }
 

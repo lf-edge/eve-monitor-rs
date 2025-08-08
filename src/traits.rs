@@ -64,6 +64,9 @@ pub trait IWidget: IWidgetPresenter + IElementEventHandler {
     fn is_enabled(&self) -> bool {
         true
     }
+    fn tips_in_focus(&self) -> Option<String> {
+        None
+    }
 }
 
 pub trait IAction: Clone {

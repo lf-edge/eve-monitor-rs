@@ -282,7 +282,17 @@ impl<D> Window<D> {
     }
 }
 
-impl<D> IWindow for Window<D> {}
+impl<D> IWindow for Window<D> {
+    fn status_bar_tips(&self) -> Option<String> {
+        // get the focused widget
+        self.ft.get_focused_view().and_then(|focused_widget| {
+            self.widgets.get(&focused_widget).and_then(|widget| {
+                // check if the widget has a status bar tip
+                widget.tips_in_focus()
+            })
+        })
+    }
+}
 
 impl<D> IEventHandler for Window<D> {
     fn handle_event(&mut self, event: events::Event) -> Option<Action> {

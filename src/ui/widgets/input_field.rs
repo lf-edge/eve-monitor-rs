@@ -11,7 +11,7 @@ use ratatui::{
 };
 
 use crate::{
-    traits::{IElementEventHandler, IWidget, IWidgetPresenter},
+    traits::{IElementEventHandler, IWidget, IWidgetPresenter, TextInput},
     ui::action::UiActions,
 };
 
@@ -56,6 +56,18 @@ pub struct InputFieldElement {
     modifiers: Vec<InputModifiers>,
     size_hint: Option<Size>,
     text_hint: Option<String>,
+}
+
+impl TextInput for InputFieldElement {
+    fn text(&self) -> &str {
+        self.value.as_deref().unwrap_or_default()
+    }
+    fn set_text(&mut self, s: String) {
+        self.value = Some(s);
+    }
+    fn set_error(&mut self, msg: Option<String>) {
+        self.validation_error = msg;
+    }
 }
 
 impl IWidget for InputFieldElement {
@@ -228,6 +240,10 @@ impl InputFieldElement {
             .scroll((0, self.scroll_left)); // note reversed order (y,x)
 
         input.render(inner_area, buf);
+    }
+
+    pub fn text(&self) -> Option<String> {
+        self.value.clone()
     }
 }
 

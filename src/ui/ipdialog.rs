@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, net::AddrParseError, net::Ipv4Addr, rc::Rc};
 
 use crossterm::event::{KeyCode, KeyEvent};
 use log::debug;
@@ -11,6 +11,10 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear},
     Frame,
 };
+use std::net::Ipv6Addr;
+use std::num::ParseIntError;
+use std::str::FromStr;
+use thiserror::Error;
 
 use crate::{
     actions::MonActions,
@@ -30,6 +34,21 @@ use super::{
     },
     window::Window,
 };
+
+#[derive(Error, Debug)]
+pub enum CidrError {
+    #[error("input string is empty")]
+    EmptyInput,
+
+    #[error("invalid IP address: {0}")]
+    InvalidAddress(#[from] AddrParseError),
+
+    #[error("invalid prefix length: {0}")]
+    InvalidMask(#[from] ParseIntError),
+
+    #[error("prefix length {given} is out of range (0–{max})")]
+    MaskOutOfRange { given: u8, max: u8 },
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProxyType {
@@ -77,6 +96,27 @@ pub struct IpDialogState {
 }
 
 impl IpDialogState {
+    // pub fn update_and_validate_state(mut self, w: &Window<IpDialogState>) -> Result<(), String> {
+    //     debug!("update_and_validate_state");
+    //     // go over all widgets and update the state
+    //     let new_iface_state = &mut self.new_iface_state;
+    //     // validate IPv4
+    //     let wi = w.get_widget("ipv4");
+    //     if let Some(wi) = wi {
+    //         let ipv4 = wi.as_any().downcast_ref::<InputFieldElement>().unwrap();
+    //         if let Some(text) = ipv4.text() {
+    //             match validate_ipv4_cidr(&text) {
+    //                 Ok((addr, prefix)) => {
+    //                     new_iface_state.ipv4 = format!("{}/{}", addr, prefix);
+    //                 }
+    //                 Err(e) => return Err(format!("Invalid IPv4 address: {}", e)),
+    //             }
+    //         } else {
+    //             new_iface_state.ipv4 = String::new();
+    //         }
+    //     }
+    //     Ok(())
+    // }
     pub fn get_focused_view(&self) -> Option<usize> {
         self.focus_tarcker_state.get(&self.selected_tab).copied()
     }
@@ -89,9 +129,9 @@ impl IpDialogState {
                     vec![
                         "ip_spinner",
                         "ipv4",
-                        "ipv6",
                         "mask",
                         "gw",
+                        "ipv6",
                         "domain",
                         "dns",
                         "ntp",
@@ -143,6 +183,72 @@ fn init_focus_tracker(w: &mut Window<IpDialogState>) {
     }
 }
 
+/// Parse an IPv4 CIDR string, returning `(Ipv4Addr, prefix)`
+/// defaulting to /32 when no mask is given.
+pub fn validate_ipv4_cidr(input: &str) -> Result<(Ipv4Addr, u8), CidrError> {
+    const MAX: u8 = 32;
+    if input.is_empty() {
+        return Err(CidrError::EmptyInput);
+    }
+    let (addr_part, mask_part) = input
+        .split_once('/')
+        .map_or((input, None), |(a, m)| (a, Some(m)));
+
+    let addr = Ipv4Addr::from_str(addr_part)?;
+    let prefix = if let Some(m_str) = mask_part {
+        let m: u8 = m_str.parse()?;
+        if m > MAX {
+            return Err(CidrError::MaskOutOfRange { given: m, max: MAX });
+        }
+        m
+    } else {
+        MAX
+    };
+
+    Ok((addr, prefix))
+}
+
+/// Parse and validate an IPv6 CIDR string in `input`.
+/// Returns the parsed `Ipv6Addr` and the prefix length.
+///
+/// # Examples
+///
+/// ```
+/// use your_crate::validate_ipv6_cidr;
+/// use std::net::Ipv6Addr;
+///
+/// assert_eq!(
+///     validate_ipv6_cidr("2001:db8::dead:beef/64").unwrap(),
+///     (Ipv6Addr::from_str("2001:db8::dead:beef").unwrap(), 64)
+/// );
+/// assert_eq!(
+///     validate_ipv6_cidr("::1").unwrap(),
+///     (Ipv6Addr::LOCALHOST, 128)
+/// );
+/// ```
+pub fn validate_ipv6_cidr(input: &str) -> Result<(Ipv6Addr, u8), CidrError> {
+    const MAX: u8 = 128;
+    if input.is_empty() {
+        return Err(CidrError::EmptyInput);
+    }
+    let (addr_part, mask_part) = input
+        .split_once('/')
+        .map_or((input, None), |(a, m)| (a, Some(m)));
+
+    let addr = Ipv6Addr::from_str(addr_part)?;
+    let prefix = if let Some(m_str) = mask_part {
+        let m: u8 = m_str.parse()?;
+        if m > MAX {
+            return Err(CidrError::MaskOutOfRange { given: m, max: MAX });
+        }
+        m
+    } else {
+        MAX
+    };
+
+    Ok((addr, prefix))
+}
+
 fn create_widgets(w: &mut Window<IpDialogState>) {
     // create all widgets only once. We draw only widgets that present in the layout
     w.add_widget(
@@ -171,24 +277,42 @@ fn create_widgets(w: &mut Window<IpDialogState>) {
     w.add_widget(
         "ipv4",
         InputFieldElement::new("IPv4", Some(w.state.new_iface_state.ipv4.as_str()))
-            .with_text_hint("e.g. 192.168.0.1"),
+            .with_text_hint("e.g. 192.168.0.1")
+            .validate(|ip| match validate_ipv4_cidr(ip) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e.to_string()),
+            }),
     );
 
     w.add_widget(
         "ipv6",
         InputFieldElement::new("IPv6", Some(w.state.new_iface_state.ipv6.as_str()))
-            .with_text_hint("e.g. c820::1"),
+            .with_text_hint("e.g. c820::1")
+            .validate(|ip| match validate_ipv6_cidr(ip) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e.to_string()),
+            }),
     );
 
     w.add_widget(
         "mask",
         InputFieldElement::new("Mask", Some(w.state.new_iface_state.mask.as_str()))
-            .with_text_hint("w.g. 255.255.255.0"),
+            .with_text_hint("e.g. 255.255.255.0")
+            .validate(|mask| {
+                if mask.is_empty() {
+                    return Err("Mask cannot be empty".to_string());
+                }
+                // try to parse as IPv4 CIDR
+                match validate_ipv4_cidr(mask) {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(e.to_string()),
+                }
+            }),
     );
     w.add_widget(
         "gw",
         InputFieldElement::new("Gateway", Some(w.state.new_iface_state.gw.as_str()))
-            .with_text_hint("e.g. 192.168.1.1"),
+            .with_text_hint("e.g. 192.168.1.1, fe80::2"),
     );
     w.add_widget(
         "dns",
@@ -213,11 +337,13 @@ fn create_widgets(w: &mut Window<IpDialogState>) {
     );
     w.add_widget(
         "http",
-        InputFieldElement::new("HTTP", Some(&w.state.new_iface_state.proxy_http.as_str())),
+        InputFieldElement::new("HTTP", Some(&w.state.new_iface_state.proxy_http.as_str()))
+            .with_text_hint("e.g. http://10.10.10.1:8080"),
     );
     w.add_widget(
         "https",
-        InputFieldElement::new("HTTPs", Some(&w.state.new_iface_state.proxy_https.as_str())),
+        InputFieldElement::new("HTTPs", Some(&w.state.new_iface_state.proxy_https.as_str()))
+            .with_text_hint("e.g. https://10.10.10.1:8080"),
     );
     w.add_widget(
         "ftp",
@@ -253,7 +379,7 @@ fn update_ip_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
     w.update_layout("ip_spinner", spinner_rect);
 
     if !w.state.new_iface_state.ip_dhcp {
-        let [ip, ipv6, mask, gw, domain, dns, ntp] = Layout::vertical(vec![
+        let [ip, mask, gw, ipv6, domain, dns, ntp] = Layout::vertical(vec![
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
@@ -578,7 +704,16 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
                 .subnet
                 .map(|ip| ip.netmask().to_string())
                 .unwrap_or_default(),
-            gw: iface.gw.map(|ip| ip.to_string()).unwrap_or_default(),
+            gw: iface
+                .routes
+                .as_ref()
+                .map(|ip| {
+                    ip.iter()
+                        .map(|ip| ip.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .unwrap_or_default(),
             proxy_url,
             proxy_certificate: "".to_string(),
             pac_file,
@@ -592,6 +727,9 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
         };
 
         let old_iface_state = new_iface_state.clone();
+
+        // print self
+        debug!("Creating IpDialogState from iface: {:?}", new_iface_state);
 
         IpDialogState {
             selected_tab: "IP".to_string(),

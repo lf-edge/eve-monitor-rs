@@ -67,6 +67,9 @@ pub trait IWidget: IWidgetPresenter + IElementEventHandler {
     fn tips_in_focus(&self) -> Option<String> {
         None
     }
+    fn as_input_field_mut(&self) -> Option<&mut dyn TextInput> {
+        None
+    }
 }
 
 pub trait IAction: Clone {
@@ -74,4 +77,10 @@ pub trait IAction: Clone {
     fn get_source(&self) -> &str;
     fn get_target(&self) -> Option<&str>;
     fn split(self) -> (String, Self::Target);
+}
+
+pub trait TextInput {
+    fn text(&self) -> &str;
+    fn set_text(&mut self, s: String);
+    fn set_error(&mut self, msg: Option<String>);
 }

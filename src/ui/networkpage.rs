@@ -171,10 +171,12 @@ fn details_table_from_iface<'a, 'b>(iface: &'a NetworkInterfaceStatus) -> Vec<Ro
     ])
     .height(dns_row_height as u16);
     // Row 2: Gateway
-    let gateway = iface
-        .gw
-        .as_ref()
-        .map_or("N/A".to_string(), |v| v.to_string());
+    let gateway = iface.routes.as_ref().map_or("N/A".to_string(), |v| {
+        v.iter()
+            .map(|ip| ip.to_string())
+            .collect::<Vec<_>>()
+            .join("\n")
+    });
     let gateway_row = Row::new(vec![
         Cell::from("Gateway").style(Style::new().yellow()),
         Cell::from(gateway).style(Style::new().white()),

@@ -3,6 +3,7 @@
 
 use crate::actions::MonActions;
 use crate::events::Event;
+use crate::ipc::eve_types::TuiEveConfig;
 use crate::model::model::Model;
 use crate::model::model::MonitorModel;
 use crate::ui::ipdialog::InterfaceState;
@@ -242,6 +243,9 @@ impl Application {
 
             IpcMessage::TUIConfig(cfg) => {
                 info!("== Configuration changed: TUIConfig ==");
+                let cfg = TuiEveConfig {
+                    log_level: "debug".to_string(),
+                };
                 // update log level
                 LevelFilter::from_str(&cfg.log_level).map_or_else(
                     |e| {

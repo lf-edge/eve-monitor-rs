@@ -358,7 +358,6 @@ pub struct WirelessStatus {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
-#[serde(rename_all = "PascalCase")]
 pub struct ProxyEntry {
     #[serde(rename = "type")]
     pub proxy_type: NetworkProxyType,

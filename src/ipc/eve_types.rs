@@ -968,6 +968,11 @@ impl NetworkPortConfig {
         self.dhcp_config.ntp_servers = ntp_server;
         self.dhcp_config.dns_servers = dns_servers;
     }
+
+    /// Set proxy configuration
+    pub fn set_proxy_config(&mut self, proxy_config: ProxyConfig) {
+        self.proxy_config = proxy_config;
+    }
 }
 
 // DhcpConfig struct

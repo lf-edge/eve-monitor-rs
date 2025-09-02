@@ -1,7 +1,8 @@
 // Copyright (c) 2024-2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{collections::HashMap, rc::Rc};
+use std::{collections::HashMap, net::AddrParseError, net::Ipv4Addr, rc::Rc};
+use url::Url;
 
 use crossterm::event::{KeyCode, KeyEvent};
 use log::debug;
@@ -11,6 +12,10 @@ use ratatui::{
     widgets::{Block, BorderType, Borders, Clear},
     Frame,
 };
+use std::net::Ipv6Addr;
+use std::num::ParseIntError;
+use std::str::FromStr;
+use thiserror::Error;
 
 use crate::{
     actions::MonActions,
@@ -30,6 +35,21 @@ use super::{
     },
     window::Window,
 };
+
+#[derive(Error, Debug)]
+pub enum CidrError {
+    #[error("input string is empty")]
+    EmptyInput,
+
+    #[error("invalid IP address: {0}")]
+    InvalidAddress(#[from] AddrParseError),
+
+    #[error("invalid prefix length: {0}")]
+    InvalidMask(#[from] ParseIntError),
+
+    #[error("prefix length {given} is out of range (0–{max})")]
+    MaskOutOfRange { given: u8, max: u8 },
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ProxyType {
@@ -55,16 +75,389 @@ pub struct InterfaceState {
     pub dns: String,
     pub ntp: String,
     // manual proxies
-    pub proxy_http: String,
-    pub proxy_https: String,
-    pub proxy_ftp: String,
-    pub proxy_socks: String,
+    pub proxy_http: Option<Url>,
+    pub proxy_https: Option<Url>,
+    pub proxy_ftp: Option<Url>,
+    pub proxy_socks: Option<Url>,
 }
 
 impl InterfaceState {
     pub fn is_dhcp(&self) -> bool {
         self.ip_dhcp
     }
+
+    /// Create a ProxyConfig from the current InterfaceState
+    pub fn create_proxy_config(&self) -> crate::ipc::eve_types::ProxyConfig {
+        use crate::ipc::eve_types::{NetworkProxyType, ProxyConfig, ProxyEntry};
+        use crate::ui::ipdialog::ProxyType;
+
+        match self.proxy_type {
+            ProxyType::None => ProxyConfig {
+                proxies: None,
+                pacfile: String::new(),
+                network_proxy_enable: false,
+                network_proxy_url: String::new(),
+                wpad_url: String::new(),
+                exceptions: String::new(),
+                proxy_cert_pem: None,
+            },
+            ProxyType::Manual => {
+                let mut proxies = Vec::new();
+
+                // Helper function to extract host and port from validated URL
+                let url_to_proxy_entry =
+                    |url: &url::Url, proxy_type: NetworkProxyType| -> Option<ProxyEntry> {
+                        if let Some(host) = url.host_str() {
+                            let default_port = match proxy_type {
+                                NetworkProxyType::HTTP => 8080,
+                                NetworkProxyType::HTTPS => 8080,
+                                NetworkProxyType::FTP => 21,
+                                NetworkProxyType::SOCKS => 1080,
+                                _ => 8080,
+                            };
+                            let port = url.port().unwrap_or(default_port) as u32;
+                            Some(ProxyEntry {
+                                proxy_type,
+                                server: host.to_string(),
+                                port,
+                            })
+                        } else {
+                            None
+                        }
+                    };
+
+                // Add HTTP proxy if specified
+                if let Some(ref url) = self.proxy_http {
+                    if let Some(entry) = url_to_proxy_entry(url, NetworkProxyType::HTTP) {
+                        proxies.push(entry);
+                    }
+                }
+
+                // Add HTTPS proxy if specified
+                if let Some(ref url) = self.proxy_https {
+                    if let Some(entry) = url_to_proxy_entry(url, NetworkProxyType::HTTPS) {
+                        proxies.push(entry);
+                    }
+                }
+
+                // Add FTP proxy if specified
+                if let Some(ref url) = self.proxy_ftp {
+                    if let Some(entry) = url_to_proxy_entry(url, NetworkProxyType::FTP) {
+                        proxies.push(entry);
+                    }
+                }
+
+                // Add SOCKS proxy if specified
+                if let Some(ref url) = self.proxy_socks {
+                    if let Some(entry) = url_to_proxy_entry(url, NetworkProxyType::SOCKS) {
+                        proxies.push(entry);
+                    }
+                }
+
+                // network_proxy_enable is only true when network_proxy_url is actually used
+                let has_network_proxy_url = !self.proxy_url.is_empty();
+
+                ProxyConfig {
+                    proxies: if !proxies.is_empty() {
+                        Some(proxies)
+                    } else {
+                        None
+                    },
+                    network_proxy_enable: has_network_proxy_url,
+                    pacfile: self.pac_file.clone(),
+                    network_proxy_url: self.proxy_url.clone(),
+                    proxy_cert_pem: if !self.proxy_certificate.is_empty() {
+                        Some(vec![self.proxy_certificate.clone().into_bytes()])
+                    } else {
+                        None
+                    },
+                    wpad_url: String::new(),
+                    exceptions: String::new(),
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ipc::eve_types::NetworkProxyType;
+    use url::Url;
+
+    #[test]
+    fn test_create_proxy_config_none() {
+        let interface_state = InterfaceState {
+            iface_name: "eth0".to_string(),
+            ip_dhcp: true,
+            proxy_type: ProxyType::None,
+            ipv4: "192.168.1.100".to_string(),
+            ipv6: "".to_string(),
+            mask: "255.255.255.0".to_string(),
+            gw: "192.168.1.1".to_string(),
+            proxy_url: "".to_string(),
+            proxy_certificate: "".to_string(),
+            pac_file: "".to_string(),
+            domain: "example.com".to_string(),
+            dns: "8.8.8.8".to_string(),
+            ntp: "pool.ntp.org".to_string(),
+            proxy_http: None,
+            proxy_https: None,
+            proxy_ftp: None,
+            proxy_socks: None,
+        };
+
+        let proxy_config = interface_state.create_proxy_config();
+
+        assert_eq!(proxy_config.proxies, None);
+        assert_eq!(proxy_config.network_proxy_enable, false);
+        assert_eq!(proxy_config.pacfile, "");
+        assert_eq!(proxy_config.network_proxy_url, "");
+        assert_eq!(proxy_config.proxy_cert_pem, None);
+    }
+
+    #[test]
+    fn test_create_proxy_config_manual() {
+        let interface_state = InterfaceState {
+            iface_name: "eth0".to_string(),
+            ip_dhcp: true,
+            proxy_type: ProxyType::Manual,
+            ipv4: "192.168.1.100".to_string(),
+            ipv6: "".to_string(),
+            mask: "255.255.255.0".to_string(),
+            gw: "192.168.1.1".to_string(),
+            proxy_url: "http://proxy.example.com:8080".to_string(),
+            proxy_certificate: "test-cert".to_string(),
+            pac_file: "http://proxy.example.com/proxy.pac".to_string(),
+            domain: "example.com".to_string(),
+            dns: "8.8.8.8".to_string(),
+            ntp: "pool.ntp.org".to_string(),
+            proxy_http: Some(Url::parse("http://proxy.example.com:8080").unwrap()),
+            proxy_https: Some(Url::parse("https://proxy.example.com:8443").unwrap()),
+            proxy_ftp: Some(Url::parse("ftp://proxy.example.com:21").unwrap()),
+            proxy_socks: Some(Url::parse("socks://proxy.example.com:1080").unwrap()),
+        };
+
+        let proxy_config = interface_state.create_proxy_config();
+
+        assert!(proxy_config.network_proxy_enable);
+        assert_eq!(proxy_config.pacfile, "http://proxy.example.com/proxy.pac");
+        assert_eq!(
+            proxy_config.network_proxy_url,
+            "http://proxy.example.com:8080"
+        );
+        assert!(proxy_config.proxy_cert_pem.is_some());
+        assert_eq!(
+            proxy_config.proxy_cert_pem.unwrap()[0],
+            "test-cert".as_bytes()
+        );
+
+        let proxies = proxy_config.proxies.unwrap();
+        assert_eq!(proxies.len(), 4);
+
+        // Check HTTP proxy
+        let http_proxy = proxies
+            .iter()
+            .find(|p| p.proxy_type == NetworkProxyType::HTTP)
+            .unwrap();
+        assert_eq!(http_proxy.server, "proxy.example.com");
+        assert_eq!(http_proxy.port, 8080);
+
+        // Check HTTPS proxy
+        let https_proxy = proxies
+            .iter()
+            .find(|p| p.proxy_type == NetworkProxyType::HTTPS)
+            .unwrap();
+        assert_eq!(https_proxy.server, "proxy.example.com");
+        assert_eq!(https_proxy.port, 8443);
+
+        // Check FTP proxy
+        let ftp_proxy = proxies
+            .iter()
+            .find(|p| p.proxy_type == NetworkProxyType::FTP)
+            .unwrap();
+        assert_eq!(ftp_proxy.server, "proxy.example.com");
+        assert_eq!(ftp_proxy.port, 21);
+
+        // Check SOCKS proxy
+        let socks_proxy = proxies
+            .iter()
+            .find(|p| p.proxy_type == NetworkProxyType::SOCKS)
+            .unwrap();
+        assert_eq!(socks_proxy.server, "proxy.example.com");
+        assert_eq!(socks_proxy.port, 1080);
+    }
+
+    #[test]
+    fn test_create_proxy_config_manual_with_default_ports() {
+        let interface_state = InterfaceState {
+            iface_name: "eth0".to_string(),
+            ip_dhcp: true,
+            proxy_type: ProxyType::Manual,
+            ipv4: "192.168.1.100".to_string(),
+            ipv6: "".to_string(),
+            mask: "255.255.255.0".to_string(),
+            gw: "192.168.1.1".to_string(),
+            proxy_url: "".to_string(),
+            proxy_certificate: "".to_string(),
+            pac_file: "".to_string(),
+            domain: "example.com".to_string(),
+            dns: "8.8.8.8".to_string(),
+            ntp: "pool.ntp.org".to_string(),
+            proxy_http: Some(Url::parse("http://proxy.example.com").unwrap()),
+            proxy_https: None,
+            proxy_ftp: None,
+            proxy_socks: None,
+        };
+
+        let proxy_config = interface_state.create_proxy_config();
+
+        assert!(!proxy_config.network_proxy_enable);
+        let proxies = proxy_config.proxies.unwrap();
+        assert_eq!(proxies.len(), 1);
+
+        // Check HTTP proxy with default port
+        let http_proxy = &proxies[0];
+        assert_eq!(http_proxy.proxy_type, NetworkProxyType::HTTP);
+        assert_eq!(http_proxy.server, "proxy.example.com");
+        assert_eq!(http_proxy.port, 8080); // Default HTTP proxy port
+    }
+
+    #[test]
+    fn test_create_proxy_config_manual_empty() {
+        let interface_state = InterfaceState {
+            iface_name: "eth0".to_string(),
+            ip_dhcp: true,
+            proxy_type: ProxyType::Manual,
+            ipv4: "192.168.1.100".to_string(),
+            ipv6: "".to_string(),
+            mask: "255.255.255.0".to_string(),
+            gw: "192.168.1.1".to_string(),
+            proxy_url: "".to_string(),
+            proxy_certificate: "".to_string(),
+            pac_file: "".to_string(),
+            domain: "example.com".to_string(),
+            dns: "8.8.8.8".to_string(),
+            ntp: "pool.ntp.org".to_string(),
+            proxy_http: None,
+            proxy_https: None,
+            proxy_ftp: None,
+            proxy_socks: None,
+        };
+
+        let proxy_config = interface_state.create_proxy_config();
+
+        assert_eq!(proxy_config.proxies, None);
+        assert_eq!(proxy_config.network_proxy_enable, false);
+    }
+
+    #[test]
+    fn test_integration_create_and_set_proxy_config() {
+        let interface_state = InterfaceState {
+            iface_name: "eth0".to_string(),
+            ip_dhcp: true,
+            proxy_type: ProxyType::Manual,
+            ipv4: "192.168.1.100".to_string(),
+            ipv6: "".to_string(),
+            mask: "255.255.255.0".to_string(),
+            gw: "192.168.1.1".to_string(),
+            proxy_url: "http://proxy.example.com:8080".to_string(),
+            proxy_certificate: "test-cert".to_string(),
+            pac_file: "".to_string(),
+            domain: "example.com".to_string(),
+            dns: "8.8.8.8".to_string(),
+            ntp: "pool.ntp.org".to_string(),
+            proxy_http: Some(Url::parse("http://proxy.example.com:3128").unwrap()),
+            proxy_https: None,
+            proxy_ftp: None,
+            proxy_socks: None,
+        };
+
+        // Test that create_proxy_config works and returns the expected config
+        let proxy_config = interface_state.create_proxy_config();
+
+        // Verify the created proxy config has the expected values
+        assert!(proxy_config.network_proxy_enable);
+        assert_eq!(
+            proxy_config.network_proxy_url,
+            "http://proxy.example.com:8080"
+        );
+        assert!(proxy_config.proxy_cert_pem.is_some());
+        assert_eq!(
+            proxy_config.proxy_cert_pem.unwrap()[0],
+            "test-cert".as_bytes()
+        );
+
+        let proxies = proxy_config.proxies.unwrap();
+        assert_eq!(proxies.len(), 1);
+        assert_eq!(proxies[0].proxy_type, NetworkProxyType::HTTP);
+        assert_eq!(proxies[0].server, "proxy.example.com");
+        assert_eq!(proxies[0].port, 3128);
+
+        // Test that we can create a second proxy config and it's independent
+        let proxy_config2 = interface_state.create_proxy_config();
+        assert_eq!(
+            proxy_config2.network_proxy_url,
+            proxy_config.network_proxy_url
+        );
+    }
+
+    #[test]
+    fn test_create_proxy_config_with_network_proxy_url() {
+        let interface_state = InterfaceState {
+            iface_name: "eth0".to_string(),
+            ip_dhcp: true,
+            proxy_type: ProxyType::Manual,
+            ipv4: "192.168.1.100".to_string(),
+            ipv6: "".to_string(),
+            mask: "255.255.255.0".to_string(),
+            gw: "192.168.1.1".to_string(),
+            proxy_url: "http://network-proxy.example.com:8080".to_string(),
+            proxy_certificate: "".to_string(),
+            pac_file: "".to_string(),
+            domain: "example.com".to_string(),
+            dns: "8.8.8.8".to_string(),
+            ntp: "pool.ntp.org".to_string(),
+            proxy_http: Some(Url::parse("http://proxy.example.com:3128").unwrap()),
+            proxy_https: None,
+            proxy_ftp: None,
+            proxy_socks: None,
+        };
+
+        let proxy_config = interface_state.create_proxy_config();
+
+        // network_proxy_enable should be true because proxy_url is not empty
+        assert!(proxy_config.network_proxy_enable);
+        assert_eq!(
+            proxy_config.network_proxy_url,
+            "http://network-proxy.example.com:8080"
+        );
+
+        // Should also have proxy entries
+        let proxies = proxy_config.proxies.unwrap();
+        assert_eq!(proxies.len(), 1);
+        assert_eq!(proxies[0].proxy_type, NetworkProxyType::HTTP);
+        assert_eq!(proxies[0].server, "proxy.example.com");
+        assert_eq!(proxies[0].port, 3128);
+    }
+}
+
+/// Parse and validate proxy URL, adding default schema if missing
+fn parse_proxy_url(input: &str, default_scheme: &str) -> Option<Url> {
+    if input.trim().is_empty() {
+        return None;
+    }
+
+    let input = input.trim();
+
+    // Try parsing as-is first
+    if let Ok(url) = Url::parse(input) {
+        return Some(url);
+    }
+
+    // If parsing failed, try adding the default scheme
+    let with_scheme = format!("{}://{}", default_scheme, input);
+    Url::parse(&with_scheme).ok()
 }
 
 // here we deal with Strings because we update them from InputFiled
@@ -89,9 +482,9 @@ impl IpDialogState {
                     vec![
                         "ip_spinner",
                         "ipv4",
-                        "ipv6",
                         "mask",
                         "gw",
+                        "ipv6",
                         "domain",
                         "dns",
                         "ntp",
@@ -143,6 +536,72 @@ fn init_focus_tracker(w: &mut Window<IpDialogState>) {
     }
 }
 
+/// Parse an IPv4 CIDR string, returning `(Ipv4Addr, prefix)`
+/// defaulting to /32 when no mask is given.
+pub fn validate_ipv4_cidr(input: &str) -> Result<(Ipv4Addr, u8), CidrError> {
+    const MAX: u8 = 32;
+    if input.is_empty() {
+        return Err(CidrError::EmptyInput);
+    }
+    let (addr_part, mask_part) = input
+        .split_once('/')
+        .map_or((input, None), |(a, m)| (a, Some(m)));
+
+    let addr = Ipv4Addr::from_str(addr_part)?;
+    let prefix = if let Some(m_str) = mask_part {
+        let m: u8 = m_str.parse()?;
+        if m > MAX {
+            return Err(CidrError::MaskOutOfRange { given: m, max: MAX });
+        }
+        m
+    } else {
+        MAX
+    };
+
+    Ok((addr, prefix))
+}
+
+/// Parse and validate an IPv6 CIDR string in `input`.
+/// Returns the parsed `Ipv6Addr` and the prefix length.
+///
+/// # Examples
+///
+/// ```
+/// use your_crate::validate_ipv6_cidr;
+/// use std::net::Ipv6Addr;
+///
+/// assert_eq!(
+///     validate_ipv6_cidr("2001:db8::dead:beef/64").unwrap(),
+///     (Ipv6Addr::from_str("2001:db8::dead:beef").unwrap(), 64)
+/// );
+/// assert_eq!(
+///     validate_ipv6_cidr("::1").unwrap(),
+///     (Ipv6Addr::LOCALHOST, 128)
+/// );
+/// ```
+pub fn validate_ipv6_cidr(input: &str) -> Result<(Ipv6Addr, u8), CidrError> {
+    const MAX: u8 = 128;
+    if input.is_empty() {
+        return Err(CidrError::EmptyInput);
+    }
+    let (addr_part, mask_part) = input
+        .split_once('/')
+        .map_or((input, None), |(a, m)| (a, Some(m)));
+
+    let addr = Ipv6Addr::from_str(addr_part)?;
+    let prefix = if let Some(m_str) = mask_part {
+        let m: u8 = m_str.parse()?;
+        if m > MAX {
+            return Err(CidrError::MaskOutOfRange { given: m, max: MAX });
+        }
+        m
+    } else {
+        MAX
+    };
+
+    Ok((addr, prefix))
+}
+
 fn create_widgets(w: &mut Window<IpDialogState>) {
     // create all widgets only once. We draw only widgets that present in the layout
     w.add_widget(
@@ -171,24 +630,42 @@ fn create_widgets(w: &mut Window<IpDialogState>) {
     w.add_widget(
         "ipv4",
         InputFieldElement::new("IPv4", Some(w.state.new_iface_state.ipv4.as_str()))
-            .with_text_hint("e.g. 192.168.0.1"),
+            .with_text_hint("e.g. 192.168.0.1")
+            .validate(|ip| match validate_ipv4_cidr(ip) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e.to_string()),
+            }),
     );
 
     w.add_widget(
         "ipv6",
         InputFieldElement::new("IPv6", Some(w.state.new_iface_state.ipv6.as_str()))
-            .with_text_hint("e.g. c820::1"),
+            .with_text_hint("e.g. c820::1")
+            .validate(|ip| match validate_ipv6_cidr(ip) {
+                Ok(_) => Ok(()),
+                Err(e) => Err(e.to_string()),
+            }),
     );
 
     w.add_widget(
         "mask",
         InputFieldElement::new("Mask", Some(w.state.new_iface_state.mask.as_str()))
-            .with_text_hint("w.g. 255.255.255.0"),
+            .with_text_hint("e.g. 255.255.255.0")
+            .validate(|mask| {
+                if mask.is_empty() {
+                    return Err("Mask cannot be empty".to_string());
+                }
+                // try to parse as IPv4 CIDR
+                match validate_ipv4_cidr(mask) {
+                    Ok(_) => Ok(()),
+                    Err(e) => Err(e.to_string()),
+                }
+            }),
     );
     w.add_widget(
         "gw",
         InputFieldElement::new("Gateway", Some(w.state.new_iface_state.gw.as_str()))
-            .with_text_hint("e.g. 192.168.1.1"),
+            .with_text_hint("e.g. 192.168.1.1, fe80::2"),
     );
     w.add_widget(
         "dns",
@@ -213,19 +690,61 @@ fn create_widgets(w: &mut Window<IpDialogState>) {
     );
     w.add_widget(
         "http",
-        InputFieldElement::new("HTTP", Some(&w.state.new_iface_state.proxy_http.as_str())),
+        InputFieldElement::new(
+            "HTTP",
+            Some(
+                &w.state
+                    .new_iface_state
+                    .proxy_http
+                    .as_ref()
+                    .map(|u| u.as_str())
+                    .unwrap_or(""),
+            ),
+        )
+        .with_text_hint("e.g. http://10.10.10.1:8080"),
     );
     w.add_widget(
         "https",
-        InputFieldElement::new("HTTPs", Some(&w.state.new_iface_state.proxy_https.as_str())),
+        InputFieldElement::new(
+            "HTTPs",
+            Some(
+                &w.state
+                    .new_iface_state
+                    .proxy_https
+                    .as_ref()
+                    .map(|u| u.as_str())
+                    .unwrap_or(""),
+            ),
+        )
+        .with_text_hint("e.g. https://10.10.10.1:8080"),
     );
     w.add_widget(
         "ftp",
-        InputFieldElement::new("FTP", Some(&w.state.new_iface_state.proxy_ftp.as_str())),
+        InputFieldElement::new(
+            "FTP",
+            Some(
+                &w.state
+                    .new_iface_state
+                    .proxy_ftp
+                    .as_ref()
+                    .map(|u| u.as_str())
+                    .unwrap_or(""),
+            ),
+        ),
     );
     w.add_widget(
         "socks",
-        InputFieldElement::new("SOCKS", Some(&w.state.new_iface_state.proxy_socks.as_str())),
+        InputFieldElement::new(
+            "SOCKS",
+            Some(
+                &w.state
+                    .new_iface_state
+                    .proxy_socks
+                    .as_ref()
+                    .map(|u| u.as_str())
+                    .unwrap_or(""),
+            ),
+        ),
     );
     // w.add_widget(
     //     "pac_file",
@@ -253,7 +772,7 @@ fn update_ip_layout(w: &mut Window<IpDialogState>, rect: &Rect) {
     w.update_layout("ip_spinner", spinner_rect);
 
     if !w.state.new_iface_state.ip_dhcp {
-        let [ip, ipv6, mask, gw, domain, dns, ntp] = Layout::vertical(vec![
+        let [ip, mask, gw, ipv6, domain, dns, ntp] = Layout::vertical(vec![
             Constraint::Length(3),
             Constraint::Length(3),
             Constraint::Length(3),
@@ -446,10 +965,10 @@ fn on_child_ui_action(
                 "gw" => w.state.new_iface_state.gw = text.clone(),
                 "dns" => w.state.new_iface_state.dns = text.clone(),
                 "domain" => w.state.new_iface_state.domain = text.clone(),
-                "http" => w.state.new_iface_state.proxy_http = text.clone(),
-                "https" => w.state.new_iface_state.proxy_https = text.clone(),
-                "ftp" => w.state.new_iface_state.proxy_ftp = text.clone(),
-                "socks" => w.state.new_iface_state.proxy_socks = text.clone(),
+                "http" => w.state.new_iface_state.proxy_http = parse_proxy_url(&text, "http"),
+                "https" => w.state.new_iface_state.proxy_https = parse_proxy_url(&text, "https"),
+                "ftp" => w.state.new_iface_state.proxy_ftp = parse_proxy_url(&text, "ftp"),
+                "socks" => w.state.new_iface_state.proxy_socks = parse_proxy_url(&text, "socks"),
                 "ntp" => w.state.new_iface_state.ntp = text.clone(),
                 _ => {}
             }
@@ -530,22 +1049,30 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
             "".to_string()
         };
 
-        let mut proxy_ftp = "".to_string();
-        let mut proxy_http = "".to_string();
-        let mut proxy_https = "".to_string();
-        let mut proxy_socks = "".to_string();
+        let mut proxy_ftp = None;
+        let mut proxy_http = None;
+        let mut proxy_https = None;
+        let mut proxy_socks = None;
 
         if let ProxyConfig::Manual {
+            ftp,
             http,
             https,
-            ftp,
             socks,
         } = &iface.proxy_config
         {
-            proxy_ftp = ftp.as_ref().map(|p| p.to_url()).unwrap_or_default();
-            proxy_http = http.as_ref().map(|p| p.to_url()).unwrap_or_default();
-            proxy_https = https.as_ref().map(|p| p.to_url()).unwrap_or_default();
-            proxy_socks = socks.as_ref().map(|p| p.to_url()).unwrap_or_default();
+            proxy_ftp = ftp
+                .as_ref()
+                .and_then(|p| Url::parse(&format!("ftp://{}", p.to_url())).ok());
+            proxy_http = http
+                .as_ref()
+                .and_then(|p| Url::parse(&format!("http://{}", p.to_url())).ok());
+            proxy_https = https
+                .as_ref()
+                .and_then(|p| Url::parse(&format!("https://{}", p.to_url())).ok());
+            proxy_socks = socks
+                .as_ref()
+                .and_then(|p| Url::parse(&format!("socks://{}", p.to_url())).ok());
         }
 
         // convert to comma separated string
@@ -578,7 +1105,16 @@ impl From<&NetworkInterfaceStatus> for IpDialogState {
                 .subnet
                 .map(|ip| ip.netmask().to_string())
                 .unwrap_or_default(),
-            gw: iface.gw.map(|ip| ip.to_string()).unwrap_or_default(),
+            gw: iface
+                .routes
+                .as_ref()
+                .map(|ip| {
+                    ip.iter()
+                        .map(|ip| ip.to_string())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                })
+                .unwrap_or_default(),
             proxy_url,
             proxy_certificate: "".to_string(),
             pac_file,

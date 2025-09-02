@@ -358,7 +358,6 @@ pub struct WirelessStatus {
 }
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
-#[serde(rename_all = "PascalCase")]
 pub struct ProxyEntry {
     #[serde(rename = "type")]
     pub proxy_type: NetworkProxyType,
@@ -967,6 +966,11 @@ impl NetworkPortConfig {
         self.dhcp_config.domain_name = domain_name;
         self.dhcp_config.ntp_servers = ntp_server;
         self.dhcp_config.dns_servers = dns_servers;
+    }
+
+    /// Set proxy configuration
+    pub fn set_proxy_config(&mut self, proxy_config: ProxyConfig) {
+        self.proxy_config = proxy_config;
     }
 }
 

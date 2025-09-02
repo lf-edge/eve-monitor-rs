@@ -11,7 +11,7 @@ use ratatui::{
 };
 
 use crate::{
-    traits::{IElementEventHandler, IWidget, IWidgetPresenter},
+    traits::{IElementEventHandler, IWidget, IWidgetPresenter, TextInput},
     ui::action::UiActions,
 };
 
@@ -32,6 +32,7 @@ impl InputMode {
 
 pub type OnContentUpdated = dyn FnMut(&String) -> Option<String>;
 pub type OnChar = dyn FnMut(&char) -> Option<char>;
+pub type ValidateFn = dyn Fn(&String) -> Result<(), String>;
 
 #[derive(PartialEq)]
 pub enum InputModifiers {
@@ -48,12 +49,25 @@ pub struct InputFieldElement {
     scroll_left: u16,
     text_area: Rect,
     input_mode: InputMode,
-    on_update: Option<Box<OnContentUpdated>>,
     on_char: Option<Box<OnChar>>,
+    on_validate: Option<Box<ValidateFn>>,
+    validation_error: Option<String>,
     enabled: bool,
     modifiers: Vec<InputModifiers>,
     size_hint: Option<Size>,
     text_hint: Option<String>,
+}
+
+impl TextInput for InputFieldElement {
+    fn text(&self) -> &str {
+        self.value.as_deref().unwrap_or_default()
+    }
+    fn set_text(&mut self, s: String) {
+        self.value = Some(s);
+    }
+    fn set_error(&mut self, msg: Option<String>) {
+        self.validation_error = msg;
+    }
 }
 
 impl IWidget for InputFieldElement {
@@ -72,6 +86,10 @@ impl IWidget for InputFieldElement {
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
     }
+
+    fn tips_in_focus(&self) -> Option<String> {
+        return self.validation_error.clone();
+    }
 }
 
 impl InputFieldElement {
@@ -86,8 +104,9 @@ impl InputFieldElement {
             input_position,
             cursor_position: input_position as u16,
             input_mode: InputMode::Insert,
-            on_update: None,
             on_char: Some(Box::new(|c| Some(*c))),
+            on_validate: None,
+            validation_error: None,
             text_area: Rect::default(),
             scroll_left: 0,
             enabled: true,
@@ -121,11 +140,11 @@ impl InputFieldElement {
         self
     }
 
-    pub fn on_update<F>(mut self, f: F) -> Self
+    pub fn validate<F>(mut self, f: F) -> Self
     where
-        F: Fn(&String) -> Option<String> + 'static,
+        F: Fn(&String) -> Result<(), String> + 'static,
     {
-        self.on_update = Some(Box::new(f));
+        self.on_validate = Some(Box::new(f));
         self
     }
 
@@ -155,8 +174,14 @@ impl InputFieldElement {
             //FIXME: need new Font
             .border_type(BorderType::Plain)
             .borders(Borders::ALL)
-            .border_style(style)
             .style(Style::default().bg(Color::Black));
+
+        // set foreground color to red if validation error is present
+        if self.validation_error.is_some() {
+            blk = blk.border_style(Style::default().fg(Color::Red));
+        } else {
+            blk = blk.border_style(style);
+        }
 
         // render caption
         if self.modifiers.contains(&InputModifiers::DisplayCaption) {
@@ -215,6 +240,10 @@ impl InputFieldElement {
             .scroll((0, self.scroll_left)); // note reversed order (y,x)
 
         input.render(inner_area, buf);
+    }
+
+    pub fn text(&self) -> Option<String> {
+        self.value.clone()
     }
 }
 
@@ -307,6 +336,11 @@ impl IElementEventHandler for InputFieldElement {
                 KeyCode::Esc => {}
                 _ => {}
             }
+
+            if let Some(validate_fn) = self.on_validate.as_mut() {
+                self.validation_error = validate_fn(value).err();
+            }
+
             if old_value != self.value {
                 return Some(UiActions::Input {
                     text: self.value.clone().unwrap_or_default(),

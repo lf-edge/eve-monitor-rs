@@ -3,6 +3,7 @@
 
 use crate::actions::MonActions;
 use crate::events::Event;
+use crate::ipc::eve_types::TuiEveConfig;
 use crate::model::model::Model;
 use crate::model::model::MonitorModel;
 use crate::ui::ipdialog::InterfaceState;
@@ -59,8 +60,10 @@ impl AppConfig {
     where
         T: AsRef<std::path::Path>,
     {
-        let cfg = std::fs::read_to_string(path)?;
-        let cfg: AppConfig = serde_json::from_str(&cfg)?;
+        let cfg = std::fs::read_to_string(&path)?;
+        let mut cfg: AppConfig = serde_json::from_str(&cfg)?;
+        // ensure the config path is set. it is not set by serde_json::from_str
+        cfg.config_path = path.as_ref().to_path_buf();
         Ok(cfg)
     }
 
@@ -278,14 +281,11 @@ impl Application {
         if let Some(current_dpc) = current_dpc {
             info!("send_dpc: Sending DPC for iface {}", &new.iface_name);
             let mut new_dpc = current_dpc.to_new_dpc_with_key("manual");
-            // there are 3 cases:
-            // 1. iface is switched DHCP -> Static
-            // 2. iface is switched Static -> DHCP
-            // 3. iface is switched Static -> Static with different IP
-            //
+
+            // Update IP configuration based on DHCP/static selection
             match (old.is_dhcp(), new.is_dhcp()) {
                 (false, true) => {
-                    // case 2
+                    // case 2: Static -> DHCP
                     new_dpc
                         .get_port_by_name_mut(&new.iface_name)
                         .unwrap()
@@ -310,14 +310,14 @@ impl Application {
                         .map(|s| s.to_string())
                         .collect::<Vec<String>>();
 
-                    // case 1,3
+                    // case 1,3: DHCP -> Static or Static -> Static
                     new_dpc
                         .get_port_by_name_mut(&new.iface_name)
                         .unwrap()
                         .to_static(
                             IpNet::with_netmask(ip, mask).unwrap(),
                             new.gw.parse().unwrap(),
-                            new.domain,
+                            new.domain.clone(),
                             if ntp_servers.is_empty() {
                                 None
                             } else {
@@ -331,13 +331,20 @@ impl Application {
                         );
                 }
                 (true, true) => {
-                    // this may actually happen if we add support for DHCP with some static fields e.g. custom DNS
-                    // log an error for now
-                    error!(
-                        "send_dpc: DHCP -> DHCP transition with static fields is not supported yet but seems it is implemented in UI"
+                    // DHCP -> DHCP: No IP configuration changes needed, but proxy settings may have changed
+                    info!(
+                        "send_dpc: DHCP -> DHCP transition for iface {}, checking for proxy changes",
+                        &new.iface_name
                     );
-                } // do nothing
+                } // IP config stays the same, proxy config will be handled below
             }
+
+            // Update proxy configuration regardless of DHCP/static IP settings
+            if let Some(port) = new_dpc.get_port_by_name_mut(&new.iface_name) {
+                let proxy_config = new.create_proxy_config();
+                port.set_proxy_config(proxy_config);
+            }
+
             self.send_ipc_message(IpcMessage::new_request(Request::SetDPC(new_dpc)), |_| {});
         }
     }

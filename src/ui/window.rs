@@ -3,6 +3,7 @@
 
 use crate::events;
 use crate::model::model::Model;
+use crate::ui::widgets::input_field::InputFieldElement;
 use std::borrow::BorrowMut;
 use std::collections::HashMap;
 use std::{fmt::Debug, rc::Rc};
@@ -12,7 +13,7 @@ use indexmap::IndexMap;
 use log::{debug, trace};
 use ratatui::layout::Rect;
 
-use crate::traits::{IEventHandler, IPresenter, IVisible, IWidget, IWindow};
+use crate::traits::{IEventHandler, IPresenter, IVisible, IWidget, IWindow, TextInput};
 use anyhow::Result;
 
 use super::{
@@ -224,6 +225,10 @@ impl<D> Window<D> {
         self.widgets.get_mut(&name.into())
     }
 
+    pub fn get_widget<S: Into<String>>(&self, name: S) -> Option<&Box<dyn IWidget>> {
+        self.widgets.get(&name.into())
+    }
+
     pub fn update_layout<S: Into<String>>(&mut self, name: S, rect: Rect) {
         self.layout.insert(name.into(), rect);
     }
@@ -280,9 +285,23 @@ impl<D> Window<D> {
         let tab_order: Vec<String> = tab_order.into_iter().map(|s| s.into()).collect();
         self.ft.set_tab_order(tab_order);
     }
+
+    pub fn text_input_mut(&mut self, id: &str) -> Option<&mut dyn TextInput> {
+        self.widgets.get_mut(id)?.as_input_field_mut()
+    }
 }
 
-impl<D> IWindow for Window<D> {}
+impl<D> IWindow for Window<D> {
+    fn status_bar_tips(&self) -> Option<String> {
+        // get the focused widget
+        self.ft.get_focused_view().and_then(|focused_widget| {
+            self.widgets.get(&focused_widget).and_then(|widget| {
+                // check if the widget has a status bar tip
+                widget.tips_in_focus()
+            })
+        })
+    }
+}
 
 impl<D> IEventHandler for Window<D> {
     fn handle_event(&mut self, event: events::Event) -> Option<Action> {

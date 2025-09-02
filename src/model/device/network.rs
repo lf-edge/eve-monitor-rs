@@ -196,7 +196,6 @@ pub struct NetworkInterfaceStatus {
     pub up: bool,
     pub media: NetworkType,
     pub dns: Option<Vec<IpAddr>>,
-    pub gw: Option<IpAddr>,
     pub subnet: Option<IpNet>,
     pub is_dhcp: bool,
     pub proxy_config: ProxyConfig,
@@ -295,12 +294,6 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
                 .collect()
         });
 
-        // take the first default router as the gateway
-        let gw = port
-            .default_routers
-            .as_ref()
-            .and_then(|routers| routers.first().cloned());
-
         // collect NTP servers. Some may come from DHCP as IpAddr, others are FQDN from
         // network configuration. Collect both types in the same list as strings
 
@@ -342,7 +335,6 @@ impl From<&NetworkPortStatus> for NetworkInterfaceStatus {
             up: port.up,
             media,
             dns,
-            gw,
             subnet: port.ipv4_subnet.clone(),
             is_dhcp,
             cost: port.cost,

@@ -238,7 +238,7 @@ impl PathNode {
                 "Path({},{},{})",
                 node.node_type,
                 node.node_sub_type,
-                hex::encode(node.data.as_ref().unwrap())
+                node.data.as_ref().map_or("null".to_string(), hex::encode)
             ),
         }
     }
@@ -361,6 +361,14 @@ impl DevicePath {
             lun,
             group_tag: target_port_gropup,
             target: target.to_string(),
+        }));
+        self
+    }
+
+    #[cfg(test)]
+    pub fn msg_uri(mut self, uri: &str) -> Self {
+        self.nodes.push(PathNode::Messaging(MessagingNode::Uri {
+            uri: uri.to_string(),
         }));
         self
     }

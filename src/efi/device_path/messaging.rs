@@ -46,7 +46,7 @@ pub enum DevicePathSubTypeMessaging {
     // -- end of vendor structs --
     // SasEx = 22, 32
     Nvme = 23,
-    // Uri = 24, >= 8 (4 + 4 for empty uri)
+    Uri = 24,
     // Ufs = 25, 6
     Sd = 26,
     // Bluetooth = 27, 10
@@ -76,6 +76,7 @@ impl NodeTypeValidator for DevicePathSubTypeMessaging {
             DevicePathSubTypeMessaging::IScsi => NodeExpectedLength::Min(38),
             DevicePathSubTypeMessaging::Vlan => NodeExpectedLength::Exact(6),
             DevicePathSubTypeMessaging::Nvme => NodeExpectedLength::Exact(16),
+            DevicePathSubTypeMessaging::Uri => NodeExpectedLength::Min(4),
             DevicePathSubTypeMessaging::Sd => NodeExpectedLength::Exact(5),
             DevicePathSubTypeMessaging::EMMC => NodeExpectedLength::Exact(5),
             DevicePathSubTypeMessaging::Unknown(_) => NodeExpectedLength::Min(4),
@@ -173,6 +174,9 @@ pub(crate) enum MessagingNode {
     I2O {
         tid: u32,
     },
+    Uri {
+        uri: String,
+    },
     Unknown(Node),
 }
 
@@ -208,6 +212,7 @@ impl PathNodeTrait for MessagingNode {
             MessagingNode::EMMC { .. } => DevicePathSubTypeMessaging::EMMC,
             MessagingNode::Nvme { .. } => DevicePathSubTypeMessaging::Nvme,
             MessagingNode::I2O { .. } => DevicePathSubTypeMessaging::I2O,
+            MessagingNode::Uri { .. } => DevicePathSubTypeMessaging::Uri,
             MessagingNode::Unknown(node) => DevicePathSubTypeMessaging::Unknown(node.node_sub_type),
         }
     }
@@ -326,7 +331,7 @@ impl PathNodeTrait for MessagingNode {
                 "{}({},{})",
                 self.get_generic_name(),
                 node.node_sub_type,
-                hex::encode(node.data.as_ref().unwrap())
+                node.data.as_ref().map_or("null".to_string(), hex::encode)
             ),
             MessagingNode::UsbWwid {
                 interface_number,
@@ -338,6 +343,13 @@ impl PathNodeTrait for MessagingNode {
                 vendor_id, product_id, interface_number,
             ),
             MessagingNode::I2O { tid } => format!("I2O({})", tid),
+            MessagingNode::Uri { uri } => {
+                if uri.is_empty() {
+                    "Uri()".to_string()
+                } else {
+                    format!("Uri({})", uri)
+                }
+            }
         }
     }
 
@@ -492,7 +504,14 @@ impl PathNodeTrait for MessagingNode {
                 Some(data)
             }
             MessagingNode::I2O { tid } => Some(tid.to_le_bytes().to_vec()),
-            MessagingNode::Unknown(node) => Some(node.data.as_ref().unwrap().clone()),
+            MessagingNode::Uri { uri } => {
+                if uri.is_empty() {
+                    None
+                } else {
+                    Some(uri.as_bytes().to_vec())
+                }
+            }
+            MessagingNode::Unknown(node) => node.data.clone(),
             MessagingNode::UsbWwid {
                 interface_number,
                 vendor_id,
@@ -683,176 +702,219 @@ impl TryFrom<&Node> for MessagingNode {
 
     fn try_from(value: &Node) -> Result<Self, Self::Error> {
         let subtype = DevicePathSubTypeMessaging::from_primitive(value.node_sub_type);
+        println!("SUBTYPE: {:#?}, len={}", subtype, value.node_length);
         subtype.validate_length(value.node_length)?;
-        let mut cursor = std::io::Cursor::new(value.data.as_ref().unwrap());
 
+        // For Unknown and Uri types, handle specially as they can have node_length == 4
         match subtype {
-            DevicePathSubTypeMessaging::Atapi => {
-                let primary = cursor.read_u8()? == 0;
-                let slave = cursor.read_u8()? == 1;
-                let lun = cursor.read_u16::<LittleEndian>()?;
-                Ok(MessagingNode::Atapi {
-                    primary,
-                    slave,
-                    lun,
-                })
+            DevicePathSubTypeMessaging::Unknown(_) => {
+                // Unknown nodes can have no data if node_length == 4
+                return Ok(MessagingNode::Unknown(value.clone()));
             }
-            DevicePathSubTypeMessaging::Scsi => {
-                let target = cursor.read_u16::<LittleEndian>()?;
-                let lun = cursor.read_u16::<LittleEndian>()?;
-                Ok(MessagingNode::Scsi { target, lun })
+            DevicePathSubTypeMessaging::Uri => {
+                // Uri can be empty (length == 4) per RFC 3986 / UEFI spec
+                if value.node_length == 4 {
+                    return Ok(MessagingNode::Uri { uri: String::new() });
+                }
+                // URI is stored as ASCII string (not null-terminated, length-delimited)
+                let data = value.data.as_ref().ok_or_else(|| {
+                    anyhow!("Node data is None but node_length is {}", value.node_length)
+                })?;
+                // RFC 3986 URIs are ASCII (with percent-encoding for non-ASCII)
+                let uri = String::from_utf8(data.clone())
+                    .context("Invalid ASCII/UTF-8 in URI - URIs must be RFC 3986 compliant")?;
+                return Ok(MessagingNode::Uri { uri });
             }
-            DevicePathSubTypeMessaging::FiberChannel => {
-                let _reserved = cursor.read_u32::<LittleEndian>()?;
-                // those are not just u64
-                let wwn = cursor.read_u64::<LittleEndian>()?;
-                let lun = cursor.read_u64::<LittleEndian>()?;
-                Ok(MessagingNode::FiberChannel { wwn, lun })
+            _ => {
+                // All other known node types require data
+                let data = value.data.as_ref().ok_or_else(|| {
+                    anyhow!("Node data is None but node_length is {}", value.node_length)
+                })?;
+                let mut cursor = std::io::Cursor::new(data);
+
+                parse_known_messaging_node(&mut cursor, subtype)
             }
-            DevicePathSubTypeMessaging::FiberChannelEx => {
-                let _reserved = cursor.read_u32::<LittleEndian>()?;
-                // those are not just u64
-                let wwn = cursor.read_u64::<LittleEndian>()?;
-                let lun = cursor.read_u64::<LittleEndian>()?;
-                // let boot_lun = cursor.read_u64::<LittleEndian>?;
-                Ok(MessagingNode::FiberChannelEx { wwn, lun })
-            }
-            DevicePathSubTypeMessaging::Sata => {
-                let hba_port = cursor.read_u16::<LittleEndian>()?;
-                let port_multiplier_port = cursor.read_u16::<LittleEndian>()?;
-                let lun = cursor.read_u16::<LittleEndian>()?;
-                Ok(MessagingNode::Sata {
-                    hba_port,
-                    port_multiplier_port,
-                    lun,
-                })
-            }
-            DevicePathSubTypeMessaging::Usb => {
-                let parent_port_number = cursor.read_u8()?;
-                let usb_interface = cursor.read_u8()?;
-                Ok(MessagingNode::Usb {
-                    parent_port_number,
-                    usb_interface,
-                })
-            }
-            DevicePathSubTypeMessaging::Lun => {
-                let lun = cursor.read_u8()?;
-                Ok(MessagingNode::Lun(lun))
-            }
-            DevicePathSubTypeMessaging::UsbClass => {
-                let vendor_id = cursor.read_u16::<LittleEndian>()?;
-                let product_id = cursor.read_u16::<LittleEndian>()?;
-                let device_class = cursor.read_u8()?;
-                let device_subclass = cursor.read_u8()?;
-                let device_protocol = cursor.read_u8()?;
-                Ok(MessagingNode::UsbClass {
-                    vendor_id,
-                    product_id,
-                    device_class,
-                    device_subclass,
-                    device_protocol,
-                })
-            }
-            DevicePathSubTypeMessaging::UsbWwid => {
-                let interface_number = cursor.read_u16::<LittleEndian>()?;
-                let vendor_id = cursor.read_u16::<LittleEndian>()?;
-                let product_id = cursor.read_u16::<LittleEndian>()?;
-                let mut serial = Vec::new();
-                _ = cursor.read_to_end(&mut serial)?;
-                Ok(MessagingNode::UsbWwid {
-                    interface_number,
-                    vendor_id,
-                    product_id,
-                    serial,
-                })
-            }
-            DevicePathSubTypeMessaging::MacAddr => {
-                let mut mac_addr = [0; 32];
-                cursor.read_exact(&mut mac_addr)?;
-                let if_type = cursor.read_u8()?;
-                let mac_addr = parse_mac(mac_addr)?;
-                Ok(MessagingNode::MacAddr { mac_addr, if_type })
-            }
-            DevicePathSubTypeMessaging::IpV4 => {
-                let local_ip = Ipv4Addr::from(cursor.read_u32::<LittleEndian>()?);
-                let remote_ip = Ipv4Addr::from(cursor.read_u32::<LittleEndian>()?);
-                let local_port = cursor.read_u16::<LittleEndian>()?;
-                let remote_port = cursor.read_u16::<LittleEndian>()?;
-                let protocol = cursor.read_u16::<LittleEndian>()?;
-                let is_static = cursor.read_u8()? == 1;
-                let gw = Ipv4Addr::from(cursor.read_u32::<LittleEndian>()?);
-                let mask = Ipv4Addr::from(cursor.read_u32::<LittleEndian>()?);
-                Ok(MessagingNode::IpV4 {
-                    local_ip,
-                    remote_ip,
-                    local_port,
-                    remote_port,
-                    protocol,
-                    is_static,
-                    gw,
-                    mask,
-                })
-            }
-            DevicePathSubTypeMessaging::IpV6 => {
-                let local_ip = Ipv6Addr::from(cursor.read_u128::<LittleEndian>()?);
-                let remote_ip = Ipv6Addr::from(cursor.read_u128::<LittleEndian>()?);
-                let local_port = cursor.read_u16::<LittleEndian>()?;
-                let remote_port = cursor.read_u16::<LittleEndian>()?;
-                let protocol = cursor.read_u16::<LittleEndian>()?;
-                let origin = cursor.read_u8()?;
-                let prefix_len = cursor.read_u8()?;
-                let gw = Ipv6Addr::from(cursor.read_u128::<LittleEndian>()?);
-                Ok(MessagingNode::IpV6 {
-                    local_ip,
-                    remote_ip,
-                    local_port,
-                    remote_port,
-                    protocol,
-                    origin,
-                    prefix_len,
-                    gw,
-                })
-            }
-            DevicePathSubTypeMessaging::IScsi => {
-                let protocol = cursor.read_u16::<LittleEndian>()?;
-                let options = cursor.read_u16::<LittleEndian>()?;
-                let lun = cursor.read_u64::<LittleEndian>()?;
-                let group_tag = cursor.read_u16::<LittleEndian>()?;
-                // FIXME: it is unclear from the spec whether it is ucs16 or ascii
-                let target = cursor.read_null_terminated_ascii_to_string()?;
-                Ok(MessagingNode::IScsi {
-                    protocol,
-                    options,
-                    lun,
-                    group_tag,
-                    target,
-                })
-            }
-            DevicePathSubTypeMessaging::Vlan => {
-                let vlan_id = cursor.read_u16::<LittleEndian>()?;
-                Ok(MessagingNode::Vlan { vlan_id })
-            }
-            DevicePathSubTypeMessaging::I2O => {
-                let i2o_path_id = cursor.read_u32::<LittleEndian>()?;
-                Ok(MessagingNode::I2O { tid: i2o_path_id })
-            }
-            DevicePathSubTypeMessaging::Nvme => {
-                let namespace_id = cursor.read_u32::<LittleEndian>()?;
-                let namespace_uuid = cursor.read_u64::<LittleEndian>()?;
-                Ok(MessagingNode::Nvme {
-                    namespace_id,
-                    namespace_uuid,
-                })
-            }
-            DevicePathSubTypeMessaging::Sd => {
-                let slot = cursor.read_u8()?;
-                Ok(MessagingNode::Sd { slot })
-            }
-            DevicePathSubTypeMessaging::EMMC => {
-                let slot = cursor.read_u8()?;
-                Ok(MessagingNode::EMMC { slot })
-            }
-            DevicePathSubTypeMessaging::Unknown(_) => Ok(MessagingNode::Unknown(value.clone())),
+        }
+    }
+}
+
+fn parse_known_messaging_node(
+    cursor: &mut std::io::Cursor<&Vec<u8>>,
+    subtype: DevicePathSubTypeMessaging,
+) -> Result<MessagingNode> {
+    match subtype {
+        DevicePathSubTypeMessaging::Atapi => {
+            let primary = cursor.read_u8()? == 0;
+            let slave = cursor.read_u8()? == 1;
+            let lun = cursor.read_u16::<LittleEndian>()?;
+            Ok(MessagingNode::Atapi {
+                primary,
+                slave,
+                lun,
+            })
+        }
+        DevicePathSubTypeMessaging::Scsi => {
+            let target = cursor.read_u16::<LittleEndian>()?;
+            let lun = cursor.read_u16::<LittleEndian>()?;
+            Ok(MessagingNode::Scsi { target, lun })
+        }
+        DevicePathSubTypeMessaging::FiberChannel => {
+            let _reserved = cursor.read_u32::<LittleEndian>()?;
+            // those are not just u64
+            let wwn = cursor.read_u64::<LittleEndian>()?;
+            let lun = cursor.read_u64::<LittleEndian>()?;
+            Ok(MessagingNode::FiberChannel { wwn, lun })
+        }
+        DevicePathSubTypeMessaging::FiberChannelEx => {
+            let _reserved = cursor.read_u32::<LittleEndian>()?;
+            // those are not just u64
+            let wwn = cursor.read_u64::<LittleEndian>()?;
+            let lun = cursor.read_u64::<LittleEndian>()?;
+            // let boot_lun = cursor.read_u64::<LittleEndian>?;
+            Ok(MessagingNode::FiberChannelEx { wwn, lun })
+        }
+        DevicePathSubTypeMessaging::Sata => {
+            let hba_port = cursor.read_u16::<LittleEndian>()?;
+            let port_multiplier_port = cursor.read_u16::<LittleEndian>()?;
+            let lun = cursor.read_u16::<LittleEndian>()?;
+            Ok(MessagingNode::Sata {
+                hba_port,
+                port_multiplier_port,
+                lun,
+            })
+        }
+        DevicePathSubTypeMessaging::Usb => {
+            let parent_port_number = cursor.read_u8()?;
+            let usb_interface = cursor.read_u8()?;
+            Ok(MessagingNode::Usb {
+                parent_port_number,
+                usb_interface,
+            })
+        }
+        DevicePathSubTypeMessaging::Lun => {
+            let lun = cursor.read_u8()?;
+            Ok(MessagingNode::Lun(lun))
+        }
+        DevicePathSubTypeMessaging::UsbClass => {
+            let vendor_id = cursor.read_u16::<LittleEndian>()?;
+            let product_id = cursor.read_u16::<LittleEndian>()?;
+            let device_class = cursor.read_u8()?;
+            let device_subclass = cursor.read_u8()?;
+            let device_protocol = cursor.read_u8()?;
+            Ok(MessagingNode::UsbClass {
+                vendor_id,
+                product_id,
+                device_class,
+                device_subclass,
+                device_protocol,
+            })
+        }
+        DevicePathSubTypeMessaging::UsbWwid => {
+            let interface_number = cursor.read_u16::<LittleEndian>()?;
+            let vendor_id = cursor.read_u16::<LittleEndian>()?;
+            let product_id = cursor.read_u16::<LittleEndian>()?;
+            let mut serial = Vec::new();
+            _ = cursor.read_to_end(&mut serial)?;
+            Ok(MessagingNode::UsbWwid {
+                interface_number,
+                vendor_id,
+                product_id,
+                serial,
+            })
+        }
+        DevicePathSubTypeMessaging::MacAddr => {
+            let mut mac_addr = [0; 32];
+            cursor.read_exact(&mut mac_addr)?;
+            let if_type = cursor.read_u8()?;
+            let mac_addr = parse_mac(mac_addr)?;
+            Ok(MessagingNode::MacAddr { mac_addr, if_type })
+        }
+        DevicePathSubTypeMessaging::IpV4 => {
+            let local_ip = Ipv4Addr::from(cursor.read_u32::<LittleEndian>()?);
+            let remote_ip = Ipv4Addr::from(cursor.read_u32::<LittleEndian>()?);
+            let local_port = cursor.read_u16::<LittleEndian>()?;
+            let remote_port = cursor.read_u16::<LittleEndian>()?;
+            let protocol = cursor.read_u16::<LittleEndian>()?;
+            let is_static = cursor.read_u8()? == 1;
+            let gw = Ipv4Addr::from(cursor.read_u32::<LittleEndian>()?);
+            let mask = Ipv4Addr::from(cursor.read_u32::<LittleEndian>()?);
+            Ok(MessagingNode::IpV4 {
+                local_ip,
+                remote_ip,
+                local_port,
+                remote_port,
+                protocol,
+                is_static,
+                gw,
+                mask,
+            })
+        }
+        DevicePathSubTypeMessaging::IpV6 => {
+            let local_ip = Ipv6Addr::from(cursor.read_u128::<LittleEndian>()?);
+            let remote_ip = Ipv6Addr::from(cursor.read_u128::<LittleEndian>()?);
+            let local_port = cursor.read_u16::<LittleEndian>()?;
+            let remote_port = cursor.read_u16::<LittleEndian>()?;
+            let protocol = cursor.read_u16::<LittleEndian>()?;
+            let origin = cursor.read_u8()?;
+            let prefix_len = cursor.read_u8()?;
+            let gw = Ipv6Addr::from(cursor.read_u128::<LittleEndian>()?);
+            Ok(MessagingNode::IpV6 {
+                local_ip,
+                remote_ip,
+                local_port,
+                remote_port,
+                protocol,
+                origin,
+                prefix_len,
+                gw,
+            })
+        }
+        DevicePathSubTypeMessaging::IScsi => {
+            let protocol = cursor.read_u16::<LittleEndian>()?;
+            let options = cursor.read_u16::<LittleEndian>()?;
+            let lun = cursor.read_u64::<LittleEndian>()?;
+            let group_tag = cursor.read_u16::<LittleEndian>()?;
+            // FIXME: it is unclear from the spec whether it is ucs16 or ascii
+            let target = cursor.read_null_terminated_ascii_to_string()?;
+            Ok(MessagingNode::IScsi {
+                protocol,
+                options,
+                lun,
+                group_tag,
+                target,
+            })
+        }
+        DevicePathSubTypeMessaging::Vlan => {
+            let vlan_id = cursor.read_u16::<LittleEndian>()?;
+            Ok(MessagingNode::Vlan { vlan_id })
+        }
+        DevicePathSubTypeMessaging::I2O => {
+            let i2o_path_id = cursor.read_u32::<LittleEndian>()?;
+            Ok(MessagingNode::I2O { tid: i2o_path_id })
+        }
+        DevicePathSubTypeMessaging::Nvme => {
+            let namespace_id = cursor.read_u32::<LittleEndian>()?;
+            let namespace_uuid = cursor.read_u64::<LittleEndian>()?;
+            Ok(MessagingNode::Nvme {
+                namespace_id,
+                namespace_uuid,
+            })
+        }
+        DevicePathSubTypeMessaging::Sd => {
+            let slot = cursor.read_u8()?;
+            Ok(MessagingNode::Sd { slot })
+        }
+        DevicePathSubTypeMessaging::EMMC => {
+            let slot = cursor.read_u8()?;
+            Ok(MessagingNode::EMMC { slot })
+        }
+        DevicePathSubTypeMessaging::Uri => {
+            unreachable!(
+                "Uri type should be handled in try_from before calling parse_known_messaging_node"
+            )
+        }
+        DevicePathSubTypeMessaging::Unknown(_) => {
+            unreachable!("Unknown type should be handled in try_from before calling parse_known_messaging_node")
         }
     }
 }

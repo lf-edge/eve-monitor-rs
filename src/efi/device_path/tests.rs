@@ -110,3 +110,60 @@ fn test_device_path_display() {
     let display = path.display(false);
     println!("{}", display);
 }
+
+#[test]
+fn test_uri_empty() {
+    // Test empty URI (length = 4, no data)
+    let path = DevicePath::new()
+        .acpi_acpi(0x0A03, 0x0)
+        .hw_pci(0, 0x1F)
+        .msg_mac_addr("38:F7:CD:C5:97:0B".parse().unwrap(), 0x0)
+        .msg_ipv4(
+            "0.0.0.0".parse().unwrap(),
+            "0.0.0.0".parse().unwrap(),
+            0,
+            0,
+            false,
+            0,
+            "0.0.0.0".parse().unwrap(),
+            "0.0.0.0".parse().unwrap(),
+        )
+        .msg_uri("");
+
+    let display = path.display(false);
+    assert!(display.contains("Uri()"));
+
+    // Check that the Uri node serializes correctly (length = 4, no data)
+    let uri_node_bytes = path.nodes[4].to_bytes();
+    assert_eq!(uri_node_bytes[0], 0x03); // Messaging type
+    assert_eq!(uri_node_bytes[1], 24); // Uri subtype
+    assert_eq!(uri_node_bytes[2], 4); // Length low byte
+    assert_eq!(uri_node_bytes[3], 0); // Length high byte
+    assert_eq!(uri_node_bytes.len(), 4); // No additional data
+}
+
+#[test]
+fn test_uri_with_content() {
+    // Test URI with content
+    let uri_string = "http://example.com/boot.img";
+    let path = DevicePath::new()
+        .acpi_acpi(0x0A03, 0x0)
+        .hw_pci(0, 0x1F)
+        .msg_mac_addr("38:F7:CD:C5:97:0B".parse().unwrap(), 0x0)
+        .msg_uri(uri_string);
+
+    let display = path.display(false);
+    assert!(display.contains(&format!("Uri({})", uri_string)));
+
+    // Check that the Uri node serializes correctly
+    let uri_node_bytes = path.nodes[3].to_bytes();
+    assert_eq!(uri_node_bytes[0], 0x03); // Messaging type
+    assert_eq!(uri_node_bytes[1], 24); // Uri subtype
+    let expected_length = 4 + uri_string.len();
+    assert_eq!(uri_node_bytes[2], (expected_length & 0xFF) as u8);
+    assert_eq!(uri_node_bytes[3], ((expected_length >> 8) & 0xFF) as u8);
+
+    // Check the URI data
+    let uri_data = &uri_node_bytes[4..];
+    assert_eq!(uri_data, uri_string.as_bytes());
+}

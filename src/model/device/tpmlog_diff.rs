@@ -627,7 +627,7 @@ mod tests {
     }
 
     #[test]
-    fn test_decode_tpm_logs_message() -> Result<()> {
+    fn test_decode_tpm_logs_message_load() -> Result<()> {
         // init logger
         let _ = env_logger::builder()
             .is_test(true)
@@ -639,6 +639,24 @@ mod tests {
         let mut json_data: serde_json::Value = serde_json::from_slice(&message).unwrap();
 
         let _raw_logs: TpmLogs = serde_json::from_value::<TpmLogs>(json_data["message"].take())?;
+
+        Ok(())
+    }
+    #[test]
+    fn test_decode_tpm_logs_message_parse() -> Result<()> {
+        // init logger
+        let _ = env_logger::builder()
+            .is_test(true)
+            .filter_level(log::LevelFilter::Trace)
+            .try_init();
+
+        let message = std::fs::read(get_test_data_path("eve-tpm/empty_uri.json")).unwrap();
+
+        let mut json_data: serde_json::Value = serde_json::from_slice(&message).unwrap();
+
+        let raw_logs: TpmLogs = serde_json::from_value::<TpmLogs>(json_data["message"].take())?;
+        let diff = TpmLogDiff::try_from(raw_logs)?;
+        diff.parse()?;
 
         Ok(())
     }

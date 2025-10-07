@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use byteorder::{LittleEndian, ReadBytesExt};
 use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::{Cursor, Read};
@@ -116,7 +116,7 @@ impl PathNodeTrait for HardwareNode {
             HardwareNode::Unknown(node) => format!(
                 "HardwarePath({},{})",
                 node.node_sub_type,
-                hex::encode(node.data.as_ref().unwrap())
+                node.data.as_ref().map_or("null".to_string(), hex::encode)
             ),
         }
     }
@@ -166,49 +166,63 @@ impl TryFrom<&Node> for HardwareNode {
     fn try_from(node: &Node) -> std::result::Result<Self, Self::Error> {
         let subtype = DevicePathSubTypeHardware::from_primitive(node.node_sub_type);
         subtype.validate_length(node.node_length)?;
-        // none of the hardware nodes have empty data
-        // so we can unwrap here
-        let mut cursor = Cursor::new(node.data.as_ref().unwrap());
+
         match subtype {
-            DevicePathSubTypeHardware::Pci => Ok(HardwareNode::Pci {
-                function: cursor.read_u8().context("error reading function")?,
-                device: cursor.read_u8().context("error reading function")?,
-            }),
-            DevicePathSubTypeHardware::PCCARD => Ok(HardwareNode::PCCARD {
-                function: cursor
-                    .read_u8()
-                    .context("error reading function for PCCARD")?,
-            }),
-            DevicePathSubTypeHardware::MemoryMapped => Ok(HardwareNode::MemoryMapped {
-                memory_type: cursor
-                    .read_u32::<LittleEndian>()
-                    .context("error reading memory type")?,
-                start_address: cursor
-                    .read_u64::<LittleEndian>()
-                    .context("error reading start address")?,
-                end_address: cursor
-                    .read_u64::<LittleEndian>()
-                    .context("error reading end address")?,
-            }),
-            DevicePathSubTypeHardware::Vendor => {
-                let mut uuid_buffer: Vec<u8> = Vec::with_capacity(16);
-                let mut vendor_data = Vec::new();
-                cursor.read_exact(&mut uuid_buffer)?;
-                let guid = uuid::Uuid::from_slice(&uuid_buffer)?;
-                let _data_size = cursor.read_to_end(&mut vendor_data)?;
-                Ok(HardwareNode::Vendor {
-                    guid,
-                    data: vendor_data,
-                })
+            DevicePathSubTypeHardware::Unknown(_) => {
+                // Unknown nodes can have no data if node_length == 4
+                Ok(HardwareNode::Unknown(node.clone()))
             }
-            DevicePathSubTypeHardware::Controller => Ok(HardwareNode::Controller {
-                controller: cursor.read_u32::<LittleEndian>()?,
-            }),
-            DevicePathSubTypeHardware::BMC => Ok(HardwareNode::BMC {
-                interface: cursor.read_u8()?,
-                base_address: cursor.read_u64::<LittleEndian>()?,
-            }),
-            DevicePathSubTypeHardware::Unknown(_) => Ok(HardwareNode::Unknown(node.clone())),
+            _ => {
+                // All known node types require data
+                let data = node.data.as_ref().ok_or_else(|| {
+                    anyhow!("Node data is None but node_length is {}", node.node_length)
+                })?;
+                let mut cursor = Cursor::new(data);
+
+                match subtype {
+                    DevicePathSubTypeHardware::Pci => Ok(HardwareNode::Pci {
+                        function: cursor.read_u8().context("error reading function")?,
+                        device: cursor.read_u8().context("error reading function")?,
+                    }),
+                    DevicePathSubTypeHardware::PCCARD => Ok(HardwareNode::PCCARD {
+                        function: cursor
+                            .read_u8()
+                            .context("error reading function for PCCARD")?,
+                    }),
+                    DevicePathSubTypeHardware::MemoryMapped => Ok(HardwareNode::MemoryMapped {
+                        memory_type: cursor
+                            .read_u32::<LittleEndian>()
+                            .context("error reading memory type")?,
+                        start_address: cursor
+                            .read_u64::<LittleEndian>()
+                            .context("error reading start address")?,
+                        end_address: cursor
+                            .read_u64::<LittleEndian>()
+                            .context("error reading end address")?,
+                    }),
+                    DevicePathSubTypeHardware::Vendor => {
+                        let mut uuid_buffer: Vec<u8> = Vec::with_capacity(16);
+                        let mut vendor_data = Vec::new();
+                        cursor.read_exact(&mut uuid_buffer)?;
+                        let guid = uuid::Uuid::from_slice(&uuid_buffer)?;
+                        let _data_size = cursor.read_to_end(&mut vendor_data)?;
+                        Ok(HardwareNode::Vendor {
+                            guid,
+                            data: vendor_data,
+                        })
+                    }
+                    DevicePathSubTypeHardware::Controller => Ok(HardwareNode::Controller {
+                        controller: cursor.read_u32::<LittleEndian>()?,
+                    }),
+                    DevicePathSubTypeHardware::BMC => Ok(HardwareNode::BMC {
+                        interface: cursor.read_u8()?,
+                        base_address: cursor.read_u64::<LittleEndian>()?,
+                    }),
+                    DevicePathSubTypeHardware::Unknown(_) => {
+                        unreachable!("Unknown type already handled above")
+                    }
+                }
+            }
         }
     }
 }

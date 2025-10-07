@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::anyhow;
 use byteorder::{LittleEndian, ReadBytesExt, WriteBytesExt};
 use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::{Cursor, Read, Write};
@@ -266,7 +267,7 @@ impl PathNodeTrait for MediaNode {
                 "{}({},{})",
                 self.get_generic_name(),
                 node.node_sub_type,
-                hex::encode(node.data.as_ref().unwrap())
+                node.data.as_ref().map_or("null".to_string(), hex::encode)
             ),
         }
     }
@@ -334,45 +335,63 @@ impl TryFrom<&Node> for MediaNode {
         let subtype = NodeSubTypeMedia::from_primitive(node.node_sub_type);
 
         subtype.validate_length(node.node_length)?;
-        let mut cursor = Cursor::new(node.data.as_ref().unwrap());
 
         match subtype {
-            NodeSubTypeMedia::HardDrive => {
-                let partition_number = cursor.read_u32::<LittleEndian>()?;
-                let partition_start = cursor.read_u64::<LittleEndian>()?;
-                let partition_size = cursor.read_u64::<LittleEndian>()?;
-                let mut signature = [0; 16];
-                cursor.read_exact(&mut signature)?;
-                let partition_format = cursor.read_u8()?;
-                let signature_type = cursor.read_u8()?;
-                Ok(MediaNode::HardDrive {
-                    partition_number,
-                    partition_start,
-                    partition_size,
-                    signature: PartitionSignature::new(signature_type, &signature),
-                    partition_format: PartitionType::from(partition_format),
-                })
+            NodeSubTypeMedia::Unknown(_)
+            | NodeSubTypeMedia::RelativeOffsetRange
+            | NodeSubTypeMedia::RamDisk
+            | NodeSubTypeMedia::MediaProtocol => {
+                // Unknown nodes can have no data if node_length == 4
+                Ok(MediaNode::Unknown(node.clone()))
             }
-            NodeSubTypeMedia::CdromElTorito => Ok(MediaNode::CdRom {
-                boot_entry: cursor.read_u32::<LittleEndian>()?,
-                partition_start: cursor.read_u64::<LittleEndian>()?,
-                partition_size: cursor.read_u64::<LittleEndian>()?,
-            }),
-            NodeSubTypeMedia::Vendor => {
-                let mut vendor_data = Vec::new();
-                let guid = cursor.read_efi_guid()?;
-                let _data_size = cursor.read_to_end(&mut vendor_data)?;
-                Ok(MediaNode::Vendor { guid, vendor_data })
+            _ => {
+                // All known node types require data
+                let data = node.data.as_ref().ok_or_else(|| {
+                    anyhow!("Node data is None but node_length is {}", node.node_length)
+                })?;
+                let mut cursor = Cursor::new(data);
+
+                match subtype {
+                    NodeSubTypeMedia::HardDrive => {
+                        let partition_number = cursor.read_u32::<LittleEndian>()?;
+                        let partition_start = cursor.read_u64::<LittleEndian>()?;
+                        let partition_size = cursor.read_u64::<LittleEndian>()?;
+                        let mut signature = [0; 16];
+                        cursor.read_exact(&mut signature)?;
+                        let partition_format = cursor.read_u8()?;
+                        let signature_type = cursor.read_u8()?;
+                        Ok(MediaNode::HardDrive {
+                            partition_number,
+                            partition_start,
+                            partition_size,
+                            signature: PartitionSignature::new(signature_type, &signature),
+                            partition_format: PartitionType::from(partition_format),
+                        })
+                    }
+                    NodeSubTypeMedia::CdromElTorito => Ok(MediaNode::CdRom {
+                        boot_entry: cursor.read_u32::<LittleEndian>()?,
+                        partition_start: cursor.read_u64::<LittleEndian>()?,
+                        partition_size: cursor.read_u64::<LittleEndian>()?,
+                    }),
+                    NodeSubTypeMedia::Vendor => {
+                        let mut vendor_data = Vec::new();
+                        let guid = cursor.read_efi_guid()?;
+                        let _data_size = cursor.read_to_end(&mut vendor_data)?;
+                        Ok(MediaNode::Vendor { guid, vendor_data })
+                    }
+                    NodeSubTypeMedia::FilePath => Ok(MediaNode::FilePath(
+                        cursor.read_null_terminated_ucs16_to_string()?,
+                    )),
+                    NodeSubTypeMedia::FwVolFile => Ok(MediaNode::FvFile(cursor.read_efi_guid()?)),
+                    NodeSubTypeMedia::FwVol => Ok(MediaNode::Fv(cursor.read_efi_guid()?)),
+                    NodeSubTypeMedia::RelativeOffsetRange
+                    | NodeSubTypeMedia::RamDisk
+                    | NodeSubTypeMedia::MediaProtocol
+                    | NodeSubTypeMedia::Unknown(_) => {
+                        unreachable!("Unknown types already handled above")
+                    }
+                }
             }
-            NodeSubTypeMedia::FilePath => Ok(MediaNode::FilePath(
-                cursor.read_null_terminated_ucs16_to_string()?,
-            )),
-            NodeSubTypeMedia::FwVolFile => Ok(MediaNode::FvFile(cursor.read_efi_guid()?)),
-            NodeSubTypeMedia::FwVol => Ok(MediaNode::Fv(cursor.read_efi_guid()?)),
-            NodeSubTypeMedia::RelativeOffsetRange => Ok(MediaNode::Unknown(node.clone())),
-            NodeSubTypeMedia::RamDisk => Ok(MediaNode::Unknown(node.clone())),
-            NodeSubTypeMedia::MediaProtocol => Ok(MediaNode::Unknown(node.clone())),
-            NodeSubTypeMedia::Unknown(_) => Ok(MediaNode::Unknown(node.clone())),
         }
     }
 }

@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Zededa, Inc.
 // SPDX-License-Identifier: Apache-2.0
 
+use anyhow::anyhow;
 use byteorder::{LittleEndian, ReadBytesExt};
 use num_enum::{FromPrimitive, IntoPrimitive};
 use std::io::Cursor;
@@ -108,7 +109,7 @@ impl PathNodeTrait for AcpiNode {
                 "{}({},{})",
                 self.get_generic_name(),
                 node.node_sub_type,
-                hex::encode(node.data.as_ref().unwrap())
+                node.data.as_ref().map_or("null".to_string(), hex::encode)
             ),
         }
     }
@@ -120,37 +121,50 @@ impl TryFrom<&Node> for AcpiNode {
     fn try_from(node: &Node) -> std::result::Result<Self, Self::Error> {
         let subtype = DevicePathSubTypeAcpi::from_primitive(node.node_sub_type);
         subtype.validate_length(node.node_length)?;
-        // none of the acpi subtypes have empty data
-        // so we can unwrap here
-        let mut cursor = Cursor::new(node.data.as_ref().unwrap());
 
         match subtype {
-            DevicePathSubTypeAcpi::Acpi => {
-                let hid = cursor.read_u32::<LittleEndian>()?;
-                let uid = cursor.read_u32::<LittleEndian>()?;
-                Ok(AcpiNode::Acpi(hid, uid))
+            DevicePathSubTypeAcpi::Unknown(_) => {
+                // Unknown nodes can have no data if node_length == 4
+                Ok(AcpiNode::Unknown(node.clone()))
             }
-            DevicePathSubTypeAcpi::ExpandedAcpi => {
-                let hid = cursor.read_u32::<LittleEndian>()?;
-                let uid = cursor.read_u32::<LittleEndian>()?;
-                let cid = cursor.read_u32::<LittleEndian>()?;
-                let hid_str = cursor.read_null_terminated_ascii_to_string()?;
-                let uid_str = cursor.read_null_terminated_ascii_to_string()?;
-                let cid_str = cursor.read_null_terminated_ascii_to_string()?;
-                Ok(AcpiNode::AcpiExpanded(
-                    hid, uid, cid, hid_str, uid_str, cid_str,
-                ))
-            }
-            DevicePathSubTypeAcpi::Adr => {
-                let hid = cursor.read_u32::<LittleEndian>()?;
-                let count = cursor.read_u8()?;
-                let mut adrs = Vec::new();
-                for _ in 0..count {
-                    adrs.push(cursor.read_u32::<LittleEndian>()?);
+            _ => {
+                // All known node types require data
+                let data = node.data.as_ref().ok_or_else(|| {
+                    anyhow!("Node data is None but node_length is {}", node.node_length)
+                })?;
+                let mut cursor = Cursor::new(data);
+
+                match subtype {
+                    DevicePathSubTypeAcpi::Acpi => {
+                        let hid = cursor.read_u32::<LittleEndian>()?;
+                        let uid = cursor.read_u32::<LittleEndian>()?;
+                        Ok(AcpiNode::Acpi(hid, uid))
+                    }
+                    DevicePathSubTypeAcpi::ExpandedAcpi => {
+                        let hid = cursor.read_u32::<LittleEndian>()?;
+                        let uid = cursor.read_u32::<LittleEndian>()?;
+                        let cid = cursor.read_u32::<LittleEndian>()?;
+                        let hid_str = cursor.read_null_terminated_ascii_to_string()?;
+                        let uid_str = cursor.read_null_terminated_ascii_to_string()?;
+                        let cid_str = cursor.read_null_terminated_ascii_to_string()?;
+                        Ok(AcpiNode::AcpiExpanded(
+                            hid, uid, cid, hid_str, uid_str, cid_str,
+                        ))
+                    }
+                    DevicePathSubTypeAcpi::Adr => {
+                        let hid = cursor.read_u32::<LittleEndian>()?;
+                        let count = cursor.read_u8()?;
+                        let mut adrs = Vec::new();
+                        for _ in 0..count {
+                            adrs.push(cursor.read_u32::<LittleEndian>()?);
+                        }
+                        Ok(AcpiNode::AcpiAdr(hid, Some(adrs)))
+                    }
+                    DevicePathSubTypeAcpi::Unknown(_) => {
+                        unreachable!("Unknown type already handled above")
+                    }
                 }
-                Ok(AcpiNode::AcpiAdr(hid, Some(adrs)))
             }
-            DevicePathSubTypeAcpi::Unknown(_) => Ok(AcpiNode::Unknown(node.clone())),
         }
     }
 }

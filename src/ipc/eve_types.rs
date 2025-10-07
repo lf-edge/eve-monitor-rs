@@ -473,7 +473,7 @@ where
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WwanIPSettings {
-    #[serde_as(as = "DefaultOnNull")]
+    #[serde_as(as = "Option<FromInto<GoIpNetwork>>")]
     pub address: Option<IpNet>,
     #[serde(deserialize_with = "ip_empty_string_as_none")]
     pub gateway: Option<IpAddr>,
@@ -592,34 +592,59 @@ where
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
+pub struct WwanCleartextCredentials {
+    username: String,
+    password: String,
+}
+
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
+#[serde(rename_all = "PascalCase")]
 pub struct CellularAccessPoint {
-    pub key: String, // SIM card slot to which this configuration applies.
     // 0 - unspecified (apply to currently activated or the only available)
     // 1 - config for SIM card in the first slot
     // 2 - config for SIM card in the second slot
     // etc.
+    #[serde(rename = "SIMSlot")]
     pub sim_slot: u8,
     // If true, then this configuration is currently activated.
     pub activated: bool,
     // Access Point Network
+    #[serde(rename = "APN")]
     pub apn: String,
+
+    #[serde(rename = "IPType")]
+    pub ip_type: String,
+
     // Authentication protocol used by the network.
     #[serde(
         deserialize_with = "deserialize_auth_protocol",
         serialize_with = "serialize_auth_protocol"
     )]
     pub auth_protocol: WwanAuthProtocol,
+    pub cleartext_credentials: WwanCleartextCredentials,
     // EncryptedCredentials : encrypted username and password.
     pub encrypted_credentials: CipherBlockStatus,
     // The set of cellular network operators that modem should preferably try to register
     // and connect into.
     // Network operator should be referenced by PLMN (Public Land Mobile Network) code.
-    pub preferred_plmns: Vec<String>,
+    #[serde(rename = "PreferredPLMNs")]
+    pub preferred_plmns: Option<Vec<String>>,
     // The list of preferred Radio Access Technologies (RATs) to use for connecting
     // to the network.
-    pub preferred_rats: Vec<WwanRAT>,
+    #[serde(rename = "PreferredRATs")]
+    pub preferred_rats: Option<Vec<WwanRAT>>,
     // If true, then modem will avoid connecting to networks with roaming.
     pub forbid_roaming: bool,
+    #[serde(rename = "AttachAPN")]
+    pub attach_apn: String,
+    #[serde(rename = "AttachIPType")]
+    pub attach_ip_type: String,
+    #[serde(
+        deserialize_with = "deserialize_auth_protocol",
+        serialize_with = "serialize_auth_protocol"
+    )]
+    pub attach_auth_protocol: WwanAuthProtocol,
+    pub attach_cleartext_credentials: WwanCleartextCredentials,
 }
 
 #[repr(u8)]

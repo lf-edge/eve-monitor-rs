@@ -47,7 +47,7 @@ pub enum DevicePathSubTypeMessaging {
     // SasEx = 22, 32
     Nvme = 23,
     Uri = 24,
-    // Ufs = 25, 6
+    Ufs = 25,
     Sd = 26,
     // Bluetooth = 27, 10
     // Wireless = 28, 36
@@ -77,6 +77,7 @@ impl NodeTypeValidator for DevicePathSubTypeMessaging {
             DevicePathSubTypeMessaging::Vlan => NodeExpectedLength::Exact(6),
             DevicePathSubTypeMessaging::Nvme => NodeExpectedLength::Exact(16),
             DevicePathSubTypeMessaging::Uri => NodeExpectedLength::Min(4),
+            DevicePathSubTypeMessaging::Ufs => NodeExpectedLength::Exact(6),
             DevicePathSubTypeMessaging::Sd => NodeExpectedLength::Exact(5),
             DevicePathSubTypeMessaging::EMMC => NodeExpectedLength::Exact(5),
             DevicePathSubTypeMessaging::Unknown(_) => NodeExpectedLength::Min(4),
@@ -177,6 +178,10 @@ pub(crate) enum MessagingNode {
     Uri {
         uri: String,
     },
+    Ufs {
+        pun: u8,
+        lun: u8,
+    },
     Unknown(Node),
 }
 
@@ -213,6 +218,7 @@ impl PathNodeTrait for MessagingNode {
             MessagingNode::Nvme { .. } => DevicePathSubTypeMessaging::Nvme,
             MessagingNode::I2O { .. } => DevicePathSubTypeMessaging::I2O,
             MessagingNode::Uri { .. } => DevicePathSubTypeMessaging::Uri,
+            MessagingNode::Ufs { .. } => DevicePathSubTypeMessaging::Ufs,
             MessagingNode::Unknown(node) => DevicePathSubTypeMessaging::Unknown(node.node_sub_type),
         }
     }
@@ -349,6 +355,9 @@ impl PathNodeTrait for MessagingNode {
                 } else {
                     format!("Uri({})", uri)
                 }
+            }
+            MessagingNode::Ufs { pun, lun } => {
+                format!("UFS({},{})", pun, lun)
             }
         }
     }
@@ -510,6 +519,12 @@ impl PathNodeTrait for MessagingNode {
                 } else {
                     Some(uri.as_bytes().to_vec())
                 }
+            }
+            MessagingNode::Ufs { pun, lun } => {
+                let mut data = Vec::new();
+                data.push(*pun);
+                data.push(*lun);
+                Some(data)
             }
             MessagingNode::Unknown(node) => node.data.clone(),
             MessagingNode::UsbWwid {
@@ -702,7 +717,6 @@ impl TryFrom<&Node> for MessagingNode {
 
     fn try_from(value: &Node) -> Result<Self, Self::Error> {
         let subtype = DevicePathSubTypeMessaging::from_primitive(value.node_sub_type);
-        println!("SUBTYPE: {:#?}, len={}", subtype, value.node_length);
         subtype.validate_length(value.node_length)?;
 
         // For Unknown and Uri types, handle specially as they can have node_length == 4
@@ -907,6 +921,11 @@ fn parse_known_messaging_node(
         DevicePathSubTypeMessaging::EMMC => {
             let slot = cursor.read_u8()?;
             Ok(MessagingNode::EMMC { slot })
+        }
+        DevicePathSubTypeMessaging::Ufs => {
+            let pun = cursor.read_u8()?;
+            let lun = cursor.read_u8()?;
+            Ok(MessagingNode::Ufs { pun, lun })
         }
         DevicePathSubTypeMessaging::Uri => {
             unreachable!(

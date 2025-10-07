@@ -473,7 +473,7 @@ where
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
 #[serde(rename_all = "PascalCase")]
 pub struct WwanIPSettings {
-    #[serde_as(as = "DefaultOnNull")]
+    #[serde_as(as = "Option<FromInto<GoIpNetwork>>")]
     pub address: Option<IpNet>,
     #[serde(deserialize_with = "ip_empty_string_as_none")]
     pub gateway: Option<IpAddr>,

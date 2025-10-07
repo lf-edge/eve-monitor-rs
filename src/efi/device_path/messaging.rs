@@ -39,12 +39,12 @@ pub enum DevicePathSubTypeMessaging {
     Vlan = 20,
     // InfinitiBand = 9, 48
     // Uart = 14, 19
-    // Vendor = 10, >=20
-    // Following 2 are Vendor structs
+    Vendor = 10,
+    // Following are specific Vendor GUID structs
     // UartFlowControl = 10, 24, DEVICE_PATH_MESSAGING_UART_FLOW_CONTROL
     // SAS = 10, 44, d487ddb4-008b-11d9-afdc-001083ffca4d
     // -- end of vendor structs --
-    // SasEx = 22, 32
+    SasEx = 22,
     Nvme = 23,
     Uri = 24,
     Ufs = 25,
@@ -75,6 +75,8 @@ impl NodeTypeValidator for DevicePathSubTypeMessaging {
             DevicePathSubTypeMessaging::IpV6 => NodeExpectedLength::Exact(60),
             DevicePathSubTypeMessaging::IScsi => NodeExpectedLength::Min(38),
             DevicePathSubTypeMessaging::Vlan => NodeExpectedLength::Exact(6),
+            DevicePathSubTypeMessaging::Vendor => NodeExpectedLength::Min(20), // 4 header + 16 GUID + min data
+            DevicePathSubTypeMessaging::SasEx => NodeExpectedLength::Exact(32), // 4 header + 28 data (8+8+2+2+8)
             DevicePathSubTypeMessaging::Nvme => NodeExpectedLength::Exact(16),
             DevicePathSubTypeMessaging::Uri => NodeExpectedLength::Min(4),
             DevicePathSubTypeMessaging::Ufs => NodeExpectedLength::Exact(6),
@@ -168,6 +170,23 @@ pub(crate) enum MessagingNode {
     EMMC {
         slot: u8,
     },
+    Vendor {
+        guid: uuid::Uuid,
+        vendor_data: Vec<u8>,
+    },
+    Sas {
+        sas_address: [u8; 8],
+        lun: [u8; 8],
+        device_topology: u16,
+        drive_topology: u16,
+    },
+    SasEx {
+        sas_address: [u8; 8],
+        reserved: [u8; 8],
+        lun: [u8; 8],
+        device_topology_info: u16,
+        rtp: u16,
+    },
     Nvme {
         namespace_id: u32,
         namespace_uuid: u64,
@@ -215,6 +234,9 @@ impl PathNodeTrait for MessagingNode {
             MessagingNode::IScsi { .. } => DevicePathSubTypeMessaging::IScsi,
             MessagingNode::Sd { .. } => DevicePathSubTypeMessaging::Sd,
             MessagingNode::EMMC { .. } => DevicePathSubTypeMessaging::EMMC,
+            MessagingNode::Vendor { .. } => DevicePathSubTypeMessaging::Vendor,
+            MessagingNode::Sas { .. } => DevicePathSubTypeMessaging::Vendor,
+            MessagingNode::SasEx { .. } => DevicePathSubTypeMessaging::SasEx,
             MessagingNode::Nvme { .. } => DevicePathSubTypeMessaging::Nvme,
             MessagingNode::I2O { .. } => DevicePathSubTypeMessaging::I2O,
             MessagingNode::Uri { .. } => DevicePathSubTypeMessaging::Uri,
@@ -329,6 +351,87 @@ impl PathNodeTrait for MessagingNode {
             }
             MessagingNode::Sd { slot } => format!("Sd({})", slot),
             MessagingNode::EMMC { slot } => format!("EMMC({})", slot),
+            MessagingNode::Vendor { guid, vendor_data } => {
+                format!("VenMsg({},{})", guid, hex::encode(vendor_data))
+            }
+            MessagingNode::Sas {
+                sas_address,
+                lun,
+                device_topology,
+                drive_topology: _,
+            } => {
+                // Decode topology information from device_topology field
+                // Bits 0:3 = More Information field
+                let more_info = device_topology & 0x0F;
+
+                if more_info == 0 {
+                    // Case 1: No topology information
+                    if *lun == [0, 0, 0, 0, 0, 0, 0, 0] {
+                        format!("SAS(0x{})", hex::encode_upper(sas_address))
+                    } else {
+                        format!(
+                            "SAS(0x{},0x{})",
+                            hex::encode_upper(sas_address),
+                            hex::encode_upper(lun)
+                        )
+                    }
+                } else {
+                    // Case 2: Topology information is present
+                    // Bits 4:5 = Device Type (0=SAS Internal, 1=SATA Internal, 2=SAS External, 3=SATA External)
+                    let device_type = (device_topology >> 4) & 0x03;
+                    let device_str = match device_type {
+                        0 | 2 => "SAS",
+                        1 | 3 => "SATA",
+                        _ => "Unknown",
+                    };
+
+                    if *lun == [0, 0, 0, 0, 0, 0, 0, 0] {
+                        format!("SAS(0x{},{})", hex::encode_upper(sas_address), device_str)
+                    } else {
+                        format!(
+                            "SAS(0x{},0x{},{})",
+                            hex::encode_upper(sas_address),
+                            hex::encode_upper(lun),
+                            device_str
+                        )
+                    }
+                }
+            }
+            MessagingNode::SasEx {
+                sas_address,
+                reserved: _,
+                lun,
+                device_topology_info,
+                rtp,
+            } => {
+                // Display SAS Address as 8 byte array in hex format
+                // byte 0 first (left) to byte 7 last (right)
+                let sas_addr_str = hex::encode_upper(sas_address);
+                let lun_str = hex::encode_upper(lun);
+
+                // Decode topology information
+                let more_info = device_topology_info & 0x0F;
+
+                if more_info == 0 {
+                    // No topology information
+                    format!(
+                        "SasEx(0x{},0x{},0x{:x},0x{:x})",
+                        sas_addr_str, lun_str, device_topology_info, rtp
+                    )
+                } else {
+                    // Topology information is present
+                    let device_type = (device_topology_info >> 4) & 0x03;
+                    let device_str = match device_type {
+                        0 | 2 => "SAS",
+                        1 | 3 => "SATA",
+                        _ => "NoTopology",
+                    };
+                    format!(
+                        "SasEx(0x{},0x{},{},0x{:x})",
+                        sas_addr_str, lun_str, device_str, rtp
+                    )
+                }
+            }
             MessagingNode::Nvme {
                 namespace_id,
                 namespace_uuid,
@@ -503,6 +606,45 @@ impl PathNodeTrait for MessagingNode {
             }
             MessagingNode::Sd { slot } => Some(vec![*slot]),
             MessagingNode::EMMC { slot } => Some(vec![*slot]),
+            MessagingNode::Vendor { guid, vendor_data } => {
+                let mut data = Vec::new();
+                data.write_efi_guid(guid).ok()?;
+                data.extend_from_slice(vendor_data);
+                Some(data)
+            }
+            MessagingNode::Sas {
+                sas_address,
+                lun,
+                device_topology,
+                drive_topology,
+            } => {
+                // SAS vendor-defined messaging node with specific GUID
+                // Total: 44 bytes (4 header + 16 GUID + 4 reserved + 8 SAS addr + 8 LUN + 2 device + 2 drive)
+                const SAS_GUID: uuid::Uuid = uuid::uuid!("d487ddb4-008b-11d9-afdc-001083ffca4d");
+                let mut data = Vec::new();
+                data.write_efi_guid(&SAS_GUID).ok()?;
+                data.extend_from_slice(&[0u8; 4]); // 4 bytes reserved
+                data.extend_from_slice(sas_address);
+                data.extend_from_slice(lun);
+                data.extend_from_slice(&device_topology.to_le_bytes());
+                data.extend_from_slice(&drive_topology.to_le_bytes());
+                Some(data)
+            }
+            MessagingNode::SasEx {
+                sas_address,
+                reserved,
+                lun,
+                device_topology_info,
+                rtp,
+            } => {
+                let mut data = Vec::new();
+                data.extend_from_slice(sas_address);
+                data.extend_from_slice(reserved);
+                data.extend_from_slice(lun);
+                data.extend_from_slice(&device_topology_info.to_le_bytes());
+                data.extend_from_slice(&rtp.to_le_bytes());
+                Some(data)
+            }
             MessagingNode::Nvme {
                 namespace_id,
                 namespace_uuid,
@@ -921,6 +1063,51 @@ fn parse_known_messaging_node(
         DevicePathSubTypeMessaging::EMMC => {
             let slot = cursor.read_u8()?;
             Ok(MessagingNode::EMMC { slot })
+        }
+        DevicePathSubTypeMessaging::Vendor => {
+            let guid = cursor.read_efi_guid()?;
+            let mut vendor_data = Vec::new();
+            cursor.read_to_end(&mut vendor_data)?;
+
+            // Check if this is a known vendor GUID (SAS)
+            const SAS_GUID: uuid::Uuid = uuid::uuid!("d487ddb4-008b-11d9-afdc-001083ffca4d");
+            if guid == SAS_GUID && vendor_data.len() == 24 {
+                // Parse as SAS device path (24 bytes after GUID)
+                let mut sas_cursor = std::io::Cursor::new(&vendor_data);
+                let _reserved1 = sas_cursor.read_u32::<LittleEndian>()?;
+                let mut sas_address = [0u8; 8];
+                let mut lun = [0u8; 8];
+                sas_cursor.read_exact(&mut sas_address)?;
+                sas_cursor.read_exact(&mut lun)?;
+                let device_topology = sas_cursor.read_u16::<LittleEndian>()?;
+                let drive_topology = sas_cursor.read_u16::<LittleEndian>()?;
+                Ok(MessagingNode::Sas {
+                    sas_address,
+                    lun,
+                    device_topology,
+                    drive_topology,
+                })
+            } else {
+                // Generic vendor messaging node
+                Ok(MessagingNode::Vendor { guid, vendor_data })
+            }
+        }
+        DevicePathSubTypeMessaging::SasEx => {
+            let mut sas_address = [0u8; 8];
+            let mut reserved = [0u8; 8];
+            let mut lun = [0u8; 8];
+            cursor.read_exact(&mut sas_address)?;
+            cursor.read_exact(&mut reserved)?;
+            cursor.read_exact(&mut lun)?;
+            let device_topology_info = cursor.read_u16::<LittleEndian>()?;
+            let rtp = cursor.read_u16::<LittleEndian>()?;
+            Ok(MessagingNode::SasEx {
+                sas_address,
+                reserved,
+                lun,
+                device_topology_info,
+                rtp,
+            })
         }
         DevicePathSubTypeMessaging::Ufs => {
             let pun = cursor.read_u8()?;

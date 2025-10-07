@@ -179,13 +179,13 @@ impl PathNode {
             PathNode::EndInstance => Node {
                 node_type: DevicePathType::End.into(),
                 node_sub_type: DevicePathSubTypeEnd::EndInstance.into(),
-                node_length: 0,
+                node_length: 4,
                 data: None,
             },
             PathNode::EndEntire => Node {
                 node_type: DevicePathType::End.into(),
                 node_sub_type: DevicePathSubTypeEnd::EndEntire.into(),
-                node_length: 0,
+                node_length: 4,
                 data: None,
             },
             PathNode::Unknown(node) => node.clone(),
@@ -388,6 +388,50 @@ impl DevicePath {
             partition_size,
             signature,
             partition_format,
+        }));
+        self
+    }
+
+    #[cfg(test)]
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        for node in &self.nodes {
+            bytes.extend_from_slice(&node.to_bytes());
+        }
+        bytes
+    }
+
+    #[cfg(test)]
+    pub fn msg_sas(
+        mut self,
+        sas_address: [u8; 8],
+        lun: [u8; 8],
+        device_topology: u16,
+        drive_topology: u16,
+    ) -> Self {
+        self.nodes.push(PathNode::Messaging(MessagingNode::Sas {
+            sas_address,
+            lun,
+            device_topology,
+            drive_topology,
+        }));
+        self
+    }
+
+    #[cfg(test)]
+    pub fn msg_sas_ex(
+        mut self,
+        sas_address: [u8; 8],
+        lun: [u8; 8],
+        device_topology_info: u16,
+        rtp: u16,
+    ) -> Self {
+        self.nodes.push(PathNode::Messaging(MessagingNode::SasEx {
+            sas_address,
+            reserved: [0u8; 8],
+            lun,
+            device_topology_info,
+            rtp,
         }));
         self
     }

@@ -72,6 +72,32 @@ impl<T> DerefMut for ElementHashMap<T> {
     }
 }
 
+// ─── time formatting helpers (shared across UI modules) ──────────────────────
+
+pub fn plural(n: u64) -> &'static str {
+    if n == 1 { "" } else { "s" }
+}
+
+/// Format a duration given in seconds into a human-readable string.
+pub fn format_secs(secs: u64) -> String {
+    let mins = secs / 60;
+    let hours = mins / 60;
+    let days = hours / 24;
+
+    if days > 0 {
+        let h = hours % 24;
+        format!("{} day{} {} hour{}", days, plural(days), h, plural(h))
+    } else if hours > 0 {
+        let m = mins % 60;
+        format!("{} hour{} {} minute{}", hours, plural(hours), m, plural(m))
+    } else if mins > 0 {
+        let s = secs % 60;
+        format!("{} minute{} {} second{}", mins, plural(mins), s, plural(s))
+    } else {
+        format!("{} second{}", secs, plural(secs))
+    }
+}
+
 // EXAMPLE to be removed
 // impl Debug for Window {
 //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

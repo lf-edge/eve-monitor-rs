@@ -35,7 +35,7 @@ use crate::{
 use super::traits::{ISelectable, ISelector};
 
 trait TpmEventDecode {
-    fn short_description(&self) -> Line;
+    fn short_description(&self) -> Line<'_>;
     fn diff(&self) -> (Vec<Row<'_>>, Vec<Row<'_>>);
 }
 
@@ -234,7 +234,7 @@ fn get_boot_efi_var_description(index: u16, vars: &Vec<EveEfiVariable>) -> Resul
     Ok(load_options.description)
 }
 
-fn data_omitted_message(t: &TcgTpmEventType) -> String {
+fn data_omitted_message(_t: &TcgTpmEventType) -> String {
     format!("<data omitted>")
 }
 
@@ -250,7 +250,7 @@ fn decode_tcg_tpm_event(event: &TcgRawTpmEvent) -> String {
         TcgTpmEventType::Separator => "".to_string(),
         TcgTpmEventType::Action => TcgEfiActionEvent::try_from(event)
             .map(|e| e.get().to_string())
-            .unwrap_or_else(|a| data_omitted_message(&event.event_type)),
+            .unwrap_or_else(|_| data_omitted_message(&event.event_type)),
         TcgTpmEventType::EventTag => data_omitted_message(&event.event_type),
         TcgTpmEventType::SCRTMContents => data_omitted_message(&event.event_type),
         TcgTpmEventType::SCRTMVersion => data_omitted_message(&event.event_type),
@@ -260,7 +260,7 @@ fn decode_tcg_tpm_event(event: &TcgRawTpmEvent) -> String {
         TcgTpmEventType::CompactHash => data_omitted_message(&event.event_type),
         TcgTpmEventType::IPL => TcgIPLEvent::try_from(event)
             .map(|e| e.get().to_string())
-            .unwrap_or_else(|e| data_omitted_message(&event.event_type)),
+            .unwrap_or_else(|_| data_omitted_message(&event.event_type)),
         TcgTpmEventType::IPLPartitionData => data_omitted_message(&event.event_type),
         TcgTpmEventType::NonhostCode => data_omitted_message(&event.event_type),
         TcgTpmEventType::NonhostConfig => data_omitted_message(&event.event_type),
@@ -276,7 +276,7 @@ fn decode_tcg_tpm_event(event: &TcgRawTpmEvent) -> String {
         TcgTpmEventType::EfiGPTEvent => data_omitted_message(&event.event_type),
         TcgTpmEventType::EfiAction => TcgEfiActionEvent::try_from(event)
             .map(|e| e.get().to_string())
-            .unwrap_or_else(|a| data_omitted_message(&event.event_type)),
+            .unwrap_or_else(|_| data_omitted_message(&event.event_type)),
         TcgTpmEventType::EfiPlatformFirmwareBlob => data_omitted_message(&event.event_type),
         TcgTpmEventType::EfiHandoffTables => data_omitted_message(&event.event_type),
         TcgTpmEventType::EfiPlatformFirmwareBlob2 => data_omitted_message(&event.event_type),
@@ -734,7 +734,7 @@ impl VaultPage {
         );
     }
 
-    fn cell_for_event_op<'a, 'b>(event: &'a TpmEventRef, op: &'a DiffOp) -> Cell<'b> {
+    fn cell_for_event_op<'a, 'b>(_event: &'a TpmEventRef, op: &'a DiffOp) -> Cell<'b> {
         match op {
             DiffOp::Unchanged(_) => Cell::from("".to_string()),
             DiffOp::Add(_) => Cell::from("+".to_string()),
@@ -1016,7 +1016,7 @@ impl<'a> Into<Line<'a>> for ConfigFileStatus {
 }
 
 impl TpmEventDecode for InterpretedTpmEvent {
-    fn short_description(&self) -> Line {
+    fn short_description(&self) -> Line<'_> {
         match self {
             InterpretedTpmEvent::ConfigFileModified { file, status } => {
                 Line::default().spans(vec![format!("{}: ", file).white(), status.to_span()])

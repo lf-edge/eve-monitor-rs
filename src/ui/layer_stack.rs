@@ -28,6 +28,13 @@ impl LayerStack {
     pub fn len(&self) -> usize {
         self.layers.len()
     }
+
+    /// Remove the topmost layer whose `window_name()` matches `name`.
+    pub fn remove_by_name(&mut self, name: &str) {
+        if let Some(pos) = self.layers.iter().rposition(|l| l.window_name() == name) {
+            self.layers.remove(pos);
+        }
+    }
 }
 
 impl Clone for LayerStack {

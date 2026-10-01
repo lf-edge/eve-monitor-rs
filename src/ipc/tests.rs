@@ -5,9 +5,11 @@ use super::*;
 use anyhow::Result;
 use eve_types::AppInstanceStatus;
 use eve_types::AppInstanceSummary;
+use eve_types::AppsList;
 use eve_types::DeviceNetworkStatus;
 use eve_types::DevicePortConfigList;
 use eve_types::DownloaderStatus;
+use eve_types::EvalStatus;
 use eve_types::EveNodeStatus;
 use eve_types::EveOnboardingStatus;
 use eve_types::EveVaultStatus;
@@ -45,9 +47,11 @@ enum TestMessageType {
     DownloaderStatus,
     AppSummary,
     AppStatus,
+    AppsList,
     Response,
     TUIConfig,
     TpmLogs,
+    EvalStatus,
     Unknown(String),
 }
 
@@ -66,9 +70,11 @@ impl From<&str> for TestMessageType {
             "DownloaderStatus" => TestMessageType::DownloaderStatus,
             "AppSummary" => TestMessageType::AppSummary,
             "AppStatus" => TestMessageType::AppStatus,
+            "AppsList" => TestMessageType::AppsList,
             "Response" => TestMessageType::Response,
             "TUIConfig" => TestMessageType::TUIConfig,
             "TpmLogs" => TestMessageType::TpmLogs,
+            "EvalStatus" => TestMessageType::EvalStatus,
             _ => TestMessageType::Unknown(s.to_string()),
         }
     }
@@ -161,12 +167,20 @@ fn test_from_device_files() -> Result<()> {
                 let _ = serde_json::from_str::<AppInstanceStatus>(&data)
                     .map_err(|err| SerdeError::new(data.to_string(), err))?;
             }
+            TestMessageType::AppsList => {
+                let _ = serde_json::from_str::<AppsList>(&data)
+                    .map_err(|err| SerdeError::new(data.to_string(), err))?;
+            }
             TestMessageType::TUIConfig => {
                 let _ = serde_json::from_str::<TuiEveConfig>(&data)
                     .map_err(|err| SerdeError::new(data.to_string(), err))?;
             }
             TestMessageType::TpmLogs => {
                 let _ = serde_json::from_str::<TpmLogs>(&data)
+                    .map_err(|err| SerdeError::new(data.to_string(), err))?;
+            }
+            TestMessageType::EvalStatus => {
+                let _ = serde_json::from_str::<EvalStatus>(&data)
                     .map_err(|err| SerdeError::new(data.to_string(), err))?;
             }
             TestMessageType::Response => {}

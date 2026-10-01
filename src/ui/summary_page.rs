@@ -4,12 +4,12 @@
 use std::rc::Rc;
 
 use crossterm::event::{KeyCode, KeyModifiers};
-use log::{debug, info};
+use log::debug;
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
     prelude::Rect,
     style::{Color, Style, Stylize},
-    text::{Line, Span, Text, ToText},
+    text::{Line, Span, Text},
     widgets::{Block, BorderType, Borders, Cell, Padding, Row, Table},
     Frame,
 };

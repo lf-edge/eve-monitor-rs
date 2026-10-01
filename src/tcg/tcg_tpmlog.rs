@@ -492,7 +492,7 @@ impl TcgTpmLog {
         Ok(events)
     }
 
-    pub fn events_for_pcr_ref(&self, pcr_index: u32) -> Vec<TcgTpmEventRef> {
+    pub fn events_for_pcr_ref(&self, pcr_index: u32) -> Vec<TcgTpmEventRef<'_>> {
         self.events
             .iter()
             .enumerate()

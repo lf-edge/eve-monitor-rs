@@ -6,8 +6,8 @@ use std::{cell::RefCell, rc::Rc};
 use crossterm::event::{KeyCode, KeyModifiers};
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Style, Styled, Stylize},
-    text::{Line, Span, Text},
+    style::{Color, Style, Stylize},
+    text::{Line, Text},
     widgets::{
         Block, BorderType, Borders, Cell, HighlightSpacing, Padding, Paragraph, Row,
         StatefulWidget, Table, TableState,

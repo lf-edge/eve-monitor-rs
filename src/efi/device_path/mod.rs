@@ -118,7 +118,7 @@ where
     Unknown(Node),
 }
 
-trait PathNodeTrait {
+pub(crate) trait PathNodeTrait {
     type Subtype: NodeTypeValidator + FromPrimitive + Into<u8>;
     fn get_generic_name(&self) -> &'static str;
     fn get_efi_sub_type(&self) -> Self::Subtype;

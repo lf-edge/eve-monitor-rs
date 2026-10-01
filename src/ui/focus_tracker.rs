@@ -84,7 +84,7 @@ impl FocusTracker {
     }
 
     pub fn focus_next(&mut self) -> Option<String> {
-        if self.too_late {
+        if self.too_late || self.tab_order.is_empty() {
             return None;
         }
         if self.focused_view + 1 < self.tab_order.len() {
@@ -102,7 +102,7 @@ impl FocusTracker {
     }
 
     pub fn focus_prev(&mut self) -> Option<String> {
-        if self.too_late {
+        if self.too_late || self.tab_order.is_empty() {
             return None;
         }
         if self.focused_view > 0 {
@@ -127,16 +127,18 @@ impl FocusTracker {
         debug!("focus_tracker handle_event {:?}", key);
 
         match key.code {
-            // handle Tab key
             KeyCode::Tab | KeyCode::BackTab => {
-                if key.code == KeyCode::Tab {
-                    self.focus_next();
+                let moved = if key.code == KeyCode::Tab {
+                    self.focus_next()
                 } else {
-                    self.focus_prev();
-                }
-                return Some(UiActions::Redraw);
+                    self.focus_prev()
+                };
+                // Only consume the key if there was actually something to move to.
+                // Returns None when tab_order is empty (e.g. system popups), letting
+                // the event fall through to the window's own on_key_event handler.
+                moved.map(|_| UiActions::Redraw)
             }
-            _ => return None,
+            _ => None,
         }
     }
 

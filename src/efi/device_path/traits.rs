@@ -10,7 +10,7 @@ pub enum NodeExpectedLength {
     Min(u16),
 }
 
-pub(super) trait NodeTypeValidator {
+pub(crate) trait NodeTypeValidator {
     fn expected_length(&self) -> NodeExpectedLength;
     fn validate_length(&self, length: u16) -> Result<()> {
         match self.expected_length() {

@@ -14,7 +14,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use serde_with::base64::Base64;
 use serde_with::serde_as;
-use serde_with::DefaultOnNull;
 use serde_with::FromInto;
 use serde_with::NoneAsEmptyString;
 use std::fs::File;
@@ -1653,4 +1652,20 @@ impl TpmLogs {
         }
         Ok(())
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "PascalCase", default)]
+pub struct EvalStatus {
+    pub is_evaluation_platform: bool,
+    pub current_slot: String,
+    pub phase: String,
+    pub allow_onboard: bool,
+    pub note: String,
+    pub last_updated: String,
+    pub test_start_time: String,
+    pub test_duration: u64,
+    pub reboot_countdown: u64,
+    pub inventory_collected: bool,
+    pub inventory_dir: String,
 }

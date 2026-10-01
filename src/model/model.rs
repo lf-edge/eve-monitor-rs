@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::{
     ipc::eve_types::{
         AppInstanceStatus, AppInstanceSummary, AppsList, DataSecAtRestStatus, DeviceNetworkStatus,
-        DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EveNodeStatus,
+        DevicePortConfig, DevicePortConfigList, DownloaderStatus, ErrorAndTime, EvalStatus, EveNodeStatus,
         EveOnboardingStatus, EveVaultStatus, PCRStatus, SwState, TpmLogs, ZedAgentStatus,
     },
     model::device::tpmlog_diff::TpmLogDiff,
@@ -99,6 +99,7 @@ pub struct MonitorModel {
     pub dpc_list: Option<DevicePortConfigList>,
     pub dpc_key: Option<String>,
     pub z_status: Option<ZedAgentStatus>,
+    pub eval_status: Option<EvalStatus>,
     pub tpm: Option<TpmLogDiff>,
     pub error_log: Vec<String>,
     pub status_bar_tips: Option<String>,
@@ -242,6 +243,10 @@ impl MonitorModel {
         self.z_status = Some(status);
     }
 
+    pub fn update_eval_status(&mut self, status: EvalStatus) {
+        self.eval_status = Some(status);
+    }
+
     pub fn update_tpm_logs(&mut self, logs: TpmLogs) {
         info!("Got TPM logs from EVE");
 
@@ -299,6 +304,7 @@ impl Default for MonitorModel {
             dpc_list: None,
             dpc_key: None,
             z_status: None,
+            eval_status: None,
             tpm: None,
             error_log: Vec::new(),
             status_bar_tips: None,

@@ -7,7 +7,7 @@ use inotify::EventMask;
 use log::{debug, info, warn};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
-use tokio::{net::UnixStream, task::JoinHandle};
+use tokio::{net::UnixStream};
 use tokio_util::codec::{Framed, LengthDelimitedCodec};
 
 /// Default timeout for establishing an IPC connection (socket appear + connect).
@@ -56,18 +56,13 @@ impl IpcClient {
     }
 
     async fn connect_inner(path: &str) -> Result<Framed<UnixStream, LengthDelimitedCodec>> {
-        //spawn a task to wait for the socket file to be created
+        // Wait for the socket file to be created if it does not exist yet
         let socket_path = PathBuf::from(path);
 
         // check if the socket file exists and return if it does
-        // TODO: there is a small chance that the file is created after this check
-        // TODO 2: get rid of it and just keep retrying?
         if !socket_path.exists() {
-            let socket_task: JoinHandle<Result<(), anyhow::Error>> =
-                tokio::spawn(async move { Self::wait_for_socket_file(&socket_path).await });
-
             info!("Waiting for socket file {} to be created", path);
-            socket_task.await??;
+            Self::wait_for_socket_file(&socket_path).await?;
         }
 
         let unix_stream = Self::try_connect(path, 30).await?;
@@ -84,7 +79,21 @@ impl IpcClient {
         let mut watcher = Watcher::init();
         let wd = watcher.add(dir, &async_inotify::WatchMask::CREATE);
         if let Ok(wd) = wd {
+            // Re-check after installing the watch to close the race between the
+            // exists() check in connect_inner and watcher.add() above.
+            if path.exists() {
+                info!("Socket file {} already exists after installing watch", path.display());
+                if let Err(e) = watcher.remove(wd) {
+                    return Err(anyhow!("Failed to remove watch: {}", e));
+                }
+                return Ok(());
+            }
             loop {
+                // Belt-and-suspenders: break out if the file appears even without a CREATE event.
+                if path.exists() {
+                    info!("Socket file {} detected as existing", path.display());
+                    break;
+                }
                 if let Some(event) = watcher.next().await {
                     debug!("{:?}: {:?}", event.mask(), event.path());
                     if *event.mask() == EventMask::CREATE && event.path() == path {
